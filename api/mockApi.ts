@@ -295,14 +295,13 @@ export const submitRating = async (ratingData: Omit<TradeRating, 'id' | 'created
     }
     trade.updatedAt = new Date();
     
-    // Double-blind logic: check for the other party's rating.
-    const otherRating = Object.values(mockRatings).find(r => r.tradeId === ratingData.tradeId && r.raterId === ratingData.rateeId);
-
-    if (otherRating) {
-        // If the other rating exists, reveal both.
-        newRating.isRevealed = true;
-        otherRating.isRevealed = true;
-        console.log(`API: Both ratings for trade ${ratingData.tradeId} exist. Revealing both.`);
+    // "Blind Reveal" Mechanism: Check if both parties have now rated.
+    if (trade.proposerRated && trade.receiverRated) {
+        console.log(`API: Both parties have rated trade ${trade.id}. Revealing ratings.`);
+        const tradeRatings = Object.values(mockRatings).filter(r => r.tradeId === trade.id);
+        for (const rating of tradeRatings) {
+            rating.isRevealed = true;
+        }
     }
 
     return JSON.parse(JSON.stringify(newRating));
