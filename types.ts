@@ -1,7 +1,31 @@
-// Fix: Populated file with necessary type definitions.
+// --- Core Game Entities ---
+
+export interface User {
+    id: string;
+    name: string;
+    inventory: Item[];
+    cash: number; // in cents
+    valuationReputationScore: number; // Starts at 100
+    netTradeSurplus: number; // in cents, cumulative
+}
+
+export interface Item {
+    id: string;
+    ownerId: string;
+    name: string;
+    category: ItemCategory;
+    condition: ItemCondition;
+    estimatedMarketValue: number; // in cents
+    imageUrl: string;
+    valuationSource: ValuationSource;
+    apiMetadata: ApiMetadata;
+}
+
+// --- Enums and Supporting Types for Items ---
+
 export type ItemCondition = 'NEW_SEALED' | 'CIB' | 'LOOSE' | 'GRADED' | 'OTHER';
-export type ItemCategory = 'VIDEO_GAMES' | 'TCG' | 'SNEAKERS' | 'OTHER';
-export type ValuationSource = 'API_VERIFIED' | 'USER_DEFINED_ESTIMATE' | 'USER_DEFINED_UNIQUE';
+export type ItemCategory = 'VIDEO_GAMES' | 'TCG' | 'SNEAKERS' | 'ELECTRONICS' | 'OTHER';
+export type ValuationSource = 'API_VERIFIED' | 'USER_DEFINED_UNIQUE' | 'USER_DEFINED_GENERIC';
 
 export interface ApiMetadata {
     apiName: 'PriceChartingProvider' | 'JustTCGProvider' | 'KicksDBProvider' | 'Consolidated' | null;
@@ -13,85 +37,8 @@ export interface ApiMetadata {
     rawDataSnapshot: Record<string, any> | null;
 }
 
-export interface Item {
-    id: string;
-    name: string;
-    description: string;
-    imageUrl: string;
-    category: ItemCategory;
-    condition: ItemCondition;
-    estimatedMarketValue: number; // in cents
-    valuationSource: ValuationSource;
-    apiMetadata: ApiMetadata;
-}
 
-export interface User {
-    id: string;
-    name: string;
-    avatarUrl: string;
-    cash: number; // in cents
-    inventory: Item[];
-    valuationReputationScore: number;
-    netTradeSurplus: number; // in cents
-}
-
-export enum TradeStatus {
-    // Initial Negotiation
-    PENDING_ACCEPTANCE = 'PENDING_ACCEPTANCE', // Awaiting response
-    REJECTED = 'REJECTED',
-    ACCEPTED = 'ACCEPTED', // Trade accepted, moving to financial/logistics
-
-    // Financial States (if cash supplement > 0)
-    PAYMENT_PENDING = 'PAYMENT_PENDING', // Awaiting escrow funding
-    PAYMENT_FAILED = 'PAYMENT_FAILED',
-    ESCROW_FUNDED = 'ESCROW_FUNDED', // Funds held by Stripe in platform account
-
-    // Logistics States
-    SHIPPING_PENDING = 'SHIPPING_PENDING', // Awaiting tracking numbers
-    IN_TRANSIT = 'IN_TRANSIT', // Shipped
-
-    // Verification & Dispute States
-    // Delivered, Inspection Window (e.g., 72 hours) open
-    DELIVERED_AWAITING_VERIFICATION = 'DELIVERED_AWAITING_VERIFICATION',
-    DISPUTE_OPENED = 'DISPUTE_OPENED', // A user has raised an issue
-
-    // Terminal States
-    COMPLETED = 'COMPLETED', // Verified by users or window expired. Funds released.
-    CANCELLED = 'CANCELLED', // Cancelled before ESCROW_FUNDED or SHIPPING_PENDING
-    // Moderator finalized the trade (funds released or refunded)
-    DISPUTE_RESOLVED = 'DISPUTE_RESOLVED'
-}
-
-export type DisputeStatus = 'AWAITING_EVIDENCE' | 'AWAITING_RESPONSE' | 'IN_MEDIATION' | 'ESCALATED_TO_MODERATION' | 'RESOLVED';
-// Item Not Received, Significantly Not As Described
-export type DisputeType = 'INR' | 'SNAD' | 'COUNTERFEIT' | 'SHIPPING_DAMAGE';
-
-export interface MediationMessage {
-    id: string;
-    senderId: string;
-    text: string;
-    timestamp: Date;
-}
-
-export type DisputeResolution = 'FULL_REFUND' | 'PARTIAL_REFUND' | 'TRADE_REVERSAL' | 'TRADE_UPHELD';
-
-
-export interface DisputeTicket {
-    id: string;
-    tradeId: string;
-    initiatorId: string;
-    status: DisputeStatus;
-    disputeType: DisputeType;
-    // Evidence Handling (Use Pre-signed S3 URLs for secure uploads)
-    initiatorEvidence: { statement: string, attachments: string[] } | null;
-    respondentEvidence: { statement: string, attachments: string[] } | null;
-    mediationLog: MediationMessage[];
-    resolution: DisputeResolution | null;
-    moderatorId: string | null;
-    moderatorNotes?: string;
-    deadlineForNextAction: Date;
-}
-
+// --- Trade Lifecycle ---
 
 export interface Trade {
     id: string;
@@ -102,28 +49,83 @@ export interface Trade {
     proposerCash: number; // in cents
     receiverCash: number; // in cents
     status: TradeStatus;
-    createdAt: Date;
-    updatedAt: Date;
-    disputeTicketId?: string | null;
-    ratingDeadline?: Date; // New: Deadline for leaving a rating
-    proposerRated?: boolean;
-    receiverRated?: boolean;
+    createdAt: string;
+    updatedAt: string;
+    disputeTicketId: string | null;
 }
 
-// --- New: TradeRating for Double-Blind System ---
+export enum TradeStatus {
+    PENDING_ACCEPTANCE = 'PENDING_ACCEPTANCE',
+    ACCEPTED = 'ACCEPTED',
+    REJECTED = 'REJECTED',
+    CANCELLED = 'CANCELLED',
+    PAYMENT_PENDING = 'PAYMENT_PENDING',
+    ESCROW_FUNDED = 'ESCROW_FUNDED',
+    SHIPPING_PENDING = 'SHIPPING_PENDING',
+    IN_TRANSIT = 'IN_TRANSIT',
+    DELIVERED_AWAITING_VERIFICATION = 'DELIVERED_AWAITING_VERIFICATION',
+    COMPLETED_AWAITING_RATING = 'COMPLETED_AWAITING_RATING',
+    COMPLETED = 'COMPLETED',
+    DISPUTE_OPENED = 'DISPUTE_OPENED',
+    DISPUTE_RESOLVED = 'DISPUTE_RESOLVED',
+}
+
+
+// --- Dispute Resolution System ---
+
+export interface DisputeTicket {
+    id: string;
+    tradeId: string;
+    initiatorId: string;
+    status: DisputeStatus;
+    disputeType: DisputeType;
+    createdAt: string;
+    updatedAt: string;
+    deadlineForNextAction: string;
+    initiatorEvidence: DisputeEvidence | null;
+    respondentEvidence: DisputeEvidence | null;
+    mediationLog: MediationMessage[];
+    resolution: DisputeResolution | null;
+    moderatorNotes: string | null;
+}
+
+export interface DisputeEvidence {
+    statement: string;
+    attachments: string[]; // URLs or identifiers for uploaded files
+}
+
+export interface MediationMessage {
+    id: string;
+    senderId: string; // 'user-1', 'user-2', or 'moderator'
+    text: string;
+    timestamp: string;
+}
+
+export enum DisputeStatus {
+    OPEN_AWAITING_RESPONSE = 'OPEN_AWAITING_RESPONSE',
+    IN_MEDIATION = 'IN_MEDIATION',
+    ESCALATED_TO_MODERATOR = 'ESCALATED_TO_MODERATOR',
+    RESOLVED = 'RESOLVED',
+    CLOSED_AUTOMATICALLY = 'CLOSED_AUTOMATICALLY',
+}
+
+export type DisputeType = 'INR' | 'SNAD' | 'COUNTERFEIT' | 'SHIPPING_DAMAGE';
+export type DisputeResolution = 'TRADE_UPHELD' | 'FULL_REFUND' | 'PARTIAL_REFUND' | 'TRADE_REVERSAL';
+
+
+// --- Rating and Feedback System ---
+
 export interface TradeRating {
     id: string;
     tradeId: string;
-    raterId: string; // The user submitting the rating
-    rateeId: string; // The user being rated
-    // Faceted Scores (1-5)
-    overallScore: number;
-    itemAccuracyScore: number;
-    communicationScore: number;
-    shippingSpeedScore: number;
+    raterId: string;
+    rateeId: string;
+    overallScore: number; // 1-5
+    itemAccuracyScore: number; // 1-5
+    communicationScore: number; // 1-5
+    shippingSpeedScore: number; // 1-5
     publicComment: string | null;
-    privateFeedback: string | null; // Only visible to Leverage admins
-    createdAt: Date;
-    // State management for the double-blind system
-    isRevealed: boolean; // Crucial: Starts as FALSE
+    privateFeedback: string | null;
+    createdAt: string;
+    isRevealed: boolean;
 }
