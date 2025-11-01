@@ -1,5 +1,5 @@
 // Fix: Populated file with mock data and API functions.
-import { User, Item, Trade, TradeStatus, DisputeTicket, DisputeType } from '../types';
+import { User, Item, Trade, TradeStatus, DisputeTicket, DisputeType, DisputeResolution } from '../types';
 
 // --- MOCK DATABASE ---
 
@@ -268,5 +268,51 @@ export const escalateDispute = async (ticketId: string): Promise<DisputeTicket> 
         mockTrades[tradeIndex].updatedAt = new Date();
     }
 
+    return JSON.parse(JSON.stringify(ticket));
+};
+
+export const resolveDispute = async (
+    ticketId: string,
+    resolution: DisputeResolution,
+    moderatorNotes: string,
+    moderatorId: string = 'mod-001'
+): Promise<DisputeTicket> => {
+    await simulateDelay(700);
+    const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) throw new Error("Dispute ticket not found");
+
+    const ticket = mockDisputeTickets[ticketIndex];
+    if (ticket.status !== 'ESCALATED_TO_MODERATION') {
+        throw new Error("This dispute is not awaiting moderation.");
+    }
+
+    // Update the dispute ticket
+    ticket.status = 'RESOLVED';
+    ticket.resolution = resolution;
+    ticket.moderatorId = moderatorId;
+    ticket.moderatorNotes = moderatorNotes;
+    mockDisputeTickets[ticketIndex] = ticket;
+
+    // Update the parent trade
+    const tradeIndex = mockTrades.findIndex(t => t.id === ticket.tradeId);
+    if (tradeIndex !== -1) {
+        const trade = mockTrades[tradeIndex];
+        trade.status = TradeStatus.DISPUTE_RESOLVED;
+        trade.updatedAt = new Date();
+        
+        // --- SIMULATE ESCROW SERVICE ---
+        if (resolution === 'FULL_REFUND' && trade.proposerCash > 0) {
+            const proposerIndex = mockUsers.findIndex(u => u.id === trade.proposerId);
+            if (proposerIndex !== -1) {
+                mockUsers[proposerIndex].cash += trade.proposerCash;
+                console.log(`Refunded $${trade.proposerCash / 100} to ${mockUsers[proposerIndex].name}`);
+            }
+        }
+        // In a real app, item ownership would be reverted for 'TRADE_REVERSAL'.
+        // This is omitted for simplicity in the mock API.
+    } else {
+        throw new Error("Could not find parent trade to resolve.");
+    }
+    
     return JSON.parse(JSON.stringify(ticket));
 };

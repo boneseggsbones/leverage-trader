@@ -73,6 +73,9 @@ export interface MediationMessage {
     timestamp: Date;
 }
 
+export type DisputeResolution = 'FULL_REFUND' | 'PARTIAL_REFUND' | 'TRADE_REVERSAL' | 'TRADE_UPHELD';
+
+
 export interface DisputeTicket {
     id: string;
     tradeId: string;
@@ -83,8 +86,9 @@ export interface DisputeTicket {
     initiatorEvidence: { statement: string, attachments: string[] } | null;
     respondentEvidence: { statement: string, attachments: string[] } | null;
     mediationLog: MediationMessage[];
-    resolution: 'FULL_REFUND' | 'PARTIAL_REFUND' | 'TRADE_REVERSAL' | 'TRADE_UPHELD' | null;
+    resolution: DisputeResolution | null;
     moderatorId: string | null;
+    moderatorNotes?: string;
     deadlineForNextAction: Date;
 }
 

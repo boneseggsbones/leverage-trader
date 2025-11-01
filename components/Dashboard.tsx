@@ -3,17 +3,18 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute } from '../api/mockApi';
-import { User, Trade, TradeStatus, DisputeType, DisputeTicket } from '../types';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute } from '../api/mockApi';
+import { User, Trade, TradeStatus, DisputeType, DisputeTicket, DisputeResolution } from '../types';
 import ItemCard from './ItemCard';
 import ConfirmationModal from './ConfirmationModal';
 import DisputeModal from './DisputeModal';
 import DisputeEvidenceModal from './DisputeEvidenceModal';
 import DisputeResponseModal from './DisputeResponseModal';
 import DisputeMediationModal from './DisputeMediationModal';
+import DisputeResolutionModal from './DisputeResolutionModal';
 
 const Dashboard: React.FC = () => {
-    const { currentUser, logout } = useAuth();
+    const { currentUser, logout, updateUser } = useAuth();
     const { navigateTo } = useNavigation();
     const { addNotification } = useNotification();
 
@@ -27,12 +28,15 @@ const Dashboard: React.FC = () => {
     const [responseModalState, setResponseModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
     const [mediationModalState, setMediationModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null, otherUser: User | null}>({ isOpen: false, disputeTicket: null, otherUser: null });
     const [escalationModalState, setEscalationModalState] = useState<{isOpen: boolean, ticketId: string | null}>({isOpen: false, ticketId: null});
+    const [resolutionModalState, setResolutionModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null, users: User[] }>({ isOpen: false, disputeTicket: null, users: [] });
+
     
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
     const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [isEscalating, setIsEscalating] = useState(false);
+    const [isResolving, setIsResolving] = useState(false);
 
 
     const loadDashboardData = async () => {
@@ -102,11 +106,16 @@ const Dashboard: React.FC = () => {
                  return;
             }
             
-            const isInitiator = currentUser.id === ticket.initiatorId;
             const allUsers = [...otherUsers, currentUser];
-            const otherPartyId = isInitiator 
-                ? trades.find(t => t.id === ticket.tradeId)?.receiverId 
-                : trades.find(t => t.id === ticket.tradeId)?.proposerId;
+            const tradeForUsers = trades.find(t => t.id === ticket.tradeId);
+            if (!tradeForUsers) {
+                 addNotification('Could not find the trade associated with this dispute.', 'error');
+                 return;
+            }
+
+            const isInitiator = currentUser.id === ticket.initiatorId;
+            const otherPartyId = ticket.initiatorId === tradeForUsers.proposerId ? tradeForUsers.receiverId : tradeForUsers.proposerId;
+
             const initiator = allUsers.find(u => u.id === ticket.initiatorId);
             const otherParty = allUsers.find(u => u.id === otherPartyId);
 
@@ -129,10 +138,17 @@ const Dashboard: React.FC = () => {
                     setMediationModalState({ isOpen: true, disputeTicket: ticket, otherUser: otherParty || null });
                     break;
                 case 'ESCALATED_TO_MODERATION':
-                    addNotification('This dispute has been escalated and is now awaiting moderator review.', 'info');
+                    const participants = [initiator, otherParty].filter(Boolean) as User[];
+                    setResolutionModalState({ isOpen: true, disputeTicket: ticket, users: participants});
+                    break;
+                case 'RESOLVED':
+                    addNotification('This dispute has been resolved by a moderator.', 'info');
                     break;
                 default:
-                    addNotification(`This dispute is currently in '${ticket.status.replace(/_/g, ' ')}' status.`, 'info');
+                    // Fix: Cast ticket.status to string. The compiler narrows ticket.status to `never`
+                    // in this default case because all possible values of DisputeStatus are handled above.
+                    // This allows graceful handling of any unexpected status values.
+                    addNotification(`This dispute is currently in '${(ticket.status as string).replace(/_/g, ' ')}' status.`, 'info');
                     break;
             }
         } catch (err) {
@@ -202,6 +218,34 @@ const Dashboard: React.FC = () => {
             setIsEscalating(false);
         }
     };
+
+    const handleResolveDispute = async (resolution: DisputeResolution, moderatorNotes: string) => {
+        if (!resolutionModalState.disputeTicket || !currentUser) return;
+        setIsResolving(true);
+        try {
+            await resolveDispute(resolutionModalState.disputeTicket.id, resolution, moderatorNotes, currentUser.id);
+            addNotification('Dispute has been resolved.', 'success');
+            
+            // This is a critical state change that affects cash, so we need a full refresh.
+            // In a real app with WebSockets/SWR, this would be handled more gracefully.
+            const [allUsers, userTrades] = await Promise.all([
+                fetchAllUsers(),
+                fetchTradesForUser(currentUser.id),
+            ]);
+            setOtherUsers(allUsers.filter(u => u.id !== currentUser.id));
+            setTrades(userTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+            const updatedCurrentUser = allUsers.find(u => u.id === currentUser.id);
+            if (updatedCurrentUser) {
+                updateUser(updatedCurrentUser); // Update context with fresh user data
+            }
+
+        } catch (err) {
+            addNotification((err as Error).message || 'Failed to resolve dispute.', 'error');
+        } finally {
+            setResolutionModalState({ isOpen: false, disputeTicket: null, users: [] });
+            setIsResolving(false);
+        }
+    };
     
     if (!currentUser) return null;
     
@@ -214,6 +258,7 @@ const Dashboard: React.FC = () => {
                  return 'bg-red-100 text-red-800';
             case TradeStatus.DELIVERED_AWAITING_VERIFICATION: return 'bg-blue-100 text-blue-800';
             case TradeStatus.DISPUTE_OPENED: return 'bg-purple-100 text-purple-800';
+            case TradeStatus.DISPUTE_RESOLVED: return 'bg-gray-800 text-white';
             default: return 'bg-gray-100 text-gray-800';
         }
     };
@@ -350,6 +395,16 @@ const Dashboard: React.FC = () => {
                     currentUser={currentUser}
                     otherUser={mediationModalState.otherUser}
                     isSubmitting={isSendingMessage}
+                />
+            )}
+            {resolutionModalState.isOpen && (
+                <DisputeResolutionModal
+                    isOpen={resolutionModalState.isOpen}
+                    onClose={() => setResolutionModalState({ isOpen: false, disputeTicket: null, users: [] })}
+                    onSubmit={handleResolveDispute}
+                    disputeTicket={resolutionModalState.disputeTicket}
+                    users={resolutionModalState.users}
+                    isSubmitting={isResolving}
                 />
             )}
             <ConfirmationModal
