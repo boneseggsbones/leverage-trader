@@ -1,5 +1,5 @@
 // Fix: Populated file with mock data and API functions.
-import { User, Item, Trade, TradeStatus } from '../types';
+import { User, Item, Trade, TradeStatus, DisputeTicket, DisputeType } from '../types';
 
 // --- MOCK DATABASE ---
 
@@ -22,7 +22,10 @@ let mockTrades: Trade[] = [
     { id: 'trade-2', proposerId: 'user-3', receiverId: 'user-1', proposerItemIds: ['item-4'], receiverItemIds: ['item-5'], proposerCash: 0, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 3600000), updatedAt: new Date(Date.now() - 3600000) },
     { id: 'trade-3', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: ['item-1'], receiverItemIds: [], proposerCash: 1000, receiverCash: 0, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 86400000*2), updatedAt: new Date(Date.now() - 86400000) },
     { id: 'trade-4', proposerId: 'user-2', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: [], proposerCash: 500, receiverCash: 0, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 86400000*3), updatedAt: new Date(Date.now() - 86400000*2) },
+    { id: 'trade-5', proposerId: 'user-3', receiverId: 'user-1', proposerItemIds: ['item-3'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DELIVERED_AWAITING_VERIFICATION, createdAt: new Date(Date.now() - 86400000*4), updatedAt: new Date(Date.now() - 86400000*2) },
 ];
+
+let mockDisputeTickets: DisputeTicket[] = [];
 
 // --- API FUNCTIONS ---
 
@@ -88,11 +91,9 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
     if (trade.status !== TradeStatus.PENDING_ACCEPTANCE) throw new Error("Trade is no longer pending");
     
     if (response === 'accept') {
-        trade.status = TradeStatus.ACCEPTED;
-        // In a real app, this would trigger payment/shipping flows. For now, we go to completed.
-        // Here you would implement the logic for item and cash exchange
-        // and reputation score updates. For this mock, we'll just complete it.
-        trade.status = TradeStatus.COMPLETED;
+        // In a real app, this would trigger payment/shipping flows. For this mock,
+        // we simulate those steps and land in the state where a user can verify the received items.
+        trade.status = TradeStatus.DELIVERED_AWAITING_VERIFICATION;
     } else if (response === 'reject') {
         trade.status = TradeStatus.REJECTED;
     } else if (response === 'cancel') {
@@ -107,4 +108,42 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
     trade.updatedAt = new Date();
 
     return JSON.parse(JSON.stringify(trade));
+};
+
+export const openDispute = async (
+    tradeId: string,
+    initiatorId: string,
+    disputeType: DisputeType,
+    statement: string
+): Promise<DisputeTicket> => {
+    await simulateDelay(600);
+    const tradeIndex = mockTrades.findIndex(t => t.id === tradeId);
+    if (tradeIndex === -1) throw new Error("Trade not found");
+    
+    const trade = mockTrades[tradeIndex];
+    
+    // In a real app, there would be stricter checks here.
+    if (trade.status !== TradeStatus.DELIVERED_AWAITING_VERIFICATION && trade.status !== TradeStatus.COMPLETED) {
+        throw new Error("This trade is not in a state that can be disputed.");
+    }
+    
+    trade.status = TradeStatus.DISPUTE_OPENED;
+    
+    const newTicket: DisputeTicket = {
+        id: `dispute-${Date.now()}`,
+        tradeId,
+        status: 'AWAITING_EVIDENCE',
+        disputeType,
+        initiatorEvidence: { statement, attachments: [] },
+        respondentEvidence: null,
+        resolution: null,
+        moderatorId: null,
+        deadlineForNextAction: new Date(Date.now() + 7 * 86400000), // 7 days from now
+    };
+    
+    mockDisputeTickets.push(newTicket);
+    trade.disputeTicketId = newTicket.id;
+    trade.updatedAt = new Date();
+    
+    return JSON.parse(JSON.stringify(newTicket));
 };

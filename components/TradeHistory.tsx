@@ -62,6 +62,9 @@ const TradeHistory: React.FC = () => {
             case TradeStatus.IN_TRANSIT:
             case TradeStatus.DELIVERED_AWAITING_VERIFICATION:
                  return 'bg-blue-100 text-blue-800';
+            case TradeStatus.DISPUTE_OPENED:
+            case TradeStatus.DISPUTE_RESOLVED:
+                return 'bg-purple-100 text-purple-800';
             default: return 'bg-yellow-100 text-yellow-800';
         }
     };
@@ -105,7 +108,7 @@ const TradeHistory: React.FC = () => {
                                                 </p>
                                             </div>
                                             <div className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(trade.status)}`}>
-                                                {trade.status}
+                                                {trade.status.replace(/_/g, ' ')}
                                             </div>
                                         </div>
                                     </div>

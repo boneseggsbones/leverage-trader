@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade } from '../api/mockApi';
-import { User, Trade, TradeStatus } from '../types';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute } from '../api/mockApi';
+import { User, Trade, TradeStatus, DisputeType } from '../types';
 import ItemCard from './ItemCard';
+import DisputeModal from './DisputeModal';
 
 const Dashboard: React.FC = () => {
     const { currentUser, logout } = useAuth();
@@ -16,31 +17,35 @@ const Dashboard: React.FC = () => {
     const [trades, setTrades] = useState<Trade[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    const [disputeModalState, setDisputeModalState] = useState<{isOpen: boolean, tradeId: string | null}>({isOpen: false, tradeId: null});
+    const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+
+
+    const loadDashboardData = async () => {
+        if (!currentUser) return;
+        try {
+            setIsLoading(true);
+            const [allUsers, userTrades] = await Promise.all([
+                fetchAllUsers(),
+                fetchTradesForUser(currentUser.id),
+            ]);
+            setOtherUsers(allUsers.filter(u => u.id !== currentUser.id));
+            setTrades(userTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+            setError(null);
+        } catch (err) {
+            setError("Failed to load dashboard data. Please refresh.");
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!currentUser) {
             navigateTo('login');
             return;
         }
-
-        const loadDashboardData = async () => {
-            try {
-                setIsLoading(true);
-                const [allUsers, userTrades] = await Promise.all([
-                    fetchAllUsers(),
-                    fetchTradesForUser(currentUser.id),
-                ]);
-                setOtherUsers(allUsers.filter(u => u.id !== currentUser.id));
-                setTrades(userTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
-                setError(null);
-            } catch (err) {
-                setError("Failed to load dashboard data. Please refresh.");
-                console.error(err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         loadDashboardData();
     }, [currentUser, navigateTo]);
 
@@ -56,33 +61,70 @@ const Dashboard: React.FC = () => {
         }
     };
     
+    const handleDisputeSubmit = async (disputeType: DisputeType, statement: string) => {
+        if (!disputeModalState.tradeId || !currentUser) return;
+        setIsSubmittingDispute(true);
+        try {
+            await openDispute(disputeModalState.tradeId, currentUser.id, disputeType, statement);
+            addNotification('Dispute opened successfully.', 'success');
+            setDisputeModalState({isOpen: false, tradeId: null});
+            await loadDashboardData(); // Refresh data from API
+        } catch (err) {
+            addNotification((err as Error).message || 'Failed to open dispute.', 'error');
+            console.error(err);
+        } finally {
+            setIsSubmittingDispute(false);
+        }
+    };
+    
     if (!currentUser) return null;
+    
+    const getStatusClasses = (status: TradeStatus) => {
+        switch (status) {
+            case TradeStatus.PENDING_ACCEPTANCE: return 'bg-yellow-100 text-yellow-800';
+            case TradeStatus.COMPLETED: return 'bg-green-100 text-green-800';
+            case TradeStatus.REJECTED:
+            case TradeStatus.CANCELLED:
+                 return 'bg-red-100 text-red-800';
+            case TradeStatus.DELIVERED_AWAITING_VERIFICATION: return 'bg-blue-100 text-blue-800';
+            case TradeStatus.DISPUTE_OPENED: return 'bg-purple-100 text-purple-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
 
     const renderTrade = (trade: Trade) => {
         const isReceiver = trade.receiverId === currentUser.id;
         const otherPartyId = isReceiver ? trade.proposerId : trade.receiverId;
         const otherParty = [...otherUsers, currentUser].find(u => u.id === otherPartyId);
-
+        
+        const canDispute = trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION;
 
         return (
              <div key={trade.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <p className="text-sm text-gray-500">
-                    Trade with <span className="font-bold">{otherParty?.name || 'Unknown User'}</span>
-                    <span className={`ml-2 px-2 py-0.5 text-xs font-semibold rounded-full ${trade.status === TradeStatus.PENDING_ACCEPTANCE ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{trade.status}</span>
-                </p>
-                <p className="text-xs text-gray-400">Last updated: {new Date(trade.updatedAt).toLocaleDateString()}</p>
-                 {trade.status === TradeStatus.PENDING_ACCEPTANCE && (
-                    <div className="mt-4 flex gap-2">
-                        {isReceiver ? (
-                            <>
-                                <button onClick={() => handleTradeResponse(trade.id, 'accept')} className="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md">Accept</button>
-                                <button onClick={() => handleTradeResponse(trade.id, 'reject')} className="px-3 py-1 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md">Reject</button>
-                            </>
-                        ) : (
-                             <button onClick={() => handleTradeResponse(trade.id, 'cancel')} className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
-                        )}
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="text-sm text-gray-500">
+                            Trade with <span className="font-bold">{otherParty?.name || 'Unknown User'}</span>
+                        </p>
+                        <p className="text-xs text-gray-400">Last updated: {new Date(trade.updatedAt).toLocaleDateString()}</p>
                     </div>
-                )}
+                     <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(trade.status)}`}>{trade.status.replace(/_/g, ' ')}</span>
+                </div>
+                 
+                 <div className="mt-4 flex gap-2">
+                    {trade.status === TradeStatus.PENDING_ACCEPTANCE && isReceiver && (
+                        <>
+                            <button onClick={() => handleTradeResponse(trade.id, 'accept')} className="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md">Accept</button>
+                            <button onClick={() => handleTradeResponse(trade.id, 'reject')} className="px-3 py-1 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md">Reject</button>
+                        </>
+                    )}
+                    {trade.status === TradeStatus.PENDING_ACCEPTANCE && !isReceiver && (
+                         <button onClick={() => handleTradeResponse(trade.id, 'cancel')} className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
+                    )}
+                    {canDispute && (
+                        <button onClick={() => setDisputeModalState({ isOpen: true, tradeId: trade.id })} className="px-3 py-1 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-md">File Dispute</button>
+                    )}
+                 </div>
             </div>
         );
     };
@@ -141,6 +183,15 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </main>
+            {disputeModalState.isOpen && disputeModalState.tradeId && (
+                <DisputeModal 
+                    isOpen={disputeModalState.isOpen}
+                    onClose={() => setDisputeModalState({ isOpen: false, tradeId: null })}
+                    onSubmit={handleDisputeSubmit}
+                    tradeId={disputeModalState.tradeId}
+                    isSubmitting={isSubmittingDispute}
+                />
+            )}
         </div>
     );
 };
