@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence } from '../api/mockApi';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse } from '../api/mockApi';
 import { User, Trade, TradeStatus, DisputeType, DisputeTicket } from '../types';
 import ItemCard from './ItemCard';
 import DisputeModal from './DisputeModal';
 import DisputeEvidenceModal from './DisputeEvidenceModal';
+import DisputeResponseModal from './DisputeResponseModal';
 
 const Dashboard: React.FC = () => {
     const { currentUser, logout } = useAuth();
@@ -21,9 +22,11 @@ const Dashboard: React.FC = () => {
     
     const [disputeModalState, setDisputeModalState] = useState<{isOpen: boolean, tradeId: string | null}>({isOpen: false, tradeId: null});
     const [evidenceModalState, setEvidenceModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
+    const [responseModalState, setResponseModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
     
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
+    const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
 
 
     const loadDashboardData = async () => {
@@ -81,26 +84,42 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const handleOpenEvidenceModal = async (trade: Trade) => {
+    const handleManageDispute = async (trade: Trade) => {
         if (!trade.disputeTicketId || !currentUser) {
             addNotification('Could not find associated dispute ticket.', 'error');
             return;
         }
         try {
             const ticket = await fetchDisputeTicket(trade.disputeTicketId);
-            if (ticket) {
-                if (ticket.status === 'AWAITING_EVIDENCE') {
-                    if (ticket.initiatorId === currentUser.id) {
+            if (!ticket) {
+                 addNotification('Failed to load dispute details.', 'error');
+                 return;
+            }
+            
+            const isInitiator = currentUser.id === ticket.initiatorId;
+
+            switch (ticket.status) {
+                case 'AWAITING_EVIDENCE':
+                    if (isInitiator) {
                         setEvidenceModalState({ isOpen: true, disputeTicket: ticket });
                     } else {
-                        const otherParty = [...otherUsers, currentUser].find(u => u.id === ticket.initiatorId);
-                        addNotification(`Waiting for ${otherParty?.name || 'the other party'} to submit evidence.`, 'info');
+                        const initiator = [...otherUsers, currentUser].find(u => u.id === ticket.initiatorId);
+                        addNotification(`Waiting for ${initiator?.name || 'the other party'} to submit evidence.`, 'info');
                     }
-                } else {
+                    break;
+                case 'AWAITING_RESPONSE':
+                     if (!isInitiator) { // It's the respondent's turn
+                        setResponseModalState({ isOpen: true, disputeTicket: ticket });
+                    } else { // Initiator is waiting
+                        addNotification(`Waiting for the other party to respond.`, 'info');
+                    }
+                    break;
+                case 'IN_MEDIATION':
+                    addNotification(`This dispute is now in mediation. A moderator will review it shortly.`, 'info');
+                    break;
+                default:
                     addNotification(`This dispute is currently in '${ticket.status.replace(/_/g, ' ')}' status.`, 'info');
-                }
-            } else {
-                 addNotification('Failed to load dispute details.', 'error');
+                    break;
             }
         } catch (err) {
             addNotification('Failed to load dispute details.', 'error');
@@ -121,6 +140,21 @@ const Dashboard: React.FC = () => {
              addNotification((err as Error).message || 'Failed to submit evidence.', 'error');
         } finally {
             setIsSubmittingEvidence(false);
+        }
+    };
+    
+    const handleResponseSubmit = async (statement: string, attachments: string[]) => {
+        if (!responseModalState.disputeTicket) return;
+
+        setIsSubmittingResponse(true);
+        try {
+            await submitResponse(responseModalState.disputeTicket.id, statement, attachments);
+            addNotification('Response submitted successfully. The dispute is now in mediation.', 'success');
+            setResponseModalState({ isOpen: false, disputeTicket: null });
+        } catch (err) {
+             addNotification((err as Error).message || 'Failed to submit response.', 'error');
+        } finally {
+            setIsSubmittingResponse(false);
         }
     };
     
@@ -173,7 +207,7 @@ const Dashboard: React.FC = () => {
                         <button onClick={() => setDisputeModalState({ isOpen: true, tradeId: trade.id })} className="px-3 py-1 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-md">File Dispute</button>
                     )}
                     {isDisputed && (
-                        <button onClick={() => handleOpenEvidenceModal(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>
+                        <button onClick={() => handleManageDispute(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>
                     )}
                  </div>
             </div>
@@ -250,6 +284,15 @@ const Dashboard: React.FC = () => {
                     onSubmit={handleEvidenceSubmit}
                     disputeTicket={evidenceModalState.disputeTicket}
                     isSubmitting={isSubmittingEvidence}
+                />
+            )}
+            {responseModalState.isOpen && (
+                <DisputeResponseModal
+                    isOpen={responseModalState.isOpen}
+                    onClose={() => setResponseModalState({ isOpen: false, disputeTicket: null })}
+                    onSubmit={handleResponseSubmit}
+                    disputeTicket={responseModalState.disputeTicket}
+                    isSubmitting={isSubmittingResponse}
                 />
             )}
         </div>

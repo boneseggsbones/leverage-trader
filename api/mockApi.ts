@@ -112,7 +112,18 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
 
 export const fetchDisputeTicket = async (ticketId: string): Promise<DisputeTicket | undefined> => {
     await simulateDelay(150);
-    return JSON.parse(JSON.stringify(mockDisputeTickets.find(t => t.id === ticketId)));
+    // In a real app, a background job would check for deadlines and escalate.
+    // We can simulate that check here for demonstration.
+    const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex !== -1) {
+        const ticket = mockDisputeTickets[ticketIndex];
+        if ((ticket.status === 'AWAITING_EVIDENCE' || ticket.status === 'AWAITING_RESPONSE') && new Date() > ticket.deadlineForNextAction) {
+            // ticket.status = 'ESCALATED_TO_MODERATION';
+            // console.log(`Dispute ${ticketId} auto-escalated due to expired deadline.`);
+        }
+        return JSON.parse(JSON.stringify(ticket));
+    }
+    return undefined;
 };
 
 export const submitEvidence = async (
@@ -139,13 +150,37 @@ export const submitEvidence = async (
     }
 
     ticket.status = 'AWAITING_RESPONSE';
-    // Give the other party 7 days to respond.
-    ticket.deadlineForNextAction = new Date(Date.now() + 7 * 86400000); 
+    // Give the other party 72 hours to respond.
+    ticket.deadlineForNextAction = new Date(Date.now() + 3 * 86400000); 
 
     mockDisputeTickets[ticketIndex] = ticket;
 
     return JSON.parse(JSON.stringify(ticket));
 };
+
+export const submitResponse = async (
+    ticketId: string,
+    statement: string,
+    attachments: string[]
+): Promise<DisputeTicket> => {
+    await simulateDelay(600);
+    const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) throw new Error("Dispute ticket not found");
+    
+    const ticket = mockDisputeTickets[ticketIndex];
+    if (ticket.status !== 'AWAITING_RESPONSE') {
+        throw new Error("This dispute is not awaiting a response.");
+    }
+
+    ticket.respondentEvidence = { statement, attachments };
+    ticket.status = 'IN_MEDIATION';
+    // Next action deadline is now up to a moderator.
+    // A real system might set a new deadline for mediation actions.
+    
+    mockDisputeTickets[ticketIndex] = ticket;
+    return JSON.parse(JSON.stringify(ticket));
+};
+
 
 export const openDispute = async (
     tradeId: string,
