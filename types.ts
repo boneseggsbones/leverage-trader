@@ -106,6 +106,8 @@ export interface Trade {
     updatedAt: Date;
     disputeTicketId?: string | null;
     ratingDeadline?: Date; // New: Deadline for leaving a rating
+    proposerRated?: boolean;
+    receiverRated?: boolean;
 }
 
 // --- New: TradeRating for Double-Blind System ---

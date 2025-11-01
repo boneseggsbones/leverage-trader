@@ -35,11 +35,11 @@ const mockDisputeTickets: Record<string, DisputeTicket> = {
 };
 
 const mockTrades: Record<string, Trade> = {
-    'trade-1': { id: 'trade-1', proposerId: 'user-1', receiverId: 'user-2', proposerItemIds: ['item-1'], receiverItemIds: [], proposerCash: 1000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000), updatedAt: new Date(Date.now() - 86400000) },
-    'trade-2': { id: 'trade-2', proposerId: 'user-3', receiverId: 'user-1', proposerItemIds: ['item-5'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 172800000), updatedAt: new Date(Date.now() - 172800000), ratingDeadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000) },
-    'trade-3': { id: 'trade-3', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-2'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DISPUTE_OPENED, disputeTicketId: 'dispute-1', createdAt: new Date(Date.now() - 259200000), updatedAt: new Date() },
-    'trade-4': { id: 'trade-4', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-6'], proposerCash: 90000, receiverCash: 0, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 345600000), updatedAt: new Date(Date.now() - 345600000) },
-    'trade-5': { id: 'trade-5', proposerId: 'user-2', receiverId: 'user-3', proposerItemIds: ['item-4'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DELIVERED_AWAITING_VERIFICATION, createdAt: new Date(Date.now() - 432000000), updatedAt: new Date(Date.now() - 86400000) },
+    'trade-1': { id: 'trade-1', proposerId: 'user-1', receiverId: 'user-2', proposerItemIds: ['item-1'], receiverItemIds: [], proposerCash: 1000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000), updatedAt: new Date(Date.now() - 86400000), proposerRated: false, receiverRated: false },
+    'trade-2': { id: 'trade-2', proposerId: 'user-3', receiverId: 'user-1', proposerItemIds: ['item-5'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 172800000), updatedAt: new Date(Date.now() - 172800000), ratingDeadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), proposerRated: false, receiverRated: false },
+    'trade-3': { id: 'trade-3', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-2'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DISPUTE_OPENED, disputeTicketId: 'dispute-1', createdAt: new Date(Date.now() - 259200000), updatedAt: new Date(), proposerRated: false, receiverRated: false },
+    'trade-4': { id: 'trade-4', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-6'], proposerCash: 90000, receiverCash: 0, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 345600000), updatedAt: new Date(Date.now() - 345600000), proposerRated: false, receiverRated: false },
+    'trade-5': { id: 'trade-5', proposerId: 'user-2', receiverId: 'user-3', proposerItemIds: ['item-4'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DELIVERED_AWAITING_VERIFICATION, createdAt: new Date(Date.now() - 432000000), updatedAt: new Date(Date.now() - 86400000), proposerRated: false, receiverRated: false },
 };
 
 const mockRatings: Record<string, TradeRating> = {};
@@ -80,6 +80,8 @@ export const proposeTrade = async (proposerId: string, receiverId: string, propo
         status: TradeStatus.PENDING_ACCEPTANCE,
         createdAt: new Date(),
         updatedAt: new Date(),
+        proposerRated: false,
+        receiverRated: false,
     };
     mockTrades[newTrade.id] = newTrade;
     mockUsers[proposerId].cash -= proposerCash;
@@ -94,12 +96,9 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
 
     switch (response) {
         case 'accept':
-            // Simple accept for demo, goes straight to a state where it can be disputed or rated.
+            // Simple accept for demo, goes to verification state where it can be disputed or finalized.
             trade.status = TradeStatus.DELIVERED_AWAITING_VERIFICATION;
             // In a real app, this would trigger payment/shipping flows.
-            // Here we just complete it for the demo flow.
-            // Let's set a rating deadline upon completion.
-            trade.ratingDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
             break;
         case 'reject':
             trade.status = TradeStatus.REJECTED;
@@ -111,6 +110,23 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
             break;
     }
     trade.updatedAt = new Date();
+    return JSON.parse(JSON.stringify(trade));
+};
+
+export const finalizeTrade = async (tradeId: string): Promise<Trade> => {
+    console.log(`API: Finalizing trade ${tradeId}`);
+    await new Promise(res => setTimeout(res, 300));
+    const trade = mockTrades[tradeId];
+    if (!trade || trade.status !== TradeStatus.DELIVERED_AWAITING_VERIFICATION) {
+        throw new Error("This trade cannot be finalized at this time.");
+    }
+
+    trade.status = TradeStatus.COMPLETED;
+    trade.updatedAt = new Date();
+    // Set rating deadline upon completion, which triggers the rating UI
+    trade.ratingDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    // In a real scenario, this would trigger escrow release.
     return JSON.parse(JSON.stringify(trade));
 };
 
@@ -228,6 +244,8 @@ export const resolveDispute = async (ticketId: string, resolution: DisputeResolu
         }
         // Set rating deadline after resolution
         trade.ratingDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        trade.proposerRated = false;
+        trade.receiverRated = false;
     }
     return JSON.parse(JSON.stringify(ticket));
 };
@@ -268,6 +286,14 @@ export const submitRating = async (ratingData: Omit<TradeRating, 'id' | 'created
         isRevealed: false,
     };
     mockRatings[newRating.id] = newRating;
+
+    // Update trade metadata to track who has rated
+    if (ratingData.raterId === trade.proposerId) {
+        trade.proposerRated = true;
+    } else if (ratingData.raterId === trade.receiverId) {
+        trade.receiverRated = true;
+    }
+    trade.updatedAt = new Date();
     
     // Double-blind logic: check for the other party's rating.
     const otherRating = Object.values(mockRatings).find(r => r.tradeId === ratingData.tradeId && r.raterId === ratingData.rateeId);

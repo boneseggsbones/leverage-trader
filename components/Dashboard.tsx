@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
 // Fix: Add fetchUser to imports to resolve undefined error.
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute, submitRating, fetchRatingsForTrade, fetchRatingsForUser, fetchUser } from '../api/mockApi';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute, submitRating, fetchRatingsForTrade, fetchRatingsForUser, fetchUser, finalizeTrade } from '../api/mockApi';
 import { User, Trade, TradeStatus, DisputeType, DisputeTicket, DisputeResolution, TradeRating } from '../types';
 import ItemCard from './ItemCard';
 import ConfirmationModal from './ConfirmationModal';
@@ -83,6 +83,17 @@ const Dashboard: React.FC = () => {
              // In a real app, user data would be refetched here.
         } catch (err) {
             addNotification(`Failed to respond to trade.`, 'error');
+            console.error(err);
+        }
+    };
+
+    const handleFinalizeTrade = async (tradeId: string) => {
+        try {
+            const updatedTrade = await finalizeTrade(tradeId);
+            setTrades(prev => prev.map(t => t.id === tradeId ? updatedTrade : t));
+            addNotification('Trade finalized successfully. You can now leave a rating.', 'success');
+        } catch (err) {
+            addNotification((err as Error).message || 'Failed to finalize trade.', 'error');
             console.error(err);
         }
     };
@@ -288,16 +299,17 @@ const Dashboard: React.FC = () => {
 
     const renderTradeActions = (trade: Trade, otherParty: User | undefined) => {
         const isReceiver = trade.receiverId === currentUser.id;
+        const canFinalize = trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION;
         const canDispute = trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION;
         const isDisputed = trade.status === TradeStatus.DISPUTE_OPENED;
+
         const isRatable = (trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED) && trade.ratingDeadline;
-        
-        const tradeRatings = ratings.filter(r => r.tradeId === trade.id);
-        const myRating = tradeRatings.find(r => r.raterId === currentUser.id);
+        const myRatingSubmitted = trade.proposerId === currentUser.id ? trade.proposerRated : trade.receiverRated;
+        const bothRated = trade.proposerRated && trade.receiverRated;
         const isDeadlinePassed = trade.ratingDeadline && new Date() > new Date(trade.ratingDeadline);
 
         return (
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
                 {trade.status === TradeStatus.PENDING_ACCEPTANCE && isReceiver && (
                     <>
                         <button onClick={() => handleTradeResponse(trade.id, 'accept')} className="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md">Accept</button>
@@ -307,14 +319,15 @@ const Dashboard: React.FC = () => {
                 {trade.status === TradeStatus.PENDING_ACCEPTANCE && !isReceiver && (
                      <button onClick={() => handleTradeResponse(trade.id, 'cancel')} className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
                 )}
+                {canFinalize && <button onClick={() => handleFinalizeTrade(trade.id)} className="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md">Finalize Trade</button>}
                 {canDispute && <button onClick={() => setDisputeModalState({ isOpen: true, tradeId: trade.id })} className="px-3 py-1 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-md">File Dispute</button>}
                 {isDisputed && <button onClick={() => handleManageDispute(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>}
                 {isRatable && (
                     <>
-                        {myRating && myRating.isRevealed && <button onClick={() => handleViewRatings(trade, otherParty)} className="px-3 py-1 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">View Ratings</button>}
-                        {myRating && !myRating.isRevealed && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Submitted</button>}
-                        {!myRating && !isDeadlinePassed && <button onClick={() => setRatingModalState({ isOpen: true, trade })} className="px-3 py-1 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md">Leave Rating</button>}
-                        {!myRating && isDeadlinePassed && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Window Closed</button>}
+                        {bothRated && <button onClick={() => handleViewRatings(trade, otherParty)} className="px-3 py-1 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">View Ratings</button>}
+                        {myRatingSubmitted && !bothRated && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Submitted</button>}
+                        {!myRatingSubmitted && !isDeadlinePassed && <button onClick={() => setRatingModalState({ isOpen: true, trade })} className="px-3 py-1 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md">Leave Rating</button>}
+                        {!myRatingSubmitted && isDeadlinePassed && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Window Closed</button>}
                     </>
                 )}
             </div>
