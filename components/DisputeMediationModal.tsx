@@ -5,6 +5,7 @@ interface DisputeMediationModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSubmitMessage: (text: string) => void;
+    onEscalate: () => void;
     disputeTicket: DisputeTicket | null;
     currentUser: User | null;
     otherUser: User | null;
@@ -15,6 +16,7 @@ const DisputeMediationModal: React.FC<DisputeMediationModalProps> = ({
     isOpen,
     onClose,
     onSubmitMessage,
+    onEscalate,
     disputeTicket,
     currentUser,
     otherUser,
@@ -101,8 +103,8 @@ const DisputeMediationModal: React.FC<DisputeMediationModalProps> = ({
                     </div>
                 </div>
 
-                <footer className="p-4 border-t border-gray-200">
-                    <form onSubmit={handleSubmit} className="flex gap-2">
+                <footer className="p-4 border-t border-gray-200 space-y-3">
+                     <form onSubmit={handleSubmit} className="flex gap-2">
                         <input
                             type="text"
                             value={newMessage}
@@ -119,6 +121,14 @@ const DisputeMediationModal: React.FC<DisputeMediationModalProps> = ({
                             {isSubmitting ? 'Sending...' : 'Send'}
                         </button>
                     </form>
+                    <div className="text-center">
+                         <button
+                            onClick={onEscalate}
+                            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                        >
+                            Can't agree? Escalate to Moderator
+                        </button>
+                    </div>
                 </footer>
             </div>
         </div>

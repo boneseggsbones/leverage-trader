@@ -248,3 +248,25 @@ export const openDispute = async (
     
     return JSON.parse(JSON.stringify(newTicket));
 };
+
+export const escalateDispute = async (ticketId: string): Promise<DisputeTicket> => {
+    await simulateDelay(500);
+    const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) throw new Error("Dispute ticket not found");
+    
+    const ticket = mockDisputeTickets[ticketIndex];
+    if (ticket.status !== 'IN_MEDIATION') {
+        throw new Error("This dispute can only be escalated from the 'In Mediation' state.");
+    }
+
+    ticket.status = 'ESCALATED_TO_MODERATION';
+    mockDisputeTickets[ticketIndex] = ticket;
+    
+    // Also update the parent trade's timestamp
+    const tradeIndex = mockTrades.findIndex(t => t.id === ticket.tradeId);
+    if (tradeIndex !== -1) {
+        mockTrades[tradeIndex].updatedAt = new Date();
+    }
+
+    return JSON.parse(JSON.stringify(ticket));
+};

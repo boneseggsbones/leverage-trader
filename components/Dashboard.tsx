@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage } from '../api/mockApi';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute } from '../api/mockApi';
 import { User, Trade, TradeStatus, DisputeType, DisputeTicket } from '../types';
 import ItemCard from './ItemCard';
+import ConfirmationModal from './ConfirmationModal';
 import DisputeModal from './DisputeModal';
 import DisputeEvidenceModal from './DisputeEvidenceModal';
 import DisputeResponseModal from './DisputeResponseModal';
@@ -25,11 +26,13 @@ const Dashboard: React.FC = () => {
     const [evidenceModalState, setEvidenceModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
     const [responseModalState, setResponseModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
     const [mediationModalState, setMediationModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null, otherUser: User | null}>({ isOpen: false, disputeTicket: null, otherUser: null });
+    const [escalationModalState, setEscalationModalState] = useState<{isOpen: boolean, ticketId: string | null}>({isOpen: false, ticketId: null});
     
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
     const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
     const [isSendingMessage, setIsSendingMessage] = useState(false);
+    const [isEscalating, setIsEscalating] = useState(false);
 
 
     const loadDashboardData = async () => {
@@ -125,6 +128,9 @@ const Dashboard: React.FC = () => {
                 case 'IN_MEDIATION':
                     setMediationModalState({ isOpen: true, disputeTicket: ticket, otherUser: otherParty || null });
                     break;
+                case 'ESCALATED_TO_MODERATION':
+                    addNotification('This dispute has been escalated and is now awaiting moderator review.', 'info');
+                    break;
                 default:
                     addNotification(`This dispute is currently in '${ticket.status.replace(/_/g, ' ')}' status.`, 'info');
                     break;
@@ -177,6 +183,23 @@ const Dashboard: React.FC = () => {
             addNotification((err as Error).message || 'Failed to send message.', 'error');
         } finally {
             setIsSendingMessage(false);
+        }
+    };
+
+    const handleConfirmEscalation = async () => {
+        if (!escalationModalState.ticketId) return;
+
+        setIsEscalating(true);
+        try {
+            await escalateDispute(escalationModalState.ticketId);
+            addNotification('Dispute successfully escalated to a moderator.', 'success');
+            setEscalationModalState({ isOpen: false, ticketId: null });
+            setMediationModalState({ isOpen: false, disputeTicket: null, otherUser: null }); // Close mediation modal
+            await loadDashboardData(); // Refresh data to show updated state
+        } catch (err) {
+            addNotification((err as Error).message || 'Failed to escalate dispute.', 'error');
+        } finally {
+            setIsEscalating(false);
         }
     };
     
@@ -322,12 +345,23 @@ const Dashboard: React.FC = () => {
                     isOpen={mediationModalState.isOpen}
                     onClose={() => setMediationModalState({ isOpen: false, disputeTicket: null, otherUser: null })}
                     onSubmitMessage={handleSendMessage}
+                    onEscalate={() => setEscalationModalState({ isOpen: true, ticketId: mediationModalState.disputeTicket?.id || null })}
                     disputeTicket={mediationModalState.disputeTicket}
                     currentUser={currentUser}
                     otherUser={mediationModalState.otherUser}
                     isSubmitting={isSendingMessage}
                 />
             )}
+            <ConfirmationModal
+                isOpen={escalationModalState.isOpen}
+                onClose={() => setEscalationModalState({ isOpen: false, ticketId: null })}
+                onConfirm={handleConfirmEscalation}
+                title="Confirm Escalation"
+                confirmButtonText={isEscalating ? "Escalating..." : "Yes, Escalate"}
+                confirmButtonClass="bg-red-600 hover:bg-red-700"
+            >
+                Are you sure you want to escalate this dispute to a moderator? This action cannot be undone. All mediation will stop, and a moderator will make a final decision.
+            </ConfirmationModal>
         </div>
     );
 };
