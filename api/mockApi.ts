@@ -110,6 +110,43 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
     return JSON.parse(JSON.stringify(trade));
 };
 
+export const fetchDisputeTicket = async (ticketId: string): Promise<DisputeTicket | undefined> => {
+    await simulateDelay(150);
+    return JSON.parse(JSON.stringify(mockDisputeTickets.find(t => t.id === ticketId)));
+};
+
+export const submitEvidence = async (
+    ticketId: string,
+    attachments: string[]
+): Promise<DisputeTicket> => {
+    await simulateDelay(600);
+    const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) throw new Error("Dispute ticket not found");
+
+    const ticket = mockDisputeTickets[ticketIndex];
+    if (ticket.status !== 'AWAITING_EVIDENCE') {
+        throw new Error("Not awaiting evidence from initiator.");
+    }
+    if (ticket.disputeType === 'SNAD' && attachments.length === 0) {
+        throw new Error("Photos are mandatory for 'Significantly Not As Described' disputes.");
+    }
+
+    if (ticket.initiatorEvidence) {
+        ticket.initiatorEvidence.attachments = attachments;
+    } else {
+        // This case shouldn't happen with the current flow, but for safety:
+        ticket.initiatorEvidence = { statement: '', attachments };
+    }
+
+    ticket.status = 'AWAITING_RESPONSE';
+    // Give the other party 7 days to respond.
+    ticket.deadlineForNextAction = new Date(Date.now() + 7 * 86400000); 
+
+    mockDisputeTickets[ticketIndex] = ticket;
+
+    return JSON.parse(JSON.stringify(ticket));
+};
+
 export const openDispute = async (
     tradeId: string,
     initiatorId: string,
@@ -123,7 +160,7 @@ export const openDispute = async (
     const trade = mockTrades[tradeIndex];
     
     // In a real app, there would be stricter checks here.
-    if (trade.status !== TradeStatus.DELIVERED_AWAITING_VERIFICATION && trade.status !== TradeStatus.COMPLETED) {
+    if (trade.status !== TradeStatus.DELIVERED_AWAITING_VERIFICATION) {
         throw new Error("This trade is not in a state that can be disputed.");
     }
     
@@ -132,13 +169,14 @@ export const openDispute = async (
     const newTicket: DisputeTicket = {
         id: `dispute-${Date.now()}`,
         tradeId,
+        initiatorId,
         status: 'AWAITING_EVIDENCE',
         disputeType,
         initiatorEvidence: { statement, attachments: [] },
         respondentEvidence: null,
         resolution: null,
         moderatorId: null,
-        deadlineForNextAction: new Date(Date.now() + 7 * 86400000), // 7 days from now
+        deadlineForNextAction: new Date(Date.now() + 2 * 86400000), // 48 hours from now
     };
     
     mockDisputeTickets.push(newTicket);

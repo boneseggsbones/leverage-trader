@@ -69,6 +69,7 @@ export type DisputeType = 'INR' | 'SNAD' | 'COUNTERFEIT' | 'SHIPPING_DAMAGE';
 export interface DisputeTicket {
     id: string;
     tradeId: string;
+    initiatorId: string;
     status: DisputeStatus;
     disputeType: DisputeType;
     // Evidence Handling (Use Pre-signed S3 URLs for secure uploads)

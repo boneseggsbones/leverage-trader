@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute } from '../api/mockApi';
-import { User, Trade, TradeStatus, DisputeType } from '../types';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence } from '../api/mockApi';
+import { User, Trade, TradeStatus, DisputeType, DisputeTicket } from '../types';
 import ItemCard from './ItemCard';
 import DisputeModal from './DisputeModal';
+import DisputeEvidenceModal from './DisputeEvidenceModal';
 
 const Dashboard: React.FC = () => {
     const { currentUser, logout } = useAuth();
@@ -19,7 +20,10 @@ const Dashboard: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     
     const [disputeModalState, setDisputeModalState] = useState<{isOpen: boolean, tradeId: string | null}>({isOpen: false, tradeId: null});
+    const [evidenceModalState, setEvidenceModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
+    
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+    const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
 
 
     const loadDashboardData = async () => {
@@ -76,6 +80,49 @@ const Dashboard: React.FC = () => {
             setIsSubmittingDispute(false);
         }
     };
+
+    const handleOpenEvidenceModal = async (trade: Trade) => {
+        if (!trade.disputeTicketId || !currentUser) {
+            addNotification('Could not find associated dispute ticket.', 'error');
+            return;
+        }
+        try {
+            const ticket = await fetchDisputeTicket(trade.disputeTicketId);
+            if (ticket) {
+                if (ticket.status === 'AWAITING_EVIDENCE') {
+                    if (ticket.initiatorId === currentUser.id) {
+                        setEvidenceModalState({ isOpen: true, disputeTicket: ticket });
+                    } else {
+                        const otherParty = [...otherUsers, currentUser].find(u => u.id === ticket.initiatorId);
+                        addNotification(`Waiting for ${otherParty?.name || 'the other party'} to submit evidence.`, 'info');
+                    }
+                } else {
+                    addNotification(`This dispute is currently in '${ticket.status.replace(/_/g, ' ')}' status.`, 'info');
+                }
+            } else {
+                 addNotification('Failed to load dispute details.', 'error');
+            }
+        } catch (err) {
+            addNotification('Failed to load dispute details.', 'error');
+        }
+    };
+    
+    const handleEvidenceSubmit = async (attachments: string[]) => {
+        if (!evidenceModalState.disputeTicket) return;
+        
+        setIsSubmittingEvidence(true);
+        try {
+            await submitEvidence(evidenceModalState.disputeTicket.id, attachments);
+            addNotification('Evidence submitted successfully.', 'success');
+            setEvidenceModalState({ isOpen: false, disputeTicket: null });
+            // The underlying ticket state changed, but the visible trade status on the dash remains DISPUTE_OPENED.
+            // No data refresh is strictly needed here unless we were showing more granular dispute status.
+        } catch (err) {
+             addNotification((err as Error).message || 'Failed to submit evidence.', 'error');
+        } finally {
+            setIsSubmittingEvidence(false);
+        }
+    };
     
     if (!currentUser) return null;
     
@@ -98,6 +145,7 @@ const Dashboard: React.FC = () => {
         const otherParty = [...otherUsers, currentUser].find(u => u.id === otherPartyId);
         
         const canDispute = trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION;
+        const isDisputed = trade.status === TradeStatus.DISPUTE_OPENED;
 
         return (
              <div key={trade.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -123,6 +171,9 @@ const Dashboard: React.FC = () => {
                     )}
                     {canDispute && (
                         <button onClick={() => setDisputeModalState({ isOpen: true, tradeId: trade.id })} className="px-3 py-1 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-md">File Dispute</button>
+                    )}
+                    {isDisputed && (
+                        <button onClick={() => handleOpenEvidenceModal(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>
                     )}
                  </div>
             </div>
@@ -190,6 +241,15 @@ const Dashboard: React.FC = () => {
                     onSubmit={handleDisputeSubmit}
                     tradeId={disputeModalState.tradeId}
                     isSubmitting={isSubmittingDispute}
+                />
+            )}
+             {evidenceModalState.isOpen && (
+                <DisputeEvidenceModal
+                    isOpen={evidenceModalState.isOpen}
+                    onClose={() => setEvidenceModalState({ isOpen: false, disputeTicket: null })}
+                    onSubmit={handleEvidenceSubmit}
+                    disputeTicket={evidenceModalState.disputeTicket}
+                    isSubmitting={isSubmittingEvidence}
                 />
             )}
         </div>
