@@ -105,4 +105,23 @@ export interface Trade {
     createdAt: Date;
     updatedAt: Date;
     disputeTicketId?: string | null;
+    ratingDeadline?: Date; // New: Deadline for leaving a rating
+}
+
+// --- New: TradeRating for Double-Blind System ---
+export interface TradeRating {
+    id: string;
+    tradeId: string;
+    raterId: string; // The user submitting the rating
+    rateeId: string; // The user being rated
+    // Faceted Scores (1-5)
+    overallScore: number;
+    itemAccuracyScore: number;
+    communicationScore: number;
+    shippingSpeedScore: number;
+    publicComment: string | null;
+    privateFeedback: string | null; // Only visible to Leverage admins
+    createdAt: Date;
+    // State management for the double-blind system
+    isRevealed: boolean; // Crucial: Starts as FALSE
 }

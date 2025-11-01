@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute } from '../api/mockApi';
-import { User, Trade, TradeStatus, DisputeType, DisputeTicket, DisputeResolution } from '../types';
+// Fix: Add fetchUser to imports to resolve undefined error.
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute, submitRating, fetchRatingsForTrade, fetchRatingsForUser, fetchUser } from '../api/mockApi';
+import { User, Trade, TradeStatus, DisputeType, DisputeTicket, DisputeResolution, TradeRating } from '../types';
 import ItemCard from './ItemCard';
 import ConfirmationModal from './ConfirmationModal';
 import DisputeModal from './DisputeModal';
@@ -12,6 +13,8 @@ import DisputeEvidenceModal from './DisputeEvidenceModal';
 import DisputeResponseModal from './DisputeResponseModal';
 import DisputeMediationModal from './DisputeMediationModal';
 import DisputeResolutionModal from './DisputeResolutionModal';
+import RatingModal from './RatingModal';
+import RatingDisplayModal from './RatingDisplayModal';
 
 const Dashboard: React.FC = () => {
     const { currentUser, logout, updateUser } = useAuth();
@@ -20,6 +23,7 @@ const Dashboard: React.FC = () => {
 
     const [otherUsers, setOtherUsers] = useState<User[]>([]);
     const [trades, setTrades] = useState<Trade[]>([]);
+    const [ratings, setRatings] = useState<TradeRating[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
@@ -29,6 +33,8 @@ const Dashboard: React.FC = () => {
     const [mediationModalState, setMediationModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null, otherUser: User | null}>({ isOpen: false, disputeTicket: null, otherUser: null });
     const [escalationModalState, setEscalationModalState] = useState<{isOpen: boolean, ticketId: string | null}>({isOpen: false, ticketId: null});
     const [resolutionModalState, setResolutionModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null, users: User[] }>({ isOpen: false, disputeTicket: null, users: [] });
+    const [ratingModalState, setRatingModalState] = useState<{isOpen: boolean, trade: Trade | null}>({isOpen: false, trade: null});
+    const [ratingDisplayModalState, setRatingDisplayModalState] = useState<{isOpen: boolean, ratings: TradeRating[], trade: Trade | null, otherUser: User | null}>({isOpen: false, ratings: [], trade: null, otherUser: null});
 
     
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
@@ -37,18 +43,21 @@ const Dashboard: React.FC = () => {
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [isEscalating, setIsEscalating] = useState(false);
     const [isResolving, setIsResolving] = useState(false);
+    const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
 
     const loadDashboardData = async () => {
         if (!currentUser) return;
         try {
             setIsLoading(true);
-            const [allUsers, userTrades] = await Promise.all([
+            const [allUsers, userTrades, userRatings] = await Promise.all([
                 fetchAllUsers(),
                 fetchTradesForUser(currentUser.id),
+                fetchRatingsForUser(currentUser.id),
             ]);
             setOtherUsers(allUsers.filter(u => u.id !== currentUser.id));
             setTrades(userTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+            setRatings(userRatings);
             setError(null);
         } catch (err) {
             setError("Failed to load dashboard data. Please refresh.");
@@ -107,17 +116,11 @@ const Dashboard: React.FC = () => {
             }
             
             const allUsers = [...otherUsers, currentUser];
-            const tradeForUsers = trades.find(t => t.id === ticket.tradeId);
-            if (!tradeForUsers) {
-                 addNotification('Could not find the trade associated with this dispute.', 'error');
-                 return;
-            }
-
-            const isInitiator = currentUser.id === ticket.initiatorId;
-            const otherPartyId = ticket.initiatorId === tradeForUsers.proposerId ? tradeForUsers.receiverId : tradeForUsers.proposerId;
+            const otherPartyId = currentUser.id === trade.proposerId ? trade.receiverId : trade.proposerId;
 
             const initiator = allUsers.find(u => u.id === ticket.initiatorId);
             const otherParty = allUsers.find(u => u.id === otherPartyId);
+            const isInitiator = currentUser.id === ticket.initiatorId;
 
             switch (ticket.status) {
                 case 'AWAITING_EVIDENCE':
@@ -164,8 +167,6 @@ const Dashboard: React.FC = () => {
             await submitEvidence(evidenceModalState.disputeTicket.id, attachments);
             addNotification('Evidence submitted successfully.', 'success');
             setEvidenceModalState({ isOpen: false, disputeTicket: null });
-            // The underlying ticket state changed, but the visible trade status on the dash remains DISPUTE_OPENED.
-            // No data refresh is strictly needed here unless we were showing more granular dispute status.
         } catch (err) {
              addNotification((err as Error).message || 'Failed to submit evidence.', 'error');
         } finally {
@@ -193,7 +194,6 @@ const Dashboard: React.FC = () => {
         setIsSendingMessage(true);
         try {
             const updatedTicket = await sendMediationMessage(mediationModalState.disputeTicket.id, currentUser.id, text);
-            // Update the state in the modal to show the new message immediately.
             setMediationModalState(prev => ({...prev, disputeTicket: updatedTicket }));
         } catch (err) {
             addNotification((err as Error).message || 'Failed to send message.', 'error');
@@ -211,7 +211,7 @@ const Dashboard: React.FC = () => {
             addNotification('Dispute successfully escalated to a moderator.', 'success');
             setEscalationModalState({ isOpen: false, ticketId: null });
             setMediationModalState({ isOpen: false, disputeTicket: null, otherUser: null }); // Close mediation modal
-            await loadDashboardData(); // Refresh data to show updated state
+            await loadDashboardData();
         } catch (err) {
             addNotification((err as Error).message || 'Failed to escalate dispute.', 'error');
         } finally {
@@ -225,25 +225,48 @@ const Dashboard: React.FC = () => {
         try {
             await resolveDispute(resolutionModalState.disputeTicket.id, resolution, moderatorNotes, currentUser.id);
             addNotification('Dispute has been resolved.', 'success');
-            
-            // This is a critical state change that affects cash, so we need a full refresh.
-            // In a real app with WebSockets/SWR, this would be handled more gracefully.
-            const [allUsers, userTrades] = await Promise.all([
-                fetchAllUsers(),
-                fetchTradesForUser(currentUser.id),
-            ]);
-            setOtherUsers(allUsers.filter(u => u.id !== currentUser.id));
-            setTrades(userTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
-            const updatedCurrentUser = allUsers.find(u => u.id === currentUser.id);
-            if (updatedCurrentUser) {
-                updateUser(updatedCurrentUser); // Update context with fresh user data
-            }
+            await loadDashboardData(); // Full refresh to get cash updates etc.
+            const updatedCurrentUser = await fetchUser(currentUser.id);
+            if (updatedCurrentUser) updateUser(updatedCurrentUser);
 
         } catch (err) {
             addNotification((err as Error).message || 'Failed to resolve dispute.', 'error');
         } finally {
             setResolutionModalState({ isOpen: false, disputeTicket: null, users: [] });
             setIsResolving(false);
+        }
+    };
+
+    const handleRatingSubmit = async (formData: Omit<TradeRating, 'id' | 'tradeId' | 'raterId' | 'rateeId' | 'createdAt' | 'isRevealed'>) => {
+        if (!ratingModalState.trade || !currentUser) return;
+        setIsSubmittingRating(true);
+        
+        const otherPartyId = currentUser.id === ratingModalState.trade.proposerId ? ratingModalState.trade.receiverId : ratingModalState.trade.proposerId;
+
+        try {
+            await submitRating({
+                ...formData,
+                tradeId: ratingModalState.trade.id,
+                raterId: currentUser.id,
+                rateeId: otherPartyId,
+            });
+            addNotification('Rating submitted successfully!', 'success');
+            setRatingModalState({ isOpen: false, trade: null });
+            await loadDashboardData(); // Refresh to check if both ratings are in and revealed
+        } catch (err) {
+            addNotification((err as Error).message || 'Failed to submit rating.', 'error');
+        } finally {
+            setIsSubmittingRating(false);
+        }
+    };
+
+    const handleViewRatings = async (trade: Trade, otherParty: User | undefined) => {
+        if (!otherParty) return;
+        try {
+            const tradeRatings = await fetchRatingsForTrade(trade.id);
+            setRatingDisplayModalState({ isOpen: true, ratings: tradeRatings, trade, otherUser: otherParty });
+        } catch (err) {
+            addNotification('Failed to fetch ratings.', 'error');
         }
     };
     
@@ -263,14 +286,45 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const renderTrade = (trade: Trade) => {
+    const renderTradeActions = (trade: Trade, otherParty: User | undefined) => {
         const isReceiver = trade.receiverId === currentUser.id;
-        const otherPartyId = isReceiver ? trade.proposerId : trade.receiverId;
-        const otherParty = [...otherUsers, currentUser].find(u => u.id === otherPartyId);
-        
         const canDispute = trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION;
         const isDisputed = trade.status === TradeStatus.DISPUTE_OPENED;
+        const isRatable = (trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED) && trade.ratingDeadline;
+        
+        const tradeRatings = ratings.filter(r => r.tradeId === trade.id);
+        const myRating = tradeRatings.find(r => r.raterId === currentUser.id);
+        const isDeadlinePassed = trade.ratingDeadline && new Date() > new Date(trade.ratingDeadline);
 
+        return (
+            <div className="mt-4 flex gap-2">
+                {trade.status === TradeStatus.PENDING_ACCEPTANCE && isReceiver && (
+                    <>
+                        <button onClick={() => handleTradeResponse(trade.id, 'accept')} className="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md">Accept</button>
+                        <button onClick={() => handleTradeResponse(trade.id, 'reject')} className="px-3 py-1 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md">Reject</button>
+                    </>
+                )}
+                {trade.status === TradeStatus.PENDING_ACCEPTANCE && !isReceiver && (
+                     <button onClick={() => handleTradeResponse(trade.id, 'cancel')} className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
+                )}
+                {canDispute && <button onClick={() => setDisputeModalState({ isOpen: true, tradeId: trade.id })} className="px-3 py-1 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-md">File Dispute</button>}
+                {isDisputed && <button onClick={() => handleManageDispute(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>}
+                {isRatable && (
+                    <>
+                        {myRating && myRating.isRevealed && <button onClick={() => handleViewRatings(trade, otherParty)} className="px-3 py-1 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">View Ratings</button>}
+                        {myRating && !myRating.isRevealed && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Submitted</button>}
+                        {!myRating && !isDeadlinePassed && <button onClick={() => setRatingModalState({ isOpen: true, trade })} className="px-3 py-1 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md">Leave Rating</button>}
+                        {!myRating && isDeadlinePassed && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Window Closed</button>}
+                    </>
+                )}
+            </div>
+        );
+    };
+
+    const renderTrade = (trade: Trade) => {
+        const otherPartyId = trade.receiverId === currentUser.id ? trade.proposerId : trade.receiverId;
+        const otherParty = [...otherUsers, currentUser].find(u => u.id === otherPartyId);
+        
         return (
              <div key={trade.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                 <div className="flex justify-between items-start">
@@ -282,24 +336,7 @@ const Dashboard: React.FC = () => {
                     </div>
                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(trade.status)}`}>{trade.status.replace(/_/g, ' ')}</span>
                 </div>
-                 
-                 <div className="mt-4 flex gap-2">
-                    {trade.status === TradeStatus.PENDING_ACCEPTANCE && isReceiver && (
-                        <>
-                            <button onClick={() => handleTradeResponse(trade.id, 'accept')} className="px-3 py-1 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md">Accept</button>
-                            <button onClick={() => handleTradeResponse(trade.id, 'reject')} className="px-3 py-1 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md">Reject</button>
-                        </>
-                    )}
-                    {trade.status === TradeStatus.PENDING_ACCEPTANCE && !isReceiver && (
-                         <button onClick={() => handleTradeResponse(trade.id, 'cancel')} className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
-                    )}
-                    {canDispute && (
-                        <button onClick={() => setDisputeModalState({ isOpen: true, tradeId: trade.id })} className="px-3 py-1 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-md">File Dispute</button>
-                    )}
-                    {isDisputed && (
-                        <button onClick={() => handleManageDispute(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>
-                    )}
-                 </div>
+                {renderTradeActions(trade, otherParty)}
             </div>
         );
     };
@@ -358,63 +395,15 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </main>
-            {disputeModalState.isOpen && disputeModalState.tradeId && (
-                <DisputeModal 
-                    isOpen={disputeModalState.isOpen}
-                    onClose={() => setDisputeModalState({ isOpen: false, tradeId: null })}
-                    onSubmit={handleDisputeSubmit}
-                    tradeId={disputeModalState.tradeId}
-                    isSubmitting={isSubmittingDispute}
-                />
-            )}
-             {evidenceModalState.isOpen && (
-                <DisputeEvidenceModal
-                    isOpen={evidenceModalState.isOpen}
-                    onClose={() => setEvidenceModalState({ isOpen: false, disputeTicket: null })}
-                    onSubmit={handleEvidenceSubmit}
-                    disputeTicket={evidenceModalState.disputeTicket}
-                    isSubmitting={isSubmittingEvidence}
-                />
-            )}
-            {responseModalState.isOpen && (
-                <DisputeResponseModal
-                    isOpen={responseModalState.isOpen}
-                    onClose={() => setResponseModalState({ isOpen: false, disputeTicket: null })}
-                    onSubmit={handleResponseSubmit}
-                    disputeTicket={responseModalState.disputeTicket}
-                    isSubmitting={isSubmittingResponse}
-                />
-            )}
-            {mediationModalState.isOpen && (
-                <DisputeMediationModal
-                    isOpen={mediationModalState.isOpen}
-                    onClose={() => setMediationModalState({ isOpen: false, disputeTicket: null, otherUser: null })}
-                    onSubmitMessage={handleSendMessage}
-                    onEscalate={() => setEscalationModalState({ isOpen: true, ticketId: mediationModalState.disputeTicket?.id || null })}
-                    disputeTicket={mediationModalState.disputeTicket}
-                    currentUser={currentUser}
-                    otherUser={mediationModalState.otherUser}
-                    isSubmitting={isSendingMessage}
-                />
-            )}
-            {resolutionModalState.isOpen && (
-                <DisputeResolutionModal
-                    isOpen={resolutionModalState.isOpen}
-                    onClose={() => setResolutionModalState({ isOpen: false, disputeTicket: null, users: [] })}
-                    onSubmit={handleResolveDispute}
-                    disputeTicket={resolutionModalState.disputeTicket}
-                    users={resolutionModalState.users}
-                    isSubmitting={isResolving}
-                />
-            )}
-            <ConfirmationModal
-                isOpen={escalationModalState.isOpen}
-                onClose={() => setEscalationModalState({ isOpen: false, ticketId: null })}
-                onConfirm={handleConfirmEscalation}
-                title="Confirm Escalation"
-                confirmButtonText={isEscalating ? "Escalating..." : "Yes, Escalate"}
-                confirmButtonClass="bg-red-600 hover:bg-red-700"
-            >
+            {disputeModalState.isOpen && disputeModalState.tradeId && <DisputeModal isOpen={disputeModalState.isOpen} onClose={() => setDisputeModalState({ isOpen: false, tradeId: null })} onSubmit={handleDisputeSubmit} tradeId={disputeModalState.tradeId} isSubmitting={isSubmittingDispute}/>}
+            {evidenceModalState.isOpen && <DisputeEvidenceModal isOpen={evidenceModalState.isOpen} onClose={() => setEvidenceModalState({ isOpen: false, disputeTicket: null })} onSubmit={handleEvidenceSubmit} disputeTicket={evidenceModalState.disputeTicket} isSubmitting={isSubmittingEvidence}/>}
+            {responseModalState.isOpen && <DisputeResponseModal isOpen={responseModalState.isOpen} onClose={() => setResponseModalState({ isOpen: false, disputeTicket: null })} onSubmit={handleResponseSubmit} disputeTicket={responseModalState.disputeTicket} isSubmitting={isSubmittingResponse}/>}
+            {mediationModalState.isOpen && <DisputeMediationModal isOpen={mediationModalState.isOpen} onClose={() => setMediationModalState({ isOpen: false, disputeTicket: null, otherUser: null })} onSubmitMessage={handleSendMessage} onEscalate={() => setEscalationModalState({ isOpen: true, ticketId: mediationModalState.disputeTicket?.id || null })} disputeTicket={mediationModalState.disputeTicket} currentUser={currentUser} otherUser={mediationModalState.otherUser} isSubmitting={isSendingMessage}/>}
+            {resolutionModalState.isOpen && <DisputeResolutionModal isOpen={resolutionModalState.isOpen} onClose={() => setResolutionModalState({ isOpen: false, disputeTicket: null, users: [] })} onSubmit={handleResolveDispute} disputeTicket={resolutionModalState.disputeTicket} users={resolutionModalState.users} isSubmitting={isResolving}/>}
+            {ratingModalState.isOpen && ratingModalState.trade && <RatingModal isOpen={ratingModalState.isOpen} onClose={() => setRatingModalState({ isOpen: false, trade: null })} onSubmit={handleRatingSubmit} trade={ratingModalState.trade} isSubmitting={isSubmittingRating} />}
+            {ratingDisplayModalState.isOpen && <RatingDisplayModal isOpen={ratingDisplayModalState.isOpen} onClose={() => setRatingDisplayModalState({ isOpen: false, ratings: [], trade: null, otherUser: null })} ratings={ratingDisplayModalState.ratings} trade={ratingDisplayModalState.trade} currentUser={currentUser} otherUser={ratingDisplayModalState.otherUser} />}
+            {/* Fix: Corrected component name typo from AConfirmationModal to ConfirmationModal */}
+            <ConfirmationModal isOpen={escalationModalState.isOpen} onClose={() => setEscalationModalState({ isOpen: false, ticketId: null })} onConfirm={handleConfirmEscalation} title="Confirm Escalation" confirmButtonText={isEscalating ? "Escalating..." : "Yes, Escalate"} confirmButtonClass="bg-red-600 hover:bg-red-700">
                 Are you sure you want to escalate this dispute to a moderator? This action cannot be undone. All mediation will stop, and a moderator will make a final decision.
             </ConfirmationModal>
         </div>
