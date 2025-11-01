@@ -117,7 +117,7 @@ export const fetchDisputeTicket = async (ticketId: string): Promise<DisputeTicke
     const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
     if (ticketIndex !== -1) {
         const ticket = mockDisputeTickets[ticketIndex];
-        if ((ticket.status === 'AWAITING_EVIDENCE' || ticket.status === 'AWAITING_RESPONSE') && new Date() > ticket.deadlineForNextAction) {
+        if ((ticket.status === 'AWAITING_EVIDENCE' || ticket.status === 'AWAITING_RESPONSE' || ticket.status === 'IN_MEDIATION') && new Date() > ticket.deadlineForNextAction) {
             // ticket.status = 'ESCALATED_TO_MODERATION';
             // console.log(`Dispute ${ticketId} auto-escalated due to expired deadline.`);
         }
@@ -174,10 +174,37 @@ export const submitResponse = async (
 
     ticket.respondentEvidence = { statement, attachments };
     ticket.status = 'IN_MEDIATION';
-    // Next action deadline is now up to a moderator.
-    // A real system might set a new deadline for mediation actions.
+    // Set a 7-day deadline for mediation.
+    ticket.deadlineForNextAction = new Date(Date.now() + 7 * 86400000);
     
     mockDisputeTickets[ticketIndex] = ticket;
+    return JSON.parse(JSON.stringify(ticket));
+};
+
+export const sendMediationMessage = async (
+    ticketId: string,
+    senderId: string,
+    text: string,
+): Promise<DisputeTicket> => {
+    await simulateDelay(300);
+    const ticketIndex = mockDisputeTickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) throw new Error("Dispute ticket not found");
+
+    const ticket = mockDisputeTickets[ticketIndex];
+    if (ticket.status !== 'IN_MEDIATION') {
+        throw new Error("This dispute is not currently in mediation.");
+    }
+
+    const newMessage = {
+        id: `msg-${Date.now()}`,
+        senderId,
+        text,
+        timestamp: new Date(),
+    };
+    
+    ticket.mediationLog.push(newMessage);
+    mockDisputeTickets[ticketIndex] = ticket;
+
     return JSON.parse(JSON.stringify(ticket));
 };
 
@@ -209,6 +236,7 @@ export const openDispute = async (
         disputeType,
         initiatorEvidence: { statement, attachments: [] },
         respondentEvidence: null,
+        mediationLog: [],
         resolution: null,
         moderatorId: null,
         deadlineForNextAction: new Date(Date.now() + 2 * 86400000), // 48 hours from now

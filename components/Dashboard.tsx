@@ -3,12 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse } from '../api/mockApi';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage } from '../api/mockApi';
 import { User, Trade, TradeStatus, DisputeType, DisputeTicket } from '../types';
 import ItemCard from './ItemCard';
 import DisputeModal from './DisputeModal';
 import DisputeEvidenceModal from './DisputeEvidenceModal';
 import DisputeResponseModal from './DisputeResponseModal';
+import DisputeMediationModal from './DisputeMediationModal';
 
 const Dashboard: React.FC = () => {
     const { currentUser, logout } = useAuth();
@@ -23,10 +24,12 @@ const Dashboard: React.FC = () => {
     const [disputeModalState, setDisputeModalState] = useState<{isOpen: boolean, tradeId: string | null}>({isOpen: false, tradeId: null});
     const [evidenceModalState, setEvidenceModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
     const [responseModalState, setResponseModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null}>({ isOpen: false, disputeTicket: null });
+    const [mediationModalState, setMediationModalState] = useState<{isOpen: boolean, disputeTicket: DisputeTicket | null, otherUser: User | null}>({ isOpen: false, disputeTicket: null, otherUser: null });
     
     const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
     const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
     const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+    const [isSendingMessage, setIsSendingMessage] = useState(false);
 
 
     const loadDashboardData = async () => {
@@ -97,13 +100,18 @@ const Dashboard: React.FC = () => {
             }
             
             const isInitiator = currentUser.id === ticket.initiatorId;
+            const allUsers = [...otherUsers, currentUser];
+            const otherPartyId = isInitiator 
+                ? trades.find(t => t.id === ticket.tradeId)?.receiverId 
+                : trades.find(t => t.id === ticket.tradeId)?.proposerId;
+            const initiator = allUsers.find(u => u.id === ticket.initiatorId);
+            const otherParty = allUsers.find(u => u.id === otherPartyId);
 
             switch (ticket.status) {
                 case 'AWAITING_EVIDENCE':
                     if (isInitiator) {
                         setEvidenceModalState({ isOpen: true, disputeTicket: ticket });
                     } else {
-                        const initiator = [...otherUsers, currentUser].find(u => u.id === ticket.initiatorId);
                         addNotification(`Waiting for ${initiator?.name || 'the other party'} to submit evidence.`, 'info');
                     }
                     break;
@@ -111,11 +119,11 @@ const Dashboard: React.FC = () => {
                      if (!isInitiator) { // It's the respondent's turn
                         setResponseModalState({ isOpen: true, disputeTicket: ticket });
                     } else { // Initiator is waiting
-                        addNotification(`Waiting for the other party to respond.`, 'info');
+                        addNotification(`Waiting for ${otherParty?.name || 'the other party'} to respond.`, 'info');
                     }
                     break;
                 case 'IN_MEDIATION':
-                    addNotification(`This dispute is now in mediation. A moderator will review it shortly.`, 'info');
+                    setMediationModalState({ isOpen: true, disputeTicket: ticket, otherUser: otherParty || null });
                     break;
                 default:
                     addNotification(`This dispute is currently in '${ticket.status.replace(/_/g, ' ')}' status.`, 'info');
@@ -155,6 +163,20 @@ const Dashboard: React.FC = () => {
              addNotification((err as Error).message || 'Failed to submit response.', 'error');
         } finally {
             setIsSubmittingResponse(false);
+        }
+    };
+    
+    const handleSendMessage = async (text: string) => {
+        if (!mediationModalState.disputeTicket || !currentUser) return;
+        setIsSendingMessage(true);
+        try {
+            const updatedTicket = await sendMediationMessage(mediationModalState.disputeTicket.id, currentUser.id, text);
+            // Update the state in the modal to show the new message immediately.
+            setMediationModalState(prev => ({...prev, disputeTicket: updatedTicket }));
+        } catch (err) {
+            addNotification((err as Error).message || 'Failed to send message.', 'error');
+        } finally {
+            setIsSendingMessage(false);
         }
     };
     
@@ -293,6 +315,17 @@ const Dashboard: React.FC = () => {
                     onSubmit={handleResponseSubmit}
                     disputeTicket={responseModalState.disputeTicket}
                     isSubmitting={isSubmittingResponse}
+                />
+            )}
+            {mediationModalState.isOpen && (
+                <DisputeMediationModal
+                    isOpen={mediationModalState.isOpen}
+                    onClose={() => setMediationModalState({ isOpen: false, disputeTicket: null, otherUser: null })}
+                    onSubmitMessage={handleSendMessage}
+                    disputeTicket={mediationModalState.disputeTicket}
+                    currentUser={currentUser}
+                    otherUser={mediationModalState.otherUser}
+                    isSubmitting={isSendingMessage}
                 />
             )}
         </div>

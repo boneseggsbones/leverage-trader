@@ -66,6 +66,13 @@ export type DisputeStatus = 'AWAITING_EVIDENCE' | 'AWAITING_RESPONSE' | 'IN_MEDI
 // Item Not Received, Significantly Not As Described
 export type DisputeType = 'INR' | 'SNAD' | 'COUNTERFEIT' | 'SHIPPING_DAMAGE';
 
+export interface MediationMessage {
+    id: string;
+    senderId: string;
+    text: string;
+    timestamp: Date;
+}
+
 export interface DisputeTicket {
     id: string;
     tradeId: string;
@@ -75,6 +82,7 @@ export interface DisputeTicket {
     // Evidence Handling (Use Pre-signed S3 URLs for secure uploads)
     initiatorEvidence: { statement: string, attachments: string[] } | null;
     respondentEvidence: { statement: string, attachments: string[] } | null;
+    mediationLog: MediationMessage[];
     resolution: 'FULL_REFUND' | 'PARTIAL_REFUND' | 'TRADE_REVERSAL' | 'TRADE_UPHELD' | null;
     moderatorId: string | null;
     deadlineForNextAction: Date;
