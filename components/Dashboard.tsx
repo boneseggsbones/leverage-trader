@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
 // Fix: Add fetchUser to imports to resolve undefined error.
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute, submitRating, fetchRatingsForTrade, fetchRatingsForUser, fetchUser, finalizeTrade } from '../api/mockApi';
+import { fetchAllUsers, fetchTradesForUser, respondToTrade, openDispute, fetchDisputeTicket, submitEvidence, submitResponse, sendMediationMessage, escalateDispute, resolveDispute, submitRating, fetchRatingsForTrade, fetchRatingsForUser, fetchUser, finalizeTrade, runRatingExpiryJob } from '../api/mockApi';
 import { User, Trade, TradeStatus, DisputeType, DisputeTicket, DisputeResolution, TradeRating } from '../types';
 import ItemCard from './ItemCard';
 import ConfirmationModal from './ConfirmationModal';
@@ -44,6 +44,7 @@ const Dashboard: React.FC = () => {
     const [isEscalating, setIsEscalating] = useState(false);
     const [isResolving, setIsResolving] = useState(false);
     const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+    const [isJobRunning, setIsJobRunning] = useState(false);
 
 
     const loadDashboardData = async () => {
@@ -280,6 +281,24 @@ const Dashboard: React.FC = () => {
             addNotification('Failed to fetch ratings.', 'error');
         }
     };
+
+    const handleRunSystemJobs = async () => {
+        setIsJobRunning(true);
+        addNotification('Simulating server background jobs...', 'info');
+        try {
+            const { revealedCount } = await runRatingExpiryJob();
+            if (revealedCount > 0) {
+                addNotification(`System job complete. Revealed ${revealedCount} expired rating(s).`, 'success');
+            } else {
+                addNotification('System job complete. No ratings required action.', 'success');
+            }
+            await loadDashboardData(); // Refresh data to reflect changes
+        } catch (err) {
+            addNotification('System job failed to run.', 'error');
+        } finally {
+            setIsJobRunning(false);
+        }
+    };
     
     if (!currentUser) return null;
     
@@ -307,6 +326,10 @@ const Dashboard: React.FC = () => {
         const myRatingSubmitted = trade.proposerId === currentUser.id ? trade.proposerRated : trade.receiverRated;
         const bothRated = trade.proposerRated && trade.receiverRated;
         const isDeadlinePassed = trade.ratingDeadline && new Date() > new Date(trade.ratingDeadline);
+        
+        // Check if ratings are available to be viewed
+        const canViewRatings = ratings.some(r => r.tradeId === trade.id && r.isRevealed);
+
 
         return (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -324,10 +347,10 @@ const Dashboard: React.FC = () => {
                 {isDisputed && <button onClick={() => handleManageDispute(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-md">Manage Dispute</button>}
                 {isRatable && (
                     <>
-                        {bothRated && <button onClick={() => handleViewRatings(trade, otherParty)} className="px-3 py-1 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">View Ratings</button>}
-                        {myRatingSubmitted && !bothRated && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Submitted</button>}
+                        {canViewRatings && <button onClick={() => handleViewRatings(trade, otherParty)} className="px-3 py-1 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">View Ratings</button>}
+                        {myRatingSubmitted && !canViewRatings && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Submitted</button>}
                         {!myRatingSubmitted && !isDeadlinePassed && <button onClick={() => setRatingModalState({ isOpen: true, trade })} className="px-3 py-1 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md">Leave Rating</button>}
-                        {!myRatingSubmitted && isDeadlinePassed && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Window Closed</button>}
+                        {!myRatingSubmitted && isDeadlinePassed && !canViewRatings && <button disabled className="px-3 py-1 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md cursor-not-allowed">Rating Window Closed</button>}
                     </>
                 )}
             </div>
@@ -362,8 +385,11 @@ const Dashboard: React.FC = () => {
                         <h1 className="text-2xl font-bold text-gray-800">Welcome, {currentUser.name}</h1>
                          <p className="text-sm text-slate-500">Cash: ${(currentUser.cash / 100).toLocaleString()}</p>
                     </div>
-                    <div>
-                         <button onClick={() => navigateTo('trade-history')} className="mr-4 px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Trade History</button>
+                    <div className="flex items-center gap-4">
+                         <button onClick={() => navigateTo('trade-history')} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Trade History</button>
+                         <button onClick={handleRunSystemJobs} disabled={isJobRunning} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:bg-gray-300 disabled:cursor-wait">
+                            {isJobRunning ? 'Running...' : 'Run System Jobs'}
+                        </button>
                         <button onClick={logout} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md">Logout</button>
                     </div>
                 </div>

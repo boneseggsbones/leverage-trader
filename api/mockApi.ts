@@ -36,13 +36,30 @@ const mockDisputeTickets: Record<string, DisputeTicket> = {
 
 const mockTrades: Record<string, Trade> = {
     'trade-1': { id: 'trade-1', proposerId: 'user-1', receiverId: 'user-2', proposerItemIds: ['item-1'], receiverItemIds: [], proposerCash: 1000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000), updatedAt: new Date(Date.now() - 86400000), proposerRated: false, receiverRated: false },
-    'trade-2': { id: 'trade-2', proposerId: 'user-3', receiverId: 'user-1', proposerItemIds: ['item-5'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 172800000), updatedAt: new Date(Date.now() - 172800000), ratingDeadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), proposerRated: false, receiverRated: false },
+    // Test case for rating expiry: Deadline is in the past, one user has rated.
+    'trade-2': { id: 'trade-2', proposerId: 'user-3', receiverId: 'user-1', proposerItemIds: ['item-5'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 172800000), updatedAt: new Date(Date.now() - 172800000), ratingDeadline: new Date(Date.now() - 1000), proposerRated: true, receiverRated: false },
     'trade-3': { id: 'trade-3', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-2'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DISPUTE_OPENED, disputeTicketId: 'dispute-1', createdAt: new Date(Date.now() - 259200000), updatedAt: new Date(), proposerRated: false, receiverRated: false },
     'trade-4': { id: 'trade-4', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-6'], proposerCash: 90000, receiverCash: 0, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 345600000), updatedAt: new Date(Date.now() - 345600000), proposerRated: false, receiverRated: false },
     'trade-5': { id: 'trade-5', proposerId: 'user-2', receiverId: 'user-3', proposerItemIds: ['item-4'], receiverItemIds: [], proposerCash: 0, receiverCash: 0, status: TradeStatus.DELIVERED_AWAITING_VERIFICATION, createdAt: new Date(Date.now() - 432000000), updatedAt: new Date(Date.now() - 86400000), proposerRated: false, receiverRated: false },
 };
 
-const mockRatings: Record<string, TradeRating> = {};
+const mockRatings: Record<string, TradeRating> = {
+    // Test case for rating expiry: A single, un-revealed rating for trade-2.
+    'rating-1': {
+        id: 'rating-1',
+        tradeId: 'trade-2',
+        raterId: 'user-3',
+        rateeId: 'user-1',
+        overallScore: 5,
+        itemAccuracyScore: 5,
+        communicationScore: 5,
+        shippingSpeedScore: 5,
+        publicComment: "Fantastic trader, couldn't be happier!",
+        privateFeedback: null,
+        createdAt: new Date(Date.now() - 170000000),
+        isRevealed: false
+    }
+};
 
 
 // --- MOCK API FUNCTIONS ---
@@ -305,4 +322,33 @@ export const submitRating = async (ratingData: Omit<TradeRating, 'id' | 'created
     }
 
     return JSON.parse(JSON.stringify(newRating));
+};
+
+// --- BACKGROUND JOB SIMULATION ---
+export const runRatingExpiryJob = async (): Promise<{ revealedCount: number }> => {
+    console.log('API: Running rating expiry job...');
+    await new Promise(res => setTimeout(res, 1000)); // Simulate job latency
+
+    let revealedCount = 0;
+    const now = new Date();
+
+    const trades = Object.values(mockTrades);
+    for (const trade of trades) {
+        // Check if the rating window has passed
+        if (trade.ratingDeadline && new Date(trade.ratingDeadline) < now) {
+            const hasOnlyOneRating = (trade.proposerRated && !trade.receiverRated) || (!trade.proposerRated && trade.receiverRated);
+            
+            if (hasOnlyOneRating) {
+                const ratingToReveal = Object.values(mockRatings).find(r => r.tradeId === trade.id && !r.isRevealed);
+                if (ratingToReveal) {
+                    console.log(`API: Revealing expired rating ${ratingToReveal.id} for trade ${trade.id}`);
+                    ratingToReveal.isRevealed = true;
+                    revealedCount++;
+                }
+            }
+        }
+    }
+    
+    console.log(`API: Job finished. Revealed ${revealedCount} ratings.`);
+    return { revealedCount };
 };
