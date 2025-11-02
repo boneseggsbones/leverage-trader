@@ -1,55 +1,89 @@
 // Fix: Implemented the TradeHistory component.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
-import { fetchTradesForUser, fetchAllUsers } from '../api/mockApi';
-import { Trade, User, TradeStatus } from '../types';
+import { fetchTradesForUser, fetchAllUsers, fetchAllItems, submitRating } from '../api/mockApi.ts';
+import { Trade, User, TradeStatus, Item, TradeRating } from '../types.ts';
+import { useNotification } from '../context/NotificationContext.tsx';
+import RatingModal from './RatingModal.tsx';
 
 const TradeHistory: React.FC = () => {
     const { currentUser } = useAuth();
     const { navigateTo } = useNavigation();
+    const { addNotification } = useNotification();
+    
     const [trades, setTrades] = useState<Trade[]>([]);
     const [users, setUsers] = useState<Record<string, User>>({});
+    const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
+    // State for rating modal
+    const [ratingTrade, setRatingTrade] = useState<Trade | null>(null);
+    const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const loadHistory = useCallback(async () => {
         if (!currentUser) {
             navigateTo('login');
             return;
         }
+        setIsLoading(true);
+        try {
+            const [userTrades, allUsers, allItemsData] = await Promise.all([
+                fetchTradesForUser(currentUser.id),
+                fetchAllUsers(),
+                fetchAllItems(),
+            ]);
+            
+            const userMap = [...allUsers, currentUser].reduce((acc, user) => {
+                if(user) acc[user.id] = user;
+                return acc;
+            }, {} as Record<string, User>);
 
-        const loadHistory = async () => {
-            try {
-                const [userTrades, allUsers] = await Promise.all([
-                    fetchTradesForUser(currentUser.id),
-                    fetchAllUsers(),
-                ]);
-                
-                const userMap = [...allUsers, currentUser].reduce((acc, user) => {
-                    if(user) acc[user.id] = user;
-                    return acc;
-                }, {} as Record<string, User>);
-
-                setUsers(userMap);
-                setTrades(
-                    userTrades
-                        .filter(t => t.status !== TradeStatus.PENDING_ACCEPTANCE)
-                        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-                );
-            } catch (err) {
-                setError('Failed to load trade history.');
-                console.error(err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        loadHistory();
+            setUsers(userMap);
+            setAllItems(new Map(allItemsData.map(item => [item.id, item])));
+            setTrades(
+                userTrades
+                    .filter(t => t.status !== TradeStatus.PENDING_ACCEPTANCE)
+                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+            );
+        } catch (err) {
+            setError('Failed to load trade history.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
     }, [currentUser, navigateTo]);
+
+    useEffect(() => {
+        loadHistory();
+    }, [loadHistory]);
     
     if (!currentUser) return null;
     
+    const handleOpenRatingModal = (trade: Trade) => {
+        setRatingTrade(trade);
+        setIsRatingModalOpen(true);
+    };
+
+    const handleRatingSubmit = async (formData: Omit<TradeRating, 'id' | 'tradeId' | 'raterId' | 'rateeId' | 'createdAt' | 'isRevealed'>) => {
+        if (!ratingTrade || !currentUser) return;
+        setIsSubmitting(true);
+        try {
+            await submitRating(ratingTrade.id, currentUser.id, formData);
+            addNotification("Rating submitted successfully!", 'success');
+            setIsRatingModalOpen(false);
+            setRatingTrade(null);
+            await loadHistory(); // Refetch data
+        } catch (err) {
+            addNotification("Failed to submit rating.", 'error');
+            console.error(err);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const getStatusColor = (status: Trade['status']) => {
         switch (status) {
             case TradeStatus.COMPLETED: return 'bg-green-100 text-green-800';
@@ -69,6 +103,39 @@ const TradeHistory: React.FC = () => {
         }
     };
     
+    const renderStatusBadge = (trade: Trade) => {
+        if (trade.status === TradeStatus.COMPLETED_AWAITING_RATING) {
+            const hasCurrentUserRated = (trade.proposerId === currentUser.id && trade.proposerRated) || (trade.receiverId === currentUser.id && trade.receiverRated);
+            const isWindowOpen = trade.ratingDeadline && new Date(trade.ratingDeadline).getTime() > Date.now();
+
+            if (!hasCurrentUserRated && isWindowOpen) {
+                return (
+                    <button onClick={() => handleOpenRatingModal(trade)} className="px-3 py-1 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-full transition-colors">
+                        Rate Trade
+                    </button>
+                );
+            } else if (hasCurrentUserRated && isWindowOpen) {
+                return (
+                    <div className="px-3 py-1 text-sm font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                        Awaiting Other Party
+                    </div>
+                );
+            } else {
+                 return (
+                    <div className="px-3 py-1 text-sm font-semibold rounded-full bg-gray-100 text-gray-800">
+                        Rating Window Closed
+                    </div>
+                );
+            }
+        }
+
+        return (
+            <div className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(trade.status)}`}>
+                {trade.status.replace(/_/g, ' ')}
+            </div>
+        );
+    };
+
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
             <div className="max-w-4xl mx-auto">
@@ -95,20 +162,48 @@ const TradeHistory: React.FC = () => {
                                 const otherPartyId = trade.proposerId === currentUser.id ? trade.receiverId : trade.proposerId;
                                 const otherPartyName = users[otherPartyId]?.name || 'Unknown User';
                                 const wasProposer = trade.proposerId === currentUser.id;
+
+                                const youGaveItemIds = wasProposer ? trade.proposerItemIds : trade.receiverItemIds;
+                                const youGaveCash = wasProposer ? trade.proposerCash : trade.receiverCash;
+                                const youGotItemIds = wasProposer ? trade.receiverItemIds : trade.proposerItemIds;
+                                const youGotCash = wasProposer ? trade.receiverCash : trade.proposerCash;
+
+                                const youGaveItems = youGaveItemIds.map(id => allItems.get(id)).filter(Boolean) as Item[];
+                                const youGotItems = youGotItemIds.map(id => allItems.get(id)).filter(Boolean) as Item[];
                                 
+                                const valueGiven = youGaveItems.reduce((sum, item) => sum + item.estimatedMarketValue, 0) + youGaveCash;
+                                const valueGotten = youGotItems.reduce((sum, item) => sum + item.estimatedMarketValue, 0) + youGotCash;
+                                
+                                const netValue = valueGotten - valueGiven;
+
                                 return (
-                                    <div key={trade.id} className="p-4 hover:bg-gray-50">
-                                        <div className="flex justify-between items-center">
+                                    <div key={trade.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                        <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="font-bold text-gray-800">
+                                                <p className="font-bold text-gray-800 text-lg">
                                                     Trade with {otherPartyName}
                                                 </p>
-                                                <p className="text-sm text-gray-500">
-                                                    {wasProposer ? 'You proposed' : `${otherPartyName} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
-                                                </p>
+                                                <div className="text-sm text-gray-500 mt-1 space-y-1">
+                                                    <p>
+                                                        <span className="font-semibold text-gray-600">Proposed:</span> {wasProposer ? 'You proposed' : `${otherPartyName} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
+                                                    </p>
+                                                    <p>
+                                                        <span className="font-semibold text-gray-600">Finalized:</span> {new Date(trade.updatedAt).toLocaleDateString()}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(trade.status)}`}>
-                                                {trade.status.replace(/_/g, ' ')}
+                                            <div className="text-right flex-shrink-0 ml-4">
+                                                {renderStatusBadge(trade)}
+                                                 { (trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED || trade.status === TradeStatus.COMPLETED_AWAITING_RATING) &&
+                                                    <div className="mt-2">
+                                                        <p className="text-xs text-gray-500">Net Value</p>
+                                                        <p className={`font-bold text-lg ${
+                                                            netValue > 0 ? 'text-green-600' : netValue < 0 ? 'text-red-600' : 'text-gray-700'
+                                                        }`}>
+                                                            {netValue > 0 ? '+' : ''}${(netValue / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </p>
+                                                    </div>
+                                                }
                                             </div>
                                         </div>
                                     </div>
@@ -118,6 +213,15 @@ const TradeHistory: React.FC = () => {
                     </div>
                 </div>
             </div>
+            {isRatingModalOpen && ratingTrade && (
+                <RatingModal 
+                    isOpen={isRatingModalOpen}
+                    onClose={() => setIsRatingModalOpen(false)}
+                    trade={ratingTrade}
+                    isSubmitting={isSubmitting}
+                    onSubmit={handleRatingSubmit}
+                />
+            )}
         </div>
     );
 };

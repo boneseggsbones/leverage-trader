@@ -7,6 +7,13 @@ export interface User {
     cash: number; // in cents
     valuationReputationScore: number; // Starts at 100
     netTradeSurplus: number; // in cents, cumulative
+    city: string;
+    state: string;
+    interests: ItemCategory[];
+    profilePictureUrl: string;
+    aboutMe: string;
+    accountCreatedAt: string;
+    wishlist: string[]; // Array of Item IDs
 }
 
 export interface Item {
@@ -52,6 +59,9 @@ export interface Trade {
     createdAt: string;
     updatedAt: string;
     disputeTicketId: string | null;
+    proposerRated: boolean;
+    receiverRated: boolean;
+    ratingDeadline: string | null;
 }
 
 export enum TradeStatus {

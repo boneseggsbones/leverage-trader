@@ -12,7 +12,7 @@ import ConfirmationModal from './ConfirmationModal.tsx';
 
 const TradeDesk: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
-    const { navigateTo, tradeContext } = useNavigation();
+    const { navigateTo, pageContext } = useNavigation();
     const { addNotification } = useNotification();
 
     const [otherUser, setOtherUser] = useState<User | null>(null);
@@ -28,7 +28,7 @@ const TradeDesk: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
-        if (!tradeContext || !tradeContext.otherUserId) {
+        if (!pageContext || !pageContext.otherUserId) {
             setError("No user selected for trade. Please go back to the dashboard.");
             setIsLoading(false);
             return;
@@ -36,7 +36,7 @@ const TradeDesk: React.FC = () => {
         
         const loadOtherUser = async () => {
             try {
-                const user = await fetchUser(tradeContext.otherUserId);
+                const user = await fetchUser(pageContext.otherUserId);
                 if (user) {
                     setOtherUser(user);
                 } else {
@@ -50,7 +50,7 @@ const TradeDesk: React.FC = () => {
         };
 
         loadOtherUser();
-    }, [tradeContext]);
+    }, [pageContext]);
     
     if (!currentUser) {
         navigateTo('dashboard');

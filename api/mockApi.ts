@@ -59,22 +59,25 @@ const resetDb = () => {
         createItem('item-3', 'user-2', 'Ocarina of Time', 12000, 'VIDEO_GAMES', 'CIB', 'https://via.placeholder.com/150/00FF00/FFFFFF?text=Game2'),
         createItem('item-4', 'user-2', 'Playstation 5', 45000, 'ELECTRONICS', 'NEW_SEALED', 'https://via.placeholder.com/150/0000FF/FFFFFF?text=PS5'),
         createItem('item-5', 'user-3', 'Air Jordans', 22000, 'SNEAKERS', 'NEW_SEALED', 'https://via.placeholder.com/150/800080/FFFFFF?text=Kicks'),
+        createItem('item-6', 'user-3', 'Magic The Gathering Black Lotus', 80000, 'TCG', 'GRADED', 'https://via.placeholder.com/150/1a1a1a/FFFFFF?text=Card2'),
     ];
     items.forEach(item => db.items.set(item.id, item));
     
     // Create Users
     const users: User[] = [
-        { id: 'user-1', name: 'Alice', cash: 50000, inventory: [db.items.get('item-1')!, db.items.get('item-2')!], valuationReputationScore: 105, netTradeSurplus: 15000 },
-        { id: 'user-2', name: 'Bob', cash: 25000, inventory: [db.items.get('item-3')!, db.items.get('item-4')!], valuationReputationScore: 98, netTradeSurplus: -5000 },
-        { id: 'user-3', name: 'Charlie', cash: 100000, inventory: [db.items.get('item-5')!], valuationReputationScore: 100, netTradeSurplus: 0 },
+        { id: 'user-1', name: 'Alice', cash: 50000, inventory: [db.items.get('item-1')!, db.items.get('item-2')!], valuationReputationScore: 105, netTradeSurplus: 15000, city: 'New York', state: 'NY', interests: ['VIDEO_GAMES', 'TCG'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-1', aboutMe: 'Collector of rare TCGs and classic Nintendo games. Looking for fair trades!', accountCreatedAt: '2023-01-15T10:00:00Z', wishlist: ['item-5'] },
+        { id: 'user-2', name: 'Bob', cash: 25000, inventory: [db.items.get('item-3')!, db.items.get('item-4')!], valuationReputationScore: 98, netTradeSurplus: -5000, city: 'New York', state: 'NY', interests: ['VIDEO_GAMES', 'ELECTRONICS'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-2', aboutMe: 'Modern console enthusiast and Zelda fan. My items are always in mint condition.', accountCreatedAt: '2023-05-20T14:30:00Z', wishlist: [] },
+        { id: 'user-3', name: 'Charlie', cash: 100000, inventory: [db.items.get('item-5')!, db.items.get('item-6')!], valuationReputationScore: 115, netTradeSurplus: 0, city: 'Los Angeles', state: 'CA', interests: ['SNEAKERS', 'TCG'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-3', aboutMe: 'High-end collector. Mostly interested in graded cards and unworn sneakers.', accountCreatedAt: '2022-11-01T08:00:00Z', wishlist: [] },
     ];
     users.forEach(user => db.users.set(user.id, user));
 
     // Create Trades
     const trades: Trade[] = [
-        { id: 'trade-1', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-3'], receiverItemIds: [], proposerCash: 2000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date(Date.now() - 86400000).toISOString(), disputeTicketId: null },
-        { id: 'trade-2', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-5'], proposerCash: 25000, receiverCash: 0, status: TradeStatus.COMPLETED_AWAITING_RATING, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), updatedAt: new Date().toISOString(), disputeTicketId: null },
-        { id: 'trade-3', proposerId: 'user-3', receiverId: 'user-2', proposerItemIds: ['item-5'], receiverItemIds: ['item-4'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(), disputeTicketId: null },
+        { id: 'trade-1', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-3'], receiverItemIds: [], proposerCash: 2000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date(Date.now() - 86400000).toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: null },
+        { id: 'trade-2', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-5'], proposerCash: 25000, receiverCash: 0, status: TradeStatus.COMPLETED_AWAITING_RATING, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), updatedAt: new Date().toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: new Date(Date.now() + 6 * 86400000).toISOString() },
+        { id: 'trade-3', proposerId: 'user-3', receiverId: 'user-2', proposerItemIds: ['item-5'], receiverItemIds: ['item-4'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: null },
+        { id: 'trade-4', proposerId: 'user-1', receiverId: 'user-2', proposerItemIds: ['item-1'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 0, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 8 * 86400000).toISOString(), disputeTicketId: null, proposerRated: true, receiverRated: true, ratingDeadline: null },
+
     ];
     trades.forEach(trade => db.trades.set(trade.id, trade));
 };
@@ -90,6 +93,11 @@ export const fetchAllUsers = async (): Promise<User[]> => {
     return Array.from(db.users.values());
 };
 
+export const fetchAllItems = async (): Promise<Item[]> => {
+    await simulateLatency();
+    return Array.from(db.items.values());
+};
+
 export const fetchUser = async (id: string): Promise<User | null> => {
     await simulateLatency();
     return db.users.get(id) || null;
@@ -99,6 +107,15 @@ export const fetchTradesForUser = async (userId: string): Promise<Trade[]> => {
     await simulateLatency();
     return Array.from(db.trades.values()).filter(t => t.proposerId === userId || t.receiverId === userId);
 };
+
+export const fetchCompletedTradesForUser = async (userId: string): Promise<Trade[]> => {
+    await simulateLatency();
+    const completedStatuses = [TradeStatus.COMPLETED, TradeStatus.DISPUTE_RESOLVED];
+    return Array.from(db.trades.values()).filter(t => 
+        (t.proposerId === userId || t.receiverId === userId) && completedStatuses.includes(t.status)
+    );
+};
+
 
 export const proposeTrade = async (
     proposerId: string,
@@ -125,6 +142,9 @@ export const proposeTrade = async (
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         disputeTicketId: null,
+        proposerRated: false,
+        receiverRated: false,
+        ratingDeadline: null,
     };
     db.trades.set(newTrade.id, newTrade);
     
@@ -142,7 +162,8 @@ export const respondToTrade = async (tradeId: string, action: 'accept' | 'reject
     if (!trade) throw new Error("Trade not found.");
     
     if (action === 'accept') {
-        trade.status = TradeStatus.COMPLETED_AWAITING_RATING; // Simplified flow for mock API
+        trade.status = TradeStatus.COMPLETED_AWAITING_RATING;
+        trade.ratingDeadline = new Date(Date.now() + 7 * 86400000).toISOString();
         // In a real app: transfer items, cash, update surpluses, check reputation, etc.
     } else {
         trade.status = TradeStatus.REJECTED;
@@ -238,6 +259,23 @@ export const addDisputeResponse = async (disputeId: string, evidence: DisputeEvi
 
 // Add more dispute functions as needed...
 
+// --- WISHLIST API ---
+export const toggleWishlistItem = async (userId: string, itemId: string): Promise<User> => {
+    await simulateLatency(100);
+    const user = db.users.get(userId);
+    if (!user) throw new Error("User not found");
+
+    const itemIndex = user.wishlist.indexOf(itemId);
+    if (itemIndex > -1) {
+        user.wishlist.splice(itemIndex, 1); // Remove item
+    } else {
+        user.wishlist.push(itemId); // Add item
+    }
+    db.users.set(userId, user);
+    return { ...user }; // Return a copy
+};
+
+
 // --- RATING API ---
 
 export const fetchRatingsForTrade = async (tradeId: string): Promise<TradeRating[]> => {
@@ -265,12 +303,21 @@ export const submitRating = async (tradeId: string, raterId: string, ratingData:
     tradeRatings.push(newRating);
     db.ratings.set(tradeId, tradeRatings);
 
+    // Update trade flags
+    if (trade.proposerId === raterId) {
+        trade.proposerRated = true;
+    } else if (trade.receiverId === raterId) {
+        trade.receiverRated = true;
+    }
+
     // Check if both parties have rated to reveal them
-    if (tradeRatings.length === 2) {
-        tradeRatings.forEach(r => r.isRevealed = true);
+    if (trade.proposerRated && trade.receiverRated) {
+        const allRatingsForTrade = db.ratings.get(tradeId) || [];
+        allRatingsForTrade.forEach(r => r.isRevealed = true);
         trade.status = TradeStatus.COMPLETED;
-        db.trades.set(tradeId, trade);
+        trade.ratingDeadline = null; // Close the window
     }
     
+    db.trades.set(tradeId, trade);
     return newRating;
 };
