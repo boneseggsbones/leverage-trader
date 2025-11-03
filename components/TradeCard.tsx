@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trade, User, Item, TradeStatus } from '../types.ts';
+import { formatCurrency } from '../utils/currency.ts';
 
 interface TradeCardProps {
     trade: Trade;
@@ -26,7 +27,7 @@ const CompactItem: React.FC<{ item: Item }> = ({ item }) => (
         <img src={item.imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover border" />
         <div>
             <p className="text-xs font-semibold text-gray-700 leading-tight">{item.name}</p>
-            <p className="text-xs text-gray-500">${(item.estimatedMarketValue / 100).toLocaleString()}</p>
+            <p className="text-xs text-gray-500">{formatCurrency(item.estimatedMarketValue)}</p>
         </div>
     </div>
 );
@@ -36,7 +37,7 @@ const CompactCash: React.FC<{ amount: number }> = ({ amount }) => (
         <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center font-bold text-green-700 text-sm border">$</div>
         <div>
             <p className="text-xs font-semibold text-gray-700 leading-tight">Cash</p>
-            <p className="text-xs text-gray-500">${(amount / 100).toLocaleString()}</p>
+            <p className="text-xs text-gray-500">{formatCurrency(amount)}</p>
         </div>
     </div>
 );

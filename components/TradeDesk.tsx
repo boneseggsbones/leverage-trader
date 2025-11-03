@@ -9,6 +9,7 @@ import ItemCard from './ItemCard.tsx';
 // Fix: Add .tsx extension to local component imports
 import TradeBalancer from './TradeBalancer.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
+import { formatCurrency, dollarsToCents } from '../utils/currency.ts';
 
 const TradeDesk: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -84,18 +85,16 @@ const TradeDesk: React.FC = () => {
         setIsSubmitting(true);
         try {
             // Fix: Pass user IDs and item IDs to the proposeTrade function, not the full objects.
-            // Fix: Pass cash value in cents to the API.
-            await proposeTrade(
+            const { updatedProposer } = await proposeTrade(
                 currentUser.id,
                 otherUser.id,
                 currentUserItems.map(item => item.id),
                 otherUserItems.map(item => item.id),
-                currentUserCash * 100 // Convert dollars to cents for API
+                dollarsToCents(currentUserCash) // Convert dollars to cents for API
             );
             
-            // Fix: Correctly update user's cash (in cents) after proposing trade.
-            const updatedUser = { ...currentUser, cash: currentUser.cash - (currentUserCash * 100) };
-            updateUser(updatedUser);
+            // Fix: Use authoritative user object from API response to update context
+            updateUser(updatedProposer);
 
             addNotification("Trade proposed successfully!", 'success');
             navigateTo('dashboard');
@@ -173,7 +172,7 @@ const TradeDesk: React.FC = () => {
                                     if (parseInt(e.target.value) > currentUserCashInDollars) {
                                         setCurrentUserCash(currentUserCashInDollars);
                                         // Fix: Correctly display available cash in dollars.
-                                        addNotification(`You only have $${currentUserCashInDollars.toLocaleString()} available.`, 'warning');
+                                        addNotification(`You only have ${formatCurrency(currentUser.cash)} available.`, 'warning');
                                     }
                                 }}
                                 className="w-full max-w-xs p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
@@ -183,7 +182,7 @@ const TradeDesk: React.FC = () => {
                                 max={currentUserCashInDollars}
                             />
                             {/* Fix: Display user's available cash in dollars. */}
-                            <span className="text-sm text-slate-500">/ ${currentUserCashInDollars.toLocaleString()} available</span>
+                            <span className="text-sm text-slate-500">/ {formatCurrency(currentUser.cash)} available</span>
                         </div>
                     </div>
 

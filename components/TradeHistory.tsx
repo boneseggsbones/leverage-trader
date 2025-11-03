@@ -6,6 +6,7 @@ import { fetchTradesForUser, fetchAllUsers, fetchAllItems, submitRating } from '
 import { Trade, User, TradeStatus, Item, TradeRating } from '../types.ts';
 import { useNotification } from '../context/NotificationContext.tsx';
 import RatingModal from './RatingModal.tsx';
+import { formatCurrency } from '../utils/currency.ts';
 
 const TradeHistory: React.FC = () => {
     const { currentUser } = useAuth();
@@ -175,6 +176,7 @@ const TradeHistory: React.FC = () => {
                                 const valueGotten = youGotItems.reduce((sum, item) => sum + item.estimatedMarketValue, 0) + youGotCash;
                                 
                                 const netValue = valueGotten - valueGiven;
+                                const formattedNetValue = formatCurrency(netValue);
 
                                 return (
                                     <div key={trade.id} className="p-4 hover:bg-gray-50 transition-colors">
@@ -200,7 +202,7 @@ const TradeHistory: React.FC = () => {
                                                         <p className={`font-bold text-lg ${
                                                             netValue > 0 ? 'text-green-600' : netValue < 0 ? 'text-red-600' : 'text-gray-700'
                                                         }`}>
-                                                            {netValue > 0 ? '+' : ''}${(netValue / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            {netValue > 0 ? `+${formattedNetValue}` : formattedNetValue}
                                                         </p>
                                                     </div>
                                                 }

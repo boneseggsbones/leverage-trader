@@ -1,6 +1,7 @@
 import React from 'react';
 // Fix: Add .tsx extension to module imports
 import { Item } from '../types.ts';
+import { formatCurrency } from '../utils/currency.ts';
 
 interface ItemCardProps {
     item: Item;
@@ -22,7 +23,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
                 <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
                 <div>
                     <p className="font-semibold text-sm text-gray-800">{item.name}</p>
-                    <p className="text-xs text-slate-500">${(item.estimatedMarketValue / 100).toLocaleString()}</p>
+                    <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue)}</p>
                 </div>
             </div>
         )
@@ -34,7 +35,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
                 <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
             </div>
             <h4 className="font-bold text-sm text-gray-800 truncate w-full">{item.name}</h4>
-            <p className="text-xs text-slate-500">${(item.estimatedMarketValue / 100).toLocaleString()}</p>
+            <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue)}</p>
         </div>
     );
 };

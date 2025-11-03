@@ -1,6 +1,7 @@
 import React from 'react';
 import { Item, User } from '../types.ts';
 import { useNavigation } from '../context/NavigationContext.tsx';
+import { formatCurrency } from '../utils/currency.ts';
 
 interface DiscoveryItemCardProps {
     item: Item;
@@ -42,7 +43,7 @@ const DiscoveryItemCard: React.FC<DiscoveryItemCardProps> = ({ item, owner, onCl
             </div>
             <div className="p-4">
                 <h3 className="font-bold text-gray-800 truncate">{item.name}</h3>
-                <p className="text-sm text-gray-500">${(item.estimatedMarketValue / 100).toLocaleString()}</p>
+                <p className="text-sm text-gray-500">{formatCurrency(item.estimatedMarketValue)}</p>
                 
                 <div className="mt-4 pt-4 border-t border-gray-100">
                     <p className="text-xs text-gray-400">Owner</p>
