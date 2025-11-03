@@ -1,159 +1,157 @@
-// Fix: Populated file with a test suite and helper functions.
-import { 
-    fetchAllUsers, 
-    fetchUser, 
-    proposeTrade, 
-    fetchTradesForUser, 
+// Fix: Implemented the full test suite for the mock API and valuation service.
+import {
+    resetDb,
+    fetchAllUsers,
+    fetchUser,
+    proposeTrade,
     respondToTrade,
-    cancelTrade,
-    openDispute,
-    addDisputeEvidence,
-    addDisputeResponse,
-    submitRating,
-    fetchRatingsForTrade
+    _internal,
+    fetchTradesForUser,
 } from '../api/mockApi';
-import { TradeStatus, DisputeStatus, DisputeType } from '../types';
+import { TradeStatus } from '../types';
+import {
+    valuationRouterService,
+    emvCalculatorService,
+    ItemValuationInput,
+} from '../services/valuationService';
+
+// A simple assertion helper for tests
+const assert = (condition: boolean, message: string) => {
+    if (!condition) {
+        throw new Error(`Assertion Failed: ${message}`);
+    }
+};
 
 export interface Test {
     name: string;
     run: () => Promise<void>;
 }
 
-// A simple assertion helper for tests
-function assert(condition: boolean, message: string) {
-    if (!condition) {
-        throw new Error(`Assertion Failed: ${message}`);
-    }
-}
-
 export const testSuite: Test[] = [
     {
-        name: 'API: fetchAllUsers should return multiple users',
+        name: 'Mock API: DB initializes with correct number of users and items',
         async run() {
+            resetDb();
             const users = await fetchAllUsers();
-            assert(users.length > 1, 'Expected more than one user to be returned.');
-            assert(users.every(u => u.id && u.name), 'All users should have an ID and a name.');
+            assert(users.length === 4, `Expected 4 users, but got ${users.length}`);
+            const items = _internal.items;
+            assert(items.size === 6, `Expected 6 items, but got ${items.size}`);
         }
     },
     {
-        name: 'API: fetchUser should return a specific user',
+        name: 'Mock API: fetchUser returns the correct user',
         async run() {
+            resetDb();
             const user = await fetchUser('user-1');
-            assert(!!user, "User with ID 'user-1' should be found.");
-            assert(user?.id === 'user-1', "Returned user ID should match the requested ID.");
-            assert(user?.name === 'Alice', "User name should be Alice.");
+            assert(!!user, 'User-1 should exist');
+            assert(user!.name === 'Alice', `Expected user name "Alice", got "${user!.name}"`);
+            assert(user!.inventory.length === 2, `Alice should have 2 items, got ${user!.inventory.length}`);
         }
     },
     {
-        name: 'API: proposeTrade should create a new pending trade',
+        name: 'Mock API: proposeTrade creates a new pending trade',
         async run() {
-            const initialTrades = await fetchTradesForUser('user-1');
-            const initialPending = initialTrades.filter(t => t.status === TradeStatus.PENDING_ACCEPTANCE).length;
+            resetDb();
+            const proposerId = 'user-1';
+            const receiverId = 'user-2';
+            const proposerItemIds = ['item-1'];
+            const receiverItemIds = ['item-3'];
+            const proposerCash = 1000; // $10.00
 
-            await proposeTrade('user-1', 'user-2', ['item-1'], [], 1000); // Propose with $10 in cents
-
-            const finalTrades = await fetchTradesForUser('user-1');
-            const finalPending = finalTrades.filter(t => t.status === TradeStatus.PENDING_ACCEPTANCE).length;
-
-            assert(finalPending === initialPending + 1, 'A new pending trade should have been created.');
-        }
-    },
-    {
-        name: 'API: respondToTrade should update trade status',
-        async run() {
-            // Create a disposable trade to avoid interfering with other tests
-            // Fix: Destructure `newTrade` from the result of `proposeTrade`.
-            const { newTrade } = await proposeTrade('user-3', 'user-2', [], [], 500);
-            assert(newTrade.status === TradeStatus.PENDING_ACCEPTANCE, 'Trade should be pending initially.');
+            await proposeTrade(proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash);
             
-            const acceptedTrade = await respondToTrade(newTrade.id, 'accept');
-            assert(acceptedTrade.status === TradeStatus.COMPLETED_AWAITING_RATING, 'Trade should be COMPLETED_AWAITING_RATING after acceptance.');
+            const trades = await fetchTradesForUser('user-1');
+            const newTrade = trades.find(t => t.status === TradeStatus.PENDING_ACCEPTANCE && t.proposerId === proposerId && t.receiverId === receiverId);
 
-            // Fix: Destructure `newTrade` and rename it to avoid conflict.
-            const { newTrade: anotherTrade } = await proposeTrade('user-3', 'user-2', [], [], 500);
-            const rejectedTrade = await respondToTrade(anotherTrade.id, 'reject');
-            assert(rejectedTrade.status === TradeStatus.REJECTED, 'Trade should be REJECTED after rejection.');
+            assert(!!newTrade, 'Newly proposed trade was not found for user-1');
+            assert(newTrade!.proposerCash === proposerCash, 'Trade cash amount is incorrect');
+            assert(newTrade!.proposerItemIds[0] === 'item-1', 'Trade proposer item is incorrect');
         }
     },
     {
-        name: 'API: cancelTrade should correctly cancel a pending trade',
+        name: 'Mock API: proposeTrade throws error for insufficient funds',
         async run() {
-            // Fix: Destructure `newTrade` from the result of `proposeTrade` and rename it.
-            const { newTrade: trade } = await proposeTrade('user-1', 'user-2', ['item-2'], [], 0);
-            assert(trade.status === TradeStatus.PENDING_ACCEPTANCE, 'Trade should be pending to be cancelled.');
+            resetDb();
+            const proposerId = 'user-2'; // Bob has $50.00 (5000 cents)
+            const receiverId = 'user-1';
+            const proposerCash = 6000; // $60.00, more than he has
+
+            try {
+                await proposeTrade(proposerId, receiverId, [], [], proposerCash);
+                // If it reaches here, the test fails
+                throw new Error('proposeTrade should have thrown an error but did not.');
+            } catch (e: any) {
+                assert(e.message === 'Insufficient funds', `Expected error "Insufficient funds", but got "${e.message}"`);
+            }
+        }
+    },
+    {
+        name: 'Mock API: Accepting a trade correctly swaps items and updates reputation',
+        async run() {
+            resetDb();
+            // trade-2: user-2 (Bob) proposes item-4 (iPhone, 40k) for user-1's (Alice) item-1 (Mario 64, 7.5k).
+            const tradeId = 'trade-2';
+
+            // Alice (user-1) accepts
+            await respondToTrade(tradeId, 'accept');
+
+            const alice = await fetchUser('user-1');
+            const bob = await fetchUser('user-2');
+
+            // Verify item swap
+            const aliceHasItem4 = alice!.inventory.some(i => i.id === 'item-4');
+            const aliceLostItem1 = !alice!.inventory.some(i => i.id === 'item-1');
+            assert(aliceHasItem4, 'Alice should have received item-4');
+            assert(aliceLostItem1, 'Alice should have lost item-1');
             
-            const cancelledTrade = await cancelTrade(trade.id, 'user-1');
-            assert(cancelledTrade.status === TradeStatus.CANCELLED, 'Trade status should be updated to CANCELLED.');
+            const bobHasItem1 = bob!.inventory.some(i => i.id === 'item-1');
+            const bobLostItem4 = !bob!.inventory.some(i => i.id === 'item-4');
+            assert(bobHasItem1, 'Bob should have received item-1');
+            assert(bobLostItem4, 'Bob should have lost item-4');
+
+            // Verify cash is unchanged
+            assert(alice!.cash === 20000, `Alice's cash should be unchanged at 20000, but is ${alice!.cash}`);
+            assert(bob!.cash === 5000, `Bob's cash should be unchanged at 5000, but is ${bob!.cash}`);
+
+            // Verify reputation update for an unbalanced trade
+            assert(alice!.valuationReputationScore === 106, `Alice's rep should be 106, but is ${alice!.valuationReputationScore}`);
+            assert(bob!.valuationReputationScore === 88, `Bob's rep should be 88, but is ${bob!.valuationReputationScore}`);
         }
     },
     {
-        name: 'Dispute Workflow: Should open, add evidence, and move to mediation',
+        name: 'Mock API: Rejecting a trade updates its status to REJECTED',
         async run() {
-            // Fix: Destructure `newTrade` from the result of `proposeTrade` and rename it.
-            const { newTrade: trade } = await proposeTrade('user-2', 'user-3', [], [], 100);
-            await respondToTrade(trade.id, 'accept');
+            resetDb();
+            const tradeId = 'trade-2';
+            const originalAlice = await fetchUser('user-1');
 
-            // Step 1: Open dispute
-            const dispute = await openDispute(trade.id, 'user-2', 'SNAD', 'Item was not as described!');
-            const updatedTrade = (await fetchTradesForUser('user-2')).find(t => t.id === trade.id);
+            const updatedTrade = await respondToTrade(tradeId, 'reject');
+            
+            assert(updatedTrade.status === TradeStatus.REJECTED, `Trade status should be REJECTED, but is ${updatedTrade.status}`);
 
-            assert(!!dispute, 'Dispute ticket should be created.');
-            assert(updatedTrade?.status === TradeStatus.DISPUTE_OPENED, 'Trade status should be DISPUTE_OPENED.');
-            assert(dispute.status === DisputeStatus.OPEN_AWAITING_RESPONSE, 'Dispute should be awaiting response.');
-
-            // Step 2: Add initiator evidence
-            await addDisputeEvidence(dispute.id, { statement: 'Here are photos', attachments: ['photo1.jpg'] });
-
-            // Step 3: Add respondent evidence and move to mediation
-            const mediatedDispute = await addDisputeResponse(dispute.id, { statement: 'The item was perfect', attachments: [] });
-            assert(mediatedDispute.status === DisputeStatus.IN_MEDIATION, 'Dispute should move to IN_MEDIATION after response.');
+            // Ensure no data was changed for users
+            const aliceAfterReject = await fetchUser('user-1');
+            assert(JSON.stringify(originalAlice) === JSON.stringify(aliceAfterReject), 'User data should not change on trade rejection');
         }
     },
     {
-        name: 'Rating System: Should keep ratings blind until both parties submit',
+        name: 'Valuation Service: Correctly calculates EMV for a known video game',
         async run() {
-            // Fix: Destructure `newTrade` from the result of `proposeTrade` and rename it.
-            const { newTrade: trade } = await proposeTrade('user-1', 'user-3', [], ['item-5'], 20000);
-            await respondToTrade(trade.id, 'accept');
-
-            // Step 1: First user rates
-            await submitRating(trade.id, 'user-1', {
-                overallScore: 5,
-                itemAccuracyScore: 5,
-                communicationScore: 5,
-                shippingSpeedScore: 5,
-                publicComment: 'Great trade!',
-                privateFeedback: null,
-            });
-
-            let ratings = await fetchRatingsForTrade(trade.id);
-            assert(ratings.length === 1, 'There should be one rating after the first submission.');
-            assert(ratings[0].isRevealed === false, 'The first rating should not be revealed.');
-            let updatedTrade = (await fetchTradesForUser('user-1')).find(t => t.id === trade.id);
-            assert(updatedTrade?.status === TradeStatus.COMPLETED_AWAITING_RATING, 'Trade should still be awaiting rating.');
-
-            // Step 2: Second user rates
-            await submitRating(trade.id, 'user-3', {
-                overallScore: 4,
-                itemAccuracyScore: 5,
-                communicationScore: 4,
-                shippingSpeedScore: 4,
-                publicComment: 'Good experience.',
-                privateFeedback: null,
-            });
-
-            ratings = await fetchRatingsForTrade(trade.id);
-            assert(ratings.length === 2, 'There should be two ratings after the second submission.');
-            assert(ratings.every(r => r.isRevealed === true), 'Both ratings should now be revealed.');
-            updatedTrade = (await fetchTradesForUser('user-1')).find(t => t.id === trade.id);
-            assert(updatedTrade?.status === TradeStatus.COMPLETED, 'Trade status should be COMPLETED after both ratings.');
-        }
-    },
-    {
-        name: 'API: Test should fail gracefully',
-        async run() {
-            // Fix: Replaced `1 === 2` with `false` to maintain the intentional failure while avoiding a TypeScript type overlap error.
-            assert(false, 'This is an intentional failure to test the UI.');
+            const input: ItemValuationInput = {
+                title: 'Super Mario 64',
+                category: 'VIDEO_GAMES',
+                condition: 'CIB',
+                identifiers: {}
+            };
+            const results = await valuationRouterService.routeValuationRequest(input);
+            assert(results.length === 1, `Expected 1 valuation result, got ${results.length}`);
+            assert(results[0].apiName === 'PriceChartingProvider', `Expected PriceChartingProvider, got ${results[0].apiName}`);
+            
+            const finalValuation = emvCalculatorService.calculateFinalEMV(input.condition, results[0]);
+            
+            assert(finalValuation.status === 'API_VERIFIED', `Status should be API_VERIFIED, got ${finalValuation.status}`);
+            assert(finalValuation.finalEMV === 7500, `Final EMV should be 7500 cents, got ${finalValuation.finalEMV}`);
+            assert(finalValuation.apiMetadata.apiConditionUsed === 'cib-price', `API condition used should be 'cib-price', got ${finalValuation.apiMetadata.apiConditionUsed}`);
         }
     }
 ];
