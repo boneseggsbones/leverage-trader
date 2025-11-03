@@ -59,6 +59,18 @@ export interface Trade {
     createdAt: string;
     updatedAt: string;
     disputeTicketId: string | null;
+
+    // Logistic tracking
+    proposerSubmittedTracking: boolean;
+    receiverSubmittedTracking: boolean;
+    proposerTrackingNumber: string | null;
+    receiverTrackingNumber: string | null;
+
+    // Verification tracking
+    proposerVerifiedSatisfaction: boolean;
+    receiverVerifiedSatisfaction: boolean;
+
+    // Rating tracking
     proposerRated: boolean;
     receiverRated: boolean;
     ratingDeadline: string | null;

@@ -1,200 +1,224 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllUsers, fetchTradesForUser, respondToTrade, cancelTrade, fetchRatingsForTrade, fetchAllItems, submitRating } from '../api/mockApi.ts';
-import { User, Trade, TradeStatus, TradeRating, Item } from '../types.ts';
-import ConfirmationModal from './ConfirmationModal.tsx';
-import RatingModal from './RatingModal.tsx';
-import RatingDisplayModal from './RatingDisplayModal.tsx';
+import {
+    fetchTradesForUser,
+    fetchAllUsers,
+    fetchAllItems,
+    respondToTrade,
+    cancelTrade,
+    submitPayment,
+    submitTracking,
+    verifySatisfaction,
+    openDispute
+} from '../api/mockApi.ts';
+import { Trade, User, Item, TradeStatus, DisputeType } from '../types.ts';
 import TradeCard from './TradeCard.tsx';
+import ConfirmationModal from './ConfirmationModal.tsx';
+import DisputeModal from './DisputeModal.tsx';
 
 const TradesPage: React.FC = () => {
     const { currentUser } = useAuth();
     const { navigateTo } = useNavigation();
     const { addNotification } = useNotification();
 
-    const [users, setUsers] = useState<User[]>([]);
     const [trades, setTrades] = useState<Trade[]>([]);
+    const [users, setUsers] = useState<Record<string, User>>({});
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [actionTrade, setActionTrade] = useState<Trade | null>(null);
-    const [modalAction, setModalAction] = useState<'accept' | 'reject' | 'cancel' | null>(null);
-    
-    // State for rating modals
-    const [ratingTrade, setRatingTrade] = useState<Trade | null>(null);
-    const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
-    const [isRatingDisplayModalOpen, setIsRatingDisplayModalOpen] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [tradeRatings, setTradeRatings] = useState<TradeRating[]>([]);
 
-    useEffect(() => {
+    const [actionTrade, setActionTrade] = useState<Trade | null>(null);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
+    const [confirmAction, setConfirmAction] = useState<'accept' | 'reject' | 'cancel' | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const loadTrades = useCallback(async () => {
         if (!currentUser) {
             navigateTo('login');
             return;
         }
+        setIsLoading(true);
+        try {
+            const [userTrades, allUsers, allItemsData] = await Promise.all([
+                fetchTradesForUser(currentUser.id),
+                fetchAllUsers(),
+                fetchAllItems(),
+            ]);
 
-        const loadTradesData = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const [allUsers, userTrades, allItemsData] = await Promise.all([
-                    fetchAllUsers(),
-                    fetchTradesForUser(currentUser.id),
-                    fetchAllItems(),
-                ]);
-                setUsers(allUsers);
-                setTrades(userTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
-                setAllItems(new Map(allItemsData.map(item => [item.id, item])));
-            } catch (err) {
-                setError("Failed to load trades data.");
-                console.error(err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
+            const userMap = allUsers.reduce((acc, user) => {
+                acc[user.id] = user;
+                return acc;
+            }, {} as Record<string, User>);
+            setUsers(userMap);
+            setAllItems(new Map(allItemsData.map(item => [item.id, item])));
 
-        loadTradesData();
+            const activeStatuses = [
+                TradeStatus.PENDING_ACCEPTANCE,
+                TradeStatus.ACCEPTED,
+                TradeStatus.PAYMENT_PENDING,
+                TradeStatus.ESCROW_FUNDED,
+                TradeStatus.SHIPPING_PENDING,
+                TradeStatus.IN_TRANSIT,
+                TradeStatus.DELIVERED_AWAITING_VERIFICATION,
+                TradeStatus.DISPUTE_OPENED,
+            ];
+
+            setTrades(
+                userTrades
+                    .filter(t => activeStatuses.includes(t.status))
+                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+            );
+        } catch (err) {
+            setError('Failed to load active trades.');
+        } finally {
+            setIsLoading(false);
+        }
     }, [currentUser, navigateTo]);
 
-    const { incomingTrades, outgoingTrades, activeTrades, needsRating } = useMemo(() => {
-        const incomingTrades: Trade[] = [];
-        const outgoingTrades: Trade[] = [];
-        const activeTrades: Trade[] = [];
-        const needsRating: Trade[] = [];
+    useEffect(() => {
+        loadTrades();
+    }, [loadTrades]);
 
-        trades.forEach(trade => {
-            if (trade.status === TradeStatus.PENDING_ACCEPTANCE) {
-                if (trade.receiverId === currentUser?.id) incomingTrades.push(trade);
-                else outgoingTrades.push(trade);
-            } else if (trade.status === TradeStatus.COMPLETED_AWAITING_RATING) {
-                needsRating.push(trade);
-            } else if (![TradeStatus.REJECTED, TradeStatus.CANCELLED, TradeStatus.COMPLETED].includes(trade.status)) {
-                activeTrades.push(trade);
-            }
-        });
-        return { incomingTrades, outgoingTrades, activeTrades, needsRating };
-    }, [trades, currentUser]);
-    
-    const handleTradeAction = async () => {
-        if (!actionTrade || !modalAction) return;
-        setIsSubmitting(true);
-        try {
-            let result: Trade;
-            if (modalAction === 'cancel') {
-                result = await cancelTrade(actionTrade.id, currentUser!.id);
-                 addNotification('Trade cancelled successfully.', 'info');
-            } else {
-                result = await respondToTrade(actionTrade.id, modalAction);
-                addNotification(`Trade ${modalAction}ed successfully.`, 'success');
-            }
-            setTrades(prev => prev.map(t => t.id === result.id ? result : t));
-        } catch (err) {
-            addNotification(`Failed to ${modalAction} trade.`, 'error');
-            console.error(err);
-        } finally {
-            setIsSubmitting(false);
-            setActionTrade(null);
-            setModalAction(null);
-        }
-    };
-    
-    const openModal = (trade: Trade, action: 'accept' | 'reject' | 'cancel') => {
+    const handleAction = (trade: Trade, action: 'accept' | 'reject' | 'cancel') => {
         setActionTrade(trade);
-        setModalAction(action);
+        setConfirmAction(action);
+        setIsConfirmModalOpen(true);
     };
-
-    const handleOpenRatingModal = (trade: Trade) => {
-        setRatingTrade(trade);
-        setIsRatingModalOpen(true);
-    };
-
-    const handleOpenRatingDisplayModal = async (trade: Trade) => {
-        setRatingTrade(trade);
-        const ratings = await fetchRatingsForTrade(trade.id);
-        setTradeRatings(ratings);
-        setIsRatingDisplayModalOpen(true);
-    };
-
-    const handleRatingSubmit = async (formData: Omit<TradeRating, 'id' | 'tradeId' | 'raterId' | 'rateeId' | 'createdAt' | 'isRevealed'>) => {
-        if (!ratingTrade || !currentUser) return;
+    
+    const handleConfirm = async () => {
+        if (!actionTrade || !confirmAction || !currentUser) return;
         setIsSubmitting(true);
         try {
-            await submitRating(ratingTrade.id, currentUser.id, formData);
-            const updatedTrades = await fetchTradesForUser(currentUser.id);
-            setTrades(updatedTrades.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
-            addNotification("Rating submitted successfully!", 'success');
-            setIsRatingModalOpen(false);
-            setRatingTrade(null);
+            if (confirmAction === 'cancel') {
+                await cancelTrade(actionTrade.id, currentUser.id);
+            } else {
+                await respondToTrade(actionTrade.id, confirmAction);
+            }
+            addNotification(`Trade successfully ${confirmAction === 'accept' ? 'accepted' : confirmAction}ed.`, 'success');
+            await loadTrades();
         } catch (err) {
-            addNotification("Failed to submit rating.", 'error');
+            addNotification(`Failed to ${confirmAction} trade.`, 'error');
         } finally {
+            setIsConfirmModalOpen(false);
+            setActionTrade(null);
+            setConfirmAction(null);
+            setIsSubmitting(false);
+        }
+    };
+    
+    const handleDisputeSubmit = async (disputeType: DisputeType, statement: string) => {
+        if (!actionTrade || !currentUser) return;
+        setIsSubmitting(true);
+        try {
+            await openDispute(actionTrade.id, currentUser.id, disputeType, statement);
+            addNotification('Dispute opened successfully.', 'success');
+            await loadTrades();
+        } catch (err) {
+            addNotification('Failed to open dispute.', 'error');
+        } finally {
+            setIsDisputeModalOpen(false);
+            setActionTrade(null);
             setIsSubmitting(false);
         }
     };
 
-    if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Trades...</div>;
-    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
-    if (!currentUser) return null;
-    
-    const otherUsers = users.filter(u => u.id !== currentUser.id);
+    const isActionRequired = (trade: Trade): boolean => {
+        if (!currentUser) return false;
+        const isReceiver = trade.receiverId === currentUser.id;
+        const isProposer = trade.proposerId === currentUser.id;
+        switch (trade.status) {
+            case TradeStatus.PENDING_ACCEPTANCE: return isReceiver;
+            case TradeStatus.PAYMENT_PENDING: return (isProposer && trade.proposerCash > 0) || (isReceiver && trade.receiverCash > 0);
+            case TradeStatus.SHIPPING_PENDING: return !((isProposer && trade.proposerSubmittedTracking) || (isReceiver && trade.receiverSubmittedTracking));
+            case TradeStatus.DELIVERED_AWAITING_VERIFICATION: return !((isProposer && trade.proposerVerifiedSatisfaction) || (isReceiver && trade.receiverVerifiedSatisfaction));
+            default: return false;
+        }
+    };
 
-    const renderTradeList = (title: string, tradeList: Trade[]) => (
+    const renderActionButtons = (trade: Trade) => {
+        if (!currentUser) return null;
+        const isReceiver = trade.receiverId === currentUser.id;
+        const isProposer = trade.proposerId === currentUser.id;
+
+        switch (trade.status) {
+            case TradeStatus.PENDING_ACCEPTANCE:
+                if (isReceiver) return (
+                    <div className="flex gap-2"><button onClick={() => handleAction(trade, 'accept')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Accept</button><button onClick={() => handleAction(trade, 'reject')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded">Reject</button></div>
+                );
+                if (isProposer) return <button onClick={() => handleAction(trade, 'cancel')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>;
+                return null;
+            case TradeStatus.PAYMENT_PENDING:
+                if ((isProposer && trade.proposerCash > 0) || (isReceiver && trade.receiverCash > 0)) return <button onClick={async () => { await submitPayment(trade.id, currentUser.id); addNotification('Payment submitted.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded">Submit Payment</button>;
+                return null;
+            case TradeStatus.SHIPPING_PENDING:
+                if (!((isProposer && trade.proposerSubmittedTracking) || (isReceiver && trade.receiverSubmittedTracking))) return <button onClick={async () => { await submitTracking(trade.id, currentUser.id, `TRACK-${Date.now()}`); addNotification('Tracking submitted.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded">Add Tracking</button>;
+                return null;
+            case TradeStatus.DELIVERED_AWAITING_VERIFICATION:
+                 if (!((isProposer && trade.proposerVerifiedSatisfaction) || (isReceiver && trade.receiverVerifiedSatisfaction))) return (
+                    <div className="flex gap-2"><button onClick={async () => { await verifySatisfaction(trade.id, currentUser.id); addNotification('Items verified.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Verify Items</button><button onClick={() => { setActionTrade(trade); setIsDisputeModalOpen(true); }} className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded">Open Dispute</button></div>
+                );
+                return null;
+            default: return null;
+        }
+    };
+    
+    const actionRequiredTrades = trades.filter(isActionRequired);
+    const waitingTrades = trades.filter(t => !isActionRequired(t));
+    
+    const TradeList: React.FC<{ title: string, tradeList: Trade[] }> = ({ title, tradeList }) => (
         <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">{title}</h2>
-            {tradeList.length === 0 ? (
-                <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-gray-500">No trades in this category.</p>
-                </div>
-            ) : (
+            <h2 className="text-xl font-bold text-gray-700 mb-4">{title}</h2>
+            {tradeList.length > 0 ? (
                 <div className="space-y-4">
                     {tradeList.map(trade => {
-                        const otherUserId = trade.proposerId === currentUser.id ? trade.receiverId : trade.proposerId;
-                        const otherUser = users.find(u => u.id === otherUserId) || {name: 'Unknown User'} as User;
+                        const otherUserId = trade.proposerId === currentUser?.id ? trade.receiverId : trade.proposerId;
+                        const otherUser = users[otherUserId];
+                        if (!otherUser || !currentUser) return null;
                         return (
-                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems}>
-                                {trade.status === TradeStatus.PENDING_ACCEPTANCE && (
-                                     <div className="flex gap-2">
-                                        {trade.receiverId === currentUser.id ? (
-                                            <>
-                                                <button onClick={() => openModal(trade, 'accept')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Accept</button>
-                                                <button onClick={() => openModal(trade, 'reject')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded">Reject</button>
-                                            </>
-                                        ) : (
-                                            <button onClick={() => openModal(trade, 'cancel')} className="px-3 py-1 text-xs font-semibold text-white bg-gray-500 hover:bg-gray-600 rounded">Cancel</button>
-                                        )}
-                                    </div>
-                                )}
-                                {trade.status === TradeStatus.COMPLETED_AWAITING_RATING && (
-                                    <button onClick={() => handleOpenRatingModal(trade)} className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded">Rate Trade</button>
-                                )}
-                                {trade.status === TradeStatus.COMPLETED && (
-                                     <button onClick={() => handleOpenRatingDisplayModal(trade)} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded">View Rating</button>
-                                )}
+                             <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems}>
+                                {renderActionButtons(trade)}
                             </TradeCard>
                         )
                     })}
                 </div>
-            )}
+            ) : <p className="text-gray-500 text-sm">No trades in this category.</p>}
         </div>
     );
 
+    if (isLoading) return <div className="p-8 text-center">Loading trades...</div>;
+    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="space-y-12">
-                {renderTradeList("Incoming Trade Offers", incomingTrades)}
-                {renderTradeList("Needs Your Rating", needsRating)}
-                {renderTradeList("Outgoing Trade Offers", outgoingTrades)}
-                {renderTradeList("Active Trades", activeTrades)}
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-8">Your Active Trades</h1>
+            <div className="space-y-10">
+                <TradeList title="Action Required" tradeList={actionRequiredTrades} />
+                <TradeList title="Waiting for Other Party" tradeList={waitingTrades} />
             </div>
             
-            <ConfirmationModal isOpen={!!modalAction} onClose={() => setModalAction(null)} onConfirm={handleTradeAction} title={`Confirm Trade ${modalAction}`} confirmButtonText={`Yes, ${modalAction}`}>
-                Are you sure you want to {modalAction} this trade?
+            <ConfirmationModal
+                isOpen={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={handleConfirm}
+                title={`${confirmAction?.charAt(0).toUpperCase()}${confirmAction?.slice(1)} Trade`}
+                confirmButtonText={`Yes, ${confirmAction}`}
+                confirmButtonClass={confirmAction === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
+            >
+                Are you sure you want to {confirmAction} this trade?
             </ConfirmationModal>
 
-            {isRatingModalOpen && ratingTrade && <RatingModal isOpen={isRatingModalOpen} onClose={() => setIsRatingModalOpen(false)} trade={ratingTrade} isSubmitting={isSubmitting} onSubmit={handleRatingSubmit} />}
-            {isRatingDisplayModalOpen && ratingTrade && <RatingDisplayModal isOpen={isRatingDisplayModalOpen} onClose={() => setIsRatingDisplayModalOpen(false)} trade={ratingTrade} ratings={tradeRatings} currentUser={currentUser} otherUser={otherUsers.find(u => u.id !== currentUser.id) || null} />}
+            {actionTrade && (
+                 <DisputeModal
+                    isOpen={isDisputeModalOpen}
+                    onClose={() => setIsDisputeModalOpen(false)}
+                    onSubmit={handleDisputeSubmit}
+                    tradeId={actionTrade.id}
+                    isSubmitting={isSubmitting}
+                />
+            )}
         </div>
     );
 };

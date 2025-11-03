@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import { useNotification } from '../context/NotificationContext.tsx';
-import { fetchAllUsers, fetchAllItems, toggleWishlistItem } from '../api/mockApi.ts';
+import { fetchAllUsers, toggleWishlistItem, fetchDashboardData, DashboardData } from '../api/mockApi.ts';
 import { User, Item } from '../types.ts';
 import ItemCarousel from './ItemCarousel.tsx';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
@@ -13,7 +13,11 @@ const Dashboard: React.FC = () => {
     const { addNotification } = useNotification();
 
     const [users, setUsers] = useState<User[]>([]);
-    const [allItems, setAllItems] = useState<Item[]>([]);
+    const [dashboardData, setDashboardData] = useState<DashboardData>({
+        nearbyItems: [],
+        recommendedItems: [],
+        topTraderItems: [],
+    });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,12 +31,13 @@ const Dashboard: React.FC = () => {
             setIsLoading(true);
             setError(null);
             try {
-                const [allUsers, allItemsData] = await Promise.all([
-                    fetchAllUsers(),
-                    fetchAllItems(),
+                // Fetch pre-filtered data from the new endpoint and all users for display purposes
+                const [data, allUsers] = await Promise.all([
+                    fetchDashboardData(currentUser.id),
+                    fetchAllUsers()
                 ]);
+                setDashboardData(data);
                 setUsers(allUsers);
-                setAllItems(allItemsData);
             } catch (err) {
                 setError("Failed to load discovery data.");
                 console.error(err);
@@ -55,31 +60,6 @@ const Dashboard: React.FC = () => {
             addNotification('Failed to update wishlist.', 'error');
         }
     };
-
-
-    const { nearbyItems, recommendedItems, topTraderItems } = useMemo(() => {
-        if (!currentUser || users.length === 0 || allItems.length === 0) {
-            return { nearbyItems: [], recommendedItems: [], topTraderItems: [] };
-        }
-
-        const otherUsers = users.filter(u => u.id !== currentUser.id);
-
-        // Nearby Items
-        const nearbyUsers = otherUsers.filter(u => u.city === currentUser.city);
-        const nearbyItems = allItems.filter(item => nearbyUsers.some(u => u.id === item.ownerId));
-
-        // Recommended Items
-        const recommendedItems = allItems.filter(item => 
-            item.ownerId !== currentUser.id && currentUser.interests.includes(item.category)
-        );
-
-        // Top Trader Items
-        const sortedTraders = [...otherUsers].sort((a, b) => b.valuationReputationScore - a.valuationReputationScore);
-        const topTraderIds = sortedTraders.slice(0, 5).map(u => u.id);
-        const topTraderItems = allItems.filter(item => topTraderIds.includes(item.ownerId));
-
-        return { nearbyItems, recommendedItems, topTraderItems };
-    }, [currentUser, users, allItems]);
 
     const handleItemClick = (itemOwnerId: string) => {
         navigateTo('trade-desk', { otherUserId: itemOwnerId });
@@ -110,15 +90,15 @@ const Dashboard: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="space-y-12">
                     <ItemCarousel title="Nearby Finds">
-                        {renderCarouselItems(nearbyItems)}
+                        {renderCarouselItems(dashboardData.nearbyItems)}
                     </ItemCarousel>
 
                     <ItemCarousel title="Recommended For You">
-                         {renderCarouselItems(recommendedItems)}
+                         {renderCarouselItems(dashboardData.recommendedItems)}
                     </ItemCarousel>
                     
                     <ItemCarousel title="From Top-Rated Traders">
-                         {renderCarouselItems(topTraderItems)}
+                         {renderCarouselItems(dashboardData.topTraderItems)}
                     </ItemCarousel>
                 </div>
             </div>

@@ -71,12 +71,21 @@ const resetDb = () => {
     ];
     users.forEach(user => db.users.set(user.id, user));
 
+    const defaultTradeFields = {
+        proposerSubmittedTracking: false,
+        receiverSubmittedTracking: false,
+        proposerTrackingNumber: null,
+        receiverTrackingNumber: null,
+        proposerVerifiedSatisfaction: false,
+        receiverVerifiedSatisfaction: false,
+    };
+
     // Create Trades
     const trades: Trade[] = [
-        { id: 'trade-1', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-3'], receiverItemIds: [], proposerCash: 2000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date(Date.now() - 86400000).toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: null },
-        { id: 'trade-2', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-5'], proposerCash: 25000, receiverCash: 0, status: TradeStatus.COMPLETED_AWAITING_RATING, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), updatedAt: new Date().toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: new Date(Date.now() + 6 * 86400000).toISOString() },
-        { id: 'trade-3', proposerId: 'user-3', receiverId: 'user-2', proposerItemIds: ['item-5'], receiverItemIds: ['item-4'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: null },
-        { id: 'trade-4', proposerId: 'user-1', receiverId: 'user-2', proposerItemIds: ['item-1'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 0, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 8 * 86400000).toISOString(), disputeTicketId: null, proposerRated: true, receiverRated: true, ratingDeadline: null },
+        { id: 'trade-1', proposerId: 'user-2', receiverId: 'user-1', proposerItemIds: ['item-3'], receiverItemIds: [], proposerCash: 2000, receiverCash: 0, status: TradeStatus.PENDING_ACCEPTANCE, createdAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date(Date.now() - 86400000).toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: null, ...defaultTradeFields },
+        { id: 'trade-2', proposerId: 'user-1', receiverId: 'user-3', proposerItemIds: [], receiverItemIds: ['item-5'], proposerCash: 25000, receiverCash: 0, status: TradeStatus.COMPLETED_AWAITING_RATING, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), updatedAt: new Date().toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: new Date(Date.now() + 6 * 86400000).toISOString(), ...defaultTradeFields },
+        { id: 'trade-3', proposerId: 'user-3', receiverId: 'user-2', proposerItemIds: ['item-5'], receiverItemIds: ['item-4'], proposerCash: 0, receiverCash: 10000, status: TradeStatus.REJECTED, createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(), disputeTicketId: null, proposerRated: false, receiverRated: false, ratingDeadline: null, ...defaultTradeFields },
+        { id: 'trade-4', proposerId: 'user-1', receiverId: 'user-2', proposerItemIds: ['item-1'], receiverItemIds: ['item-3'], proposerCash: 0, receiverCash: 0, status: TradeStatus.COMPLETED, createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), updatedAt: new Date(Date.now() - 8 * 86400000).toISOString(), disputeTicketId: null, proposerRated: true, receiverRated: true, ratingDeadline: null, ...defaultTradeFields },
 
     ];
     trades.forEach(trade => db.trades.set(trade.id, trade));
@@ -116,6 +125,39 @@ export const fetchCompletedTradesForUser = async (userId: string): Promise<Trade
     );
 };
 
+export interface DashboardData {
+    nearbyItems: Item[];
+    recommendedItems: Item[];
+    topTraderItems: Item[];
+}
+
+export const fetchDashboardData = async (userId: string): Promise<DashboardData> => {
+    await simulateLatency(400); // Simulate a slightly more complex query
+    const currentUser = db.users.get(userId);
+    if (!currentUser) {
+        throw new Error("Current user not found for dashboard query.");
+    }
+    
+    const allItems = Array.from(db.items.values());
+    const otherUsers = Array.from(db.users.values()).filter(u => u.id !== userId);
+
+    // Nearby Items
+    const nearbyUsers = otherUsers.filter(u => u.city === currentUser.city);
+    const nearbyItems = allItems.filter(item => nearbyUsers.some(u => u.id === item.ownerId));
+
+    // Recommended Items
+    const recommendedItems = allItems.filter(item => 
+        item.ownerId !== currentUser.id && currentUser.interests.includes(item.category)
+    );
+
+    // Top Trader Items
+    const sortedTraders = [...otherUsers].sort((a, b) => b.valuationReputationScore - a.valuationReputationScore);
+    const topTraderIds = sortedTraders.slice(0, 5).map(u => u.id);
+    const topTraderItems = allItems.filter(item => topTraderIds.includes(item.ownerId));
+
+    return { nearbyItems, recommendedItems, topTraderItems };
+};
+
 
 export const proposeTrade = async (
     proposerId: string,
@@ -123,7 +165,7 @@ export const proposeTrade = async (
     proposerItemIds: string[],
     receiverItemIds: string[],
     proposerCash: number // in cents
-): Promise<Trade> => {
+): Promise<{newTrade: Trade, updatedProposer: User}> => {
     await simulateLatency(300);
     const proposer = db.users.get(proposerId);
     if (!proposer || proposer.cash < proposerCash) {
@@ -145,15 +187,22 @@ export const proposeTrade = async (
         proposerRated: false,
         receiverRated: false,
         ratingDeadline: null,
+        proposerSubmittedTracking: false,
+        receiverSubmittedTracking: false,
+        proposerTrackingNumber: null,
+        receiverTrackingNumber: null,
+        proposerVerifiedSatisfaction: false,
+        receiverVerifiedSatisfaction: false,
     };
     db.trades.set(newTrade.id, newTrade);
     
     // "Hold" the cash and items (in a real app this would be more robust)
-    proposer.cash -= proposerCash;
-    proposer.inventory = proposer.inventory.filter(item => !proposerItemIds.includes(item.id));
-    db.users.set(proposerId, proposer);
+    const updatedProposer = { ...proposer };
+    updatedProposer.cash -= proposerCash;
+    updatedProposer.inventory = proposer.inventory.filter(item => !proposerItemIds.includes(item.id));
+    db.users.set(proposerId, updatedProposer);
 
-    return newTrade;
+    return { newTrade, updatedProposer };
 };
 
 export const respondToTrade = async (tradeId: string, action: 'accept' | 'reject'): Promise<Trade> => {
@@ -162,9 +211,8 @@ export const respondToTrade = async (tradeId: string, action: 'accept' | 'reject
     if (!trade) throw new Error("Trade not found.");
     
     if (action === 'accept') {
-        trade.status = TradeStatus.COMPLETED_AWAITING_RATING;
-        trade.ratingDeadline = new Date(Date.now() + 7 * 86400000).toISOString();
-        // In a real app: transfer items, cash, update surpluses, check reputation, etc.
+        const involvesCash = trade.proposerCash > 0 || trade.receiverCash > 0;
+        trade.status = involvesCash ? TradeStatus.PAYMENT_PENDING : TradeStatus.SHIPPING_PENDING;
     } else {
         trade.status = TradeStatus.REJECTED;
         // Return held items/cash
@@ -203,6 +251,96 @@ export const cancelTrade = async (tradeId: string, cancellerId: string): Promise
     db.trades.set(tradeId, trade);
     return trade;
 };
+
+
+// --- NEW LIFECYCLE FUNCTIONS ---
+
+export const submitPayment = async (tradeId: string, userId: string): Promise<Trade> => {
+    await simulateLatency(500);
+    const trade = db.trades.get(tradeId);
+    if (!trade) throw new Error("Trade not found.");
+    if (trade.status !== TradeStatus.PAYMENT_PENDING) throw new Error("Trade is not awaiting payment.");
+    // In a real app, we'd check if `userId` is the correct person to pay.
+
+    trade.status = TradeStatus.ESCROW_FUNDED;
+    trade.updatedAt = new Date().toISOString();
+    db.trades.set(tradeId, trade);
+
+    // Automatically transition to next state after a brief delay
+    await simulateLatency(200);
+    trade.status = TradeStatus.SHIPPING_PENDING;
+    trade.updatedAt = new Date().toISOString();
+    db.trades.set(tradeId, trade);
+
+    return trade;
+};
+
+export const submitTracking = async (tradeId: string, userId: string, trackingNumber: string): Promise<Trade> => {
+    await simulateLatency(200);
+    const trade = db.trades.get(tradeId);
+    if (!trade) throw new Error("Trade not found.");
+    if (trade.status !== TradeStatus.SHIPPING_PENDING && trade.status !== TradeStatus.IN_TRANSIT) {
+        throw new Error("Trade is not awaiting shipping information.");
+    }
+    
+    if (trade.proposerId === userId) {
+        trade.proposerSubmittedTracking = true;
+        trade.proposerTrackingNumber = trackingNumber;
+    } else if (trade.receiverId === userId) {
+        trade.receiverSubmittedTracking = true;
+        trade.receiverTrackingNumber = trackingNumber;
+    } else {
+        throw new Error("User is not part of this trade.");
+    }
+
+    if (trade.proposerSubmittedTracking && trade.receiverSubmittedTracking) {
+        trade.status = TradeStatus.IN_TRANSIT;
+    }
+    
+    trade.updatedAt = new Date().toISOString();
+    db.trades.set(tradeId, trade);
+    return trade;
+};
+
+export const markDelivered = async (tradeId: string): Promise<Trade> => {
+    await simulateLatency(100);
+    const trade = db.trades.get(tradeId);
+    if (!trade) throw new Error("Trade not found.");
+    if (trade.status !== TradeStatus.IN_TRANSIT) throw new Error("Trade is not currently in transit.");
+    
+    trade.status = TradeStatus.DELIVERED_AWAITING_VERIFICATION;
+    trade.updatedAt = new Date().toISOString();
+    db.trades.set(tradeId, trade);
+    return trade;
+};
+
+export const verifySatisfaction = async (tradeId: string, userId: string): Promise<Trade> => {
+    await simulateLatency(200);
+    const trade = db.trades.get(tradeId);
+    if (!trade) throw new Error("Trade not found.");
+    if (trade.status !== TradeStatus.DELIVERED_AWAITING_VERIFICATION) {
+        throw new Error("Trade is not awaiting verification.");
+    }
+
+    if (trade.proposerId === userId) {
+        trade.proposerVerifiedSatisfaction = true;
+    } else if (trade.receiverId === userId) {
+        trade.receiverVerifiedSatisfaction = true;
+    } else {
+        throw new Error("User is not part of this trade.");
+    }
+
+    if (trade.proposerVerifiedSatisfaction && trade.receiverVerifiedSatisfaction) {
+        trade.status = TradeStatus.COMPLETED_AWAITING_RATING;
+        trade.ratingDeadline = new Date(Date.now() + 7 * 86400000).toISOString();
+        // Here, we would execute the final asset swap in the database
+    }
+
+    trade.updatedAt = new Date().toISOString();
+    db.trades.set(tradeId, trade);
+    return trade;
+};
+
 
 // --- DISPUTE API ---
 

@@ -62,13 +62,15 @@ export const testSuite: Test[] = [
         name: 'API: respondToTrade should update trade status',
         async run() {
             // Create a disposable trade to avoid interfering with other tests
-            const newTrade = await proposeTrade('user-3', 'user-2', [], [], 500);
+            // Fix: Destructure `newTrade` from the result of `proposeTrade`.
+            const { newTrade } = await proposeTrade('user-3', 'user-2', [], [], 500);
             assert(newTrade.status === TradeStatus.PENDING_ACCEPTANCE, 'Trade should be pending initially.');
             
             const acceptedTrade = await respondToTrade(newTrade.id, 'accept');
             assert(acceptedTrade.status === TradeStatus.COMPLETED_AWAITING_RATING, 'Trade should be COMPLETED_AWAITING_RATING after acceptance.');
 
-            const anotherTrade = await proposeTrade('user-3', 'user-2', [], [], 500);
+            // Fix: Destructure `newTrade` and rename it to avoid conflict.
+            const { newTrade: anotherTrade } = await proposeTrade('user-3', 'user-2', [], [], 500);
             const rejectedTrade = await respondToTrade(anotherTrade.id, 'reject');
             assert(rejectedTrade.status === TradeStatus.REJECTED, 'Trade should be REJECTED after rejection.');
         }
@@ -76,7 +78,8 @@ export const testSuite: Test[] = [
     {
         name: 'API: cancelTrade should correctly cancel a pending trade',
         async run() {
-            const trade = await proposeTrade('user-1', 'user-2', ['item-2'], [], 0);
+            // Fix: Destructure `newTrade` from the result of `proposeTrade` and rename it.
+            const { newTrade: trade } = await proposeTrade('user-1', 'user-2', ['item-2'], [], 0);
             assert(trade.status === TradeStatus.PENDING_ACCEPTANCE, 'Trade should be pending to be cancelled.');
             
             const cancelledTrade = await cancelTrade(trade.id, 'user-1');
@@ -86,7 +89,8 @@ export const testSuite: Test[] = [
     {
         name: 'Dispute Workflow: Should open, add evidence, and move to mediation',
         async run() {
-            const trade = await proposeTrade('user-2', 'user-3', [], [], 100);
+            // Fix: Destructure `newTrade` from the result of `proposeTrade` and rename it.
+            const { newTrade: trade } = await proposeTrade('user-2', 'user-3', [], [], 100);
             await respondToTrade(trade.id, 'accept');
 
             // Step 1: Open dispute
@@ -108,7 +112,8 @@ export const testSuite: Test[] = [
     {
         name: 'Rating System: Should keep ratings blind until both parties submit',
         async run() {
-            const trade = await proposeTrade('user-1', 'user-3', [], ['item-5'], 20000);
+            // Fix: Destructure `newTrade` from the result of `proposeTrade` and rename it.
+            const { newTrade: trade } = await proposeTrade('user-1', 'user-3', [], ['item-5'], 20000);
             await respondToTrade(trade.id, 'accept');
 
             // Step 1: First user rates
