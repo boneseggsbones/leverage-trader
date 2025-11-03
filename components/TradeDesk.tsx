@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 // Fix: Add .tsx extension to module imports
 import { fetchUser, proposeTrade } from '../api/mockApi.ts';
@@ -13,7 +14,8 @@ import { formatCurrency, dollarsToCents } from '../utils/currency.ts';
 
 const TradeDesk: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
-    const { navigateTo, pageContext } = useNavigation();
+    const navigate = useNavigate();
+    const { otherUserId } = useParams<{ otherUserId: string }>();
     const { addNotification } = useNotification();
 
     const [otherUser, setOtherUser] = useState<User | null>(null);
@@ -29,7 +31,7 @@ const TradeDesk: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
-        if (!pageContext || !pageContext.otherUserId) {
+        if (!otherUserId) {
             setError("No user selected for trade. Please go back to the dashboard.");
             setIsLoading(false);
             return;
@@ -37,7 +39,7 @@ const TradeDesk: React.FC = () => {
         
         const loadOtherUser = async () => {
             try {
-                const user = await fetchUser(pageContext.otherUserId);
+                const user = await fetchUser(otherUserId);
                 if (user) {
                     setOtherUser(user);
                 } else {
@@ -51,10 +53,10 @@ const TradeDesk: React.FC = () => {
         };
 
         loadOtherUser();
-    }, [pageContext]);
+    }, [otherUserId]);
     
     if (!currentUser) {
-        navigateTo('dashboard');
+        navigate('/');
         return null;
     }
     
@@ -97,7 +99,7 @@ const TradeDesk: React.FC = () => {
             updateUser(updatedProposer);
 
             addNotification("Trade proposed successfully!", 'success');
-            navigateTo('dashboard');
+            navigate('/');
         } catch (err) {
             addNotification("Failed to propose trade. Please try again.", 'error');
             console.error(err);
@@ -142,7 +144,7 @@ const TradeDesk: React.FC = () => {
                         <p className="text-slate-500 mt-1">Select items from both inventories and add cash to propose a trade.</p>
                     </div>
                     <button
-                        onClick={() => navigateTo('dashboard')}
+                        onClick={() => navigate('/')}
                         className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors self-start"
                     >
                         Cancel Trade

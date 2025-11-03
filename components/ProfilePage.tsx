@@ -1,20 +1,21 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate, useParams } from 'react-router-dom';
 import { fetchUser, fetchCompletedTradesForUser } from '../api/mockApi.ts';
 import { User, Trade } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
 
 const ProfilePage: React.FC = () => {
     const { currentUser } = useAuth();
-    const { pageContext, navigateTo } = useNavigation();
+    const navigate = useNavigate();
+    const { userId } = useParams<{ userId: string }>();
     const [profileUser, setProfileUser] = useState<User | null>(null);
     const [completedTrades, setCompletedTrades] = useState<Trade[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const userId = pageContext?.userId;
         if (!userId) {
             setError("No user specified for profile view.");
             setIsLoading(false);
@@ -44,7 +45,7 @@ const ProfilePage: React.FC = () => {
         };
 
         loadProfileData();
-    }, [pageContext]);
+    }, [userId]);
 
     if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
@@ -91,7 +92,7 @@ const ProfilePage: React.FC = () => {
 
                         {!isCurrentUserProfile && (
                              <button 
-                                onClick={() => navigateTo('trade-desk', { otherUserId: profileUser.id })}
+                                onClick={() => navigate(`/trade-desk/${profileUser.id}`)}
                                 className="mt-8 w-full px-4 py-2 text-md font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
                             >
                                 Start Trade

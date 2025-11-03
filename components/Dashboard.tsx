@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext.tsx';
 import { fetchAllUsers, toggleWishlistItem, fetchDashboardData, DashboardData } from '../api/mockApi.ts';
 import { User, Item } from '../types.ts';
@@ -9,7 +10,7 @@ import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 
 const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const { addNotification } = useNotification();
 
     const [users, setUsers] = useState<User[]>([]);
@@ -23,7 +24,7 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         if (!currentUser) {
-            navigateTo('login');
+            navigate('/login');
             return;
         }
 
@@ -47,7 +48,7 @@ const Dashboard: React.FC = () => {
         };
 
         loadDashboardData();
-    }, [currentUser, navigateTo]);
+    }, [currentUser, navigate]);
     
     const handleToggleWishlist = async (itemId: string) => {
         if (!currentUser) return;
@@ -62,7 +63,7 @@ const Dashboard: React.FC = () => {
     };
 
     const handleItemClick = (itemOwnerId: string) => {
-        navigateTo('trade-desk', { otherUserId: itemOwnerId });
+        navigate(`/trade-desk/${itemOwnerId}`);
     };
 
     if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Discovery...</div>;

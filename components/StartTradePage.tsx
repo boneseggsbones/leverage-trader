@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 import { fetchAllUsers } from '../api/mockApi.ts';
 import { User } from '../types.ts';
 
 const StartTradePage: React.FC = () => {
     const { currentUser } = useAuth();
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -36,7 +37,7 @@ const StartTradePage: React.FC = () => {
                         className="p-6 bg-white rounded-xl border border-gray-200 flex flex-col"
                     >
                         <div className="flex-grow">
-                            <button onClick={(e) => { e.stopPropagation(); navigateTo('profile', { userId: user.id })}} className="text-xl font-bold text-gray-800 hover:underline">{user.name}</button>
+                            <button onClick={(e) => { e.stopPropagation(); navigate(`/profile/${user.id}`)}} className="text-xl font-bold text-gray-800 hover:underline">{user.name}</button>
                             <div className="mt-4 space-y-2 text-sm text-gray-600">
                                <div className="flex justify-between">
                                     <span>Items:</span>
@@ -50,7 +51,7 @@ const StartTradePage: React.FC = () => {
                         </div>
                         <div className="mt-6">
                             <button 
-                                onClick={() => navigateTo('trade-desk', { otherUserId: user.id })}
+                                onClick={() => navigate(`/trade-desk/${user.id}`)}
                                 className="w-full px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                             >
                                 Open Trade Desk

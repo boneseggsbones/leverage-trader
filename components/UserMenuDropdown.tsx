@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 
 interface UserMenuDropdownProps {
     onClose: () => void;
@@ -22,14 +23,10 @@ const MenuItem: React.FC<{ icon: React.ReactNode; label: string; onClick: () => 
 
 const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({ onClose }) => {
     const { currentUser, logout } = useAuth();
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
 
-    const handleNavigate = (page: 'profile' | 'wishlist' | 'trade-history') => {
-        if (page === 'profile' && currentUser) {
-             navigateTo(page, { userId: currentUser.id });
-        } else {
-            navigateTo(page);
-        }
+    const handleNavigate = (path: string) => {
+        navigate(path);
         onClose();
     };
 
@@ -46,9 +43,9 @@ const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({ onClose }) => {
 
     return (
         <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 p-2 z-30">
-            <MenuItem icon={<ProfileIcon />} label="Profile" onClick={() => handleNavigate('profile')} />
-            <MenuItem icon={<WishlistIcon />} label="Wishlist" onClick={() => handleNavigate('wishlist')} />
-            <MenuItem icon={<HistoryIcon />} label="Trade History" onClick={() => handleNavigate('trade-history')} />
+            <MenuItem icon={<ProfileIcon />} label="Profile" onClick={() => handleNavigate(`/profile/${currentUser?.id}`)} />
+            <MenuItem icon={<WishlistIcon />} label="Wishlist" onClick={() => handleNavigate('/wishlist')} />
+            <MenuItem icon={<HistoryIcon />} label="Trade History" onClick={() => handleNavigate('/trade-history')} />
             <MenuItem icon={<LogoutIcon />} label="Log out" onClick={handleLogout} hasSeparator />
         </div>
     );

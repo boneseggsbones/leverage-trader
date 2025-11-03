@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { fetchAllItems, fetchAllUsers, toggleWishlistItem } from '../api/mockApi.ts';
 import { Item, User } from '../types.ts';
@@ -8,7 +9,7 @@ import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 
 const WishlistPage: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const { addNotification } = useNotification();
     
     const [allItems, setAllItems] = useState<Item[]>([]);
@@ -49,7 +50,7 @@ const WishlistPage: React.FC = () => {
     };
     
     const handleItemClick = (itemOwnerId: string) => {
-        navigateTo('trade-desk', { otherUserId: itemOwnerId });
+        navigate(`/trade-desk/${itemOwnerId}`);
     };
 
     if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Wishlist...</div>;

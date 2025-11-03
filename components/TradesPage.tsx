@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import {
     fetchTradesForUser,
@@ -20,7 +21,7 @@ import DisputeModal from './DisputeModal.tsx';
 
 const TradesPage: React.FC = () => {
     const { currentUser } = useAuth();
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const { addNotification } = useNotification();
 
     const [trades, setTrades] = useState<Trade[]>([]);
@@ -37,7 +38,7 @@ const TradesPage: React.FC = () => {
 
     const loadTrades = useCallback(async () => {
         if (!currentUser) {
-            navigateTo('login');
+            navigate('/login');
             return;
         }
         setIsLoading(true);
@@ -76,7 +77,7 @@ const TradesPage: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [currentUser, navigateTo]);
+    }, [currentUser, navigate]);
 
     useEffect(() => {
         loadTrades();

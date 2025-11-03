@@ -1,8 +1,9 @@
+
 import React, { useState, useCallback } from 'react';
 // Import the test suite from its dedicated file
 // Fix: Add .tsx extension to module imports
 import { testSuite, Test } from '../tests/App.test.tsx';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 
 type TestResult = 'idle' | 'running' | 'passed' | 'failed';
 
@@ -13,7 +14,7 @@ interface TestState {
 }
 
 const TestRunner: React.FC = () => {
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const [testStates, setTestStates] = useState<TestState[]>([]);
     const [isRunning, setIsRunning] = useState(false);
 
@@ -64,7 +65,7 @@ const TestRunner: React.FC = () => {
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-cyan-400">Leverage Test Runner</h1>
                     <button
-                        onClick={() => navigateTo('login')}
+                        onClick={() => navigate('/login')}
                         className="px-4 py-2 text-sm font-semibold text-gray-900 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
                     >
                         Back to Login

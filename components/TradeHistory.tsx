@@ -1,7 +1,8 @@
+
 // Fix: Implemented the TradeHistory component.
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 import { fetchTradesForUser, fetchAllUsers, fetchAllItems, submitRating } from '../api/mockApi.ts';
 import { Trade, User, TradeStatus, Item, TradeRating } from '../types.ts';
 import { useNotification } from '../context/NotificationContext.tsx';
@@ -10,7 +11,7 @@ import { formatCurrency } from '../utils/currency.ts';
 
 const TradeHistory: React.FC = () => {
     const { currentUser } = useAuth();
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const { addNotification } = useNotification();
     
     const [trades, setTrades] = useState<Trade[]>([]);
@@ -26,7 +27,7 @@ const TradeHistory: React.FC = () => {
 
     const loadHistory = useCallback(async () => {
         if (!currentUser) {
-            navigateTo('login');
+            navigate('/login');
             return;
         }
         setIsLoading(true);
@@ -55,7 +56,7 @@ const TradeHistory: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [currentUser, navigateTo]);
+    }, [currentUser, navigate]);
 
     useEffect(() => {
         loadHistory();
@@ -143,7 +144,7 @@ const TradeHistory: React.FC = () => {
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-3xl font-bold text-gray-800">Trade History</h1>
                     <button
-                        onClick={() => navigateTo('dashboard')}
+                        onClick={() => navigate('/')}
                         className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
                     >
                         Back to Dashboard

@@ -1,11 +1,11 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { Link, NavLink } from 'react-router-dom';
 import UserMenuDropdown from './UserMenuDropdown.tsx';
 
 const Header: React.FC = () => {
     const { currentUser } = useAuth();
-    const { currentPage, navigateTo } = useNavigation();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -24,9 +24,9 @@ const Header: React.FC = () => {
     if (!currentUser) return null;
 
     const navItems = [
-        { page: 'dashboard', label: 'Discover' },
-        { page: 'inventory', label: 'Inventory' },
-        { page: 'trades', label: 'Trades' },
+        { path: '/', label: 'Discover' },
+        { path: '/inventory', label: 'Inventory' },
+        { path: '/trades', label: 'Trades' },
     ];
 
     return (
@@ -36,30 +36,32 @@ const Header: React.FC = () => {
                     {/* Left side: Logo and main nav */}
                     <div className="flex items-center space-x-8">
                         <div className="flex-shrink-0">
-                            <h1 className="text-2xl font-bold text-gray-800 cursor-pointer" onClick={() => navigateTo('dashboard')}>Leverage</h1>
+                            <Link to="/" className="text-2xl font-bold text-gray-800">Leverage</Link>
                         </div>
                         <nav className="hidden md:flex space-x-4">
                             {navItems.map(item => (
-                                <button
-                                    key={item.page}
-                                    onClick={() => navigateTo(item.page as any)}
-                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                                        currentPage === item.page
-                                            ? 'text-gray-900 bg-gray-100'
-                                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                                    }`}
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    className={({ isActive }) =>
+                                        `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                            isActive
+                                                ? 'text-gray-900 bg-gray-100'
+                                                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                                        }`
+                                    }
                                 >
                                     {item.label}
-                                </button>
+                                </NavLink>
                             ))}
                         </nav>
                     </div>
 
                     {/* Right side: User info and actions */}
                     <div className="flex items-center space-x-4">
-                         <button onClick={() => navigateTo('start-trade')} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors hidden sm:block">
+                         <Link to="/start-trade" className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors hidden sm:block">
                             Start a New Trade
-                        </button>
+                        </Link>
                         <div ref={menuRef} className="relative">
                             <button 
                                 onClick={() => setIsMenuOpen(prev => !prev)}

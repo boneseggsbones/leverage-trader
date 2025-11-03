@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 // --- SVG Illustrations ---
@@ -57,12 +57,12 @@ const InflatedTradeIcon = () => (
 
 
 const AboutPage: React.FC = () => {
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
     const { currentUser } = useAuth();
 
     const handleBackClick = () => {
         // If logged in, go to dashboard. Otherwise, the router will redirect to login.
-        navigateTo('dashboard');
+        navigate('/');
     };
 
     return (

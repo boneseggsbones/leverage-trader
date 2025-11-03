@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Item, User } from '../types.ts';
-import { useNavigation } from '../context/NavigationContext.tsx';
+import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../utils/currency.ts';
 
 interface DiscoveryItemCardProps {
@@ -12,11 +13,11 @@ interface DiscoveryItemCardProps {
 }
 
 const DiscoveryItemCard: React.FC<DiscoveryItemCardProps> = ({ item, owner, onClick, isWishlisted, onToggleWishlist }) => {
-    const { navigateTo } = useNavigation();
+    const navigate = useNavigate();
 
     const handleOwnerClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent the main card click
-        navigateTo('profile', { userId: owner.id });
+        navigate(`/profile/${owner.id}`);
     };
 
     const handleWishlistClick = (e: React.MouseEvent) => {

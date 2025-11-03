@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '../context/NavigationContext';
+import { useNavigate } from 'react-router-dom';
 // Fix: Add .tsx extension to module imports
 import { fetchAllUsers } from '../api/mockApi.ts';
 import { User } from '../types.ts';
 
 const LoginScreen: React.FC = () => {
-    const { login } = useAuth();
-    const { navigateTo } = useNavigation();
+    const { login, currentUser } = useAuth();
+    const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -27,9 +28,14 @@ const LoginScreen: React.FC = () => {
         loadUsers();
     }, []);
 
+    useEffect(() => {
+        if (currentUser) {
+            navigate('/');
+        }
+    }, [currentUser, navigate]);
+
     const handleLogin = (user: User) => {
         login(user);
-        // Navigation to dashboard is handled by the effect in App.tsx
     };
 
     return (
@@ -58,14 +64,14 @@ const LoginScreen: React.FC = () => {
                 <div className="text-center text-slate-500 text-sm pt-4 border-t border-gray-200">
                     <p>This is a demo application. All data is mocked.</p>
                      <button
-                        onClick={() => navigateTo('about')}
+                        onClick={() => navigate('/about')}
                         className="mt-2 font-semibold text-blue-600 hover:underline"
                     >
                         Learn about Leverage
                     </button>
                      <span className="mx-2">|</span>
                      <button
-                        onClick={() => navigateTo('test-runner')}
+                        onClick={() => navigate('/test-runner')}
                         className="mt-2 font-semibold text-cyan-600 hover:underline"
                     >
                         Run Test Suite
