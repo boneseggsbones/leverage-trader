@@ -12,6 +12,7 @@ import StartTradePage from './components/StartTradePage';
 import ProfilePage from './components/ProfilePage';
 import WishlistPage from './components/WishlistPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import DatabaseVisualizer from './src/components/DatabaseVisualizer';
 
 const AppRoutes = () => {
     return (
@@ -19,6 +20,7 @@ const AppRoutes = () => {
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/test-runner" element={<TestRunner />} />
+            <Route path="/database" element={<DatabaseVisualizer />} />
             <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/inventory" element={<InventoryPage />} />
