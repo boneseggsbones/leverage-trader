@@ -20,7 +20,7 @@ import ConfirmationModal from './ConfirmationModal.tsx';
 import DisputeModal from './DisputeModal.tsx';
 
 const TradesPage: React.FC = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
     const { addNotification } = useNotification();
 
@@ -126,6 +126,22 @@ const TradesPage: React.FC = () => {
         }
     };
 
+    const handleVerifySatisfaction = async (trade: Trade) => {
+        if (!currentUser) return;
+        try {
+            const { proposer, receiver } = await verifySatisfaction(trade.id, currentUser.id);
+            if (currentUser.id === proposer.id) {
+                updateUser(proposer);
+            } else {
+                updateUser(receiver);
+            }
+            addNotification('Items verified.', 'success');
+            loadTrades();
+        } catch (error) {
+            addNotification('Failed to verify items.', 'error');
+        }
+    }
+
     const isActionRequired = (trade: Trade): boolean => {
         if (!currentUser) return false;
         const isReceiver = trade.receiverId === currentUser.id;
@@ -159,7 +175,7 @@ const TradesPage: React.FC = () => {
                 return null;
             case TradeStatus.DELIVERED_AWAITING_VERIFICATION:
                  if (!((isProposer && trade.proposerVerifiedSatisfaction) || (isReceiver && trade.receiverVerifiedSatisfaction))) return (
-                    <div className="flex gap-2"><button onClick={async () => { await verifySatisfaction(trade.id, currentUser.id); addNotification('Items verified.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Verify Items</button><button onClick={() => { setActionTrade(trade); setIsDisputeModalOpen(true); }} className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded">Open Dispute</button></div>
+                    <div className="flex gap-2"><button onClick={() => handleVerifySatisfaction(trade)} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Verify Items</button><button onClick={() => { setActionTrade(trade); setIsDisputeModalOpen(true); }} className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded">Open Dispute</button></div>
                 );
                 return null;
             default: return null;

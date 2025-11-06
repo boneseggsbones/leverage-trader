@@ -2,9 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
-import { fetchUser, fetchCompletedTradesForUser } from '../api/mockApi.ts';
-import { User, Trade } from '../types.ts';
+import { fetchUser, fetchCompletedTradesForUser, fetchAllItems } from '../api/mockApi.ts';
+import { User, Trade, Item } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
+import AssetLineageGraph from './visualization/AssetLineageGraph.tsx';
+import GraphInspectorPanel from './visualization/GraphInspectorPanel.tsx';
 
 const ProfilePage: React.FC = () => {
     const { currentUser } = useAuth();
@@ -12,8 +14,10 @@ const ProfilePage: React.FC = () => {
     const { userId } = useParams<{ userId: string }>();
     const [profileUser, setProfileUser] = useState<User | null>(null);
     const [completedTrades, setCompletedTrades] = useState<Trade[]>([]);
+    const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
 
     useEffect(() => {
         if (!userId) {
@@ -25,14 +29,16 @@ const ProfilePage: React.FC = () => {
         const loadProfileData = async () => {
             setIsLoading(true);
             try {
-                const [user, trades] = await Promise.all([
+                const [user, trades, allItemsData] = await Promise.all([
                     fetchUser(userId),
-                    fetchCompletedTradesForUser(userId)
+                    fetchCompletedTradesForUser(userId),
+                    fetchAllItems()
                 ]);
 
                 if (user) {
                     setProfileUser(user);
                     setCompletedTrades(trades);
+                    setAllItems(new Map(allItemsData.map(item => [item.id, item])));
                 } else {
                     setError("Could not find the specified user.");
                 }
@@ -101,23 +107,34 @@ const ProfilePage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Right Column: Inventory */}
-                <div className="md:col-span-2">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-4">{isCurrentUserProfile ? "Your Inventory" : `${profileUser.name}'s Inventory`}</h2>
-                     {profileUser.inventory.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                            {profileUser.inventory.map(item => (
-                                <ItemCard 
-                                    key={item.id} 
-                                    item={item}
-                                />
-                            ))}
+                {/* Right Column: Inventory and Trade-Up Journey */}
+                <div className="md:col-span-2 space-y-8">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">{isCurrentUserProfile ? "Your Inventory" : `${profileUser.name}'s Inventory`}</h2>
+                        {profileUser.inventory.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                                {profileUser.inventory.map(item => (
+                                    <ItemCard 
+                                        key={item.id} 
+                                        item={item}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-16 bg-gray-50 rounded-lg border border-gray-200">
+                                <h3 className="text-xl font-semibold text-gray-700">Inventory is empty.</h3>
+                            </div>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2 bg-white p-6 rounded-lg border border-gray-200">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Trade-Up Journey</h2>
+                            <AssetLineageGraph trades={completedTrades} userId={profileUser.id} allItems={allItems} onNodeClick={setSelectedNodeData} />
                         </div>
-                    ) : (
-                        <div className="text-center py-16 bg-gray-50 rounded-lg border border-gray-200">
-                            <h3 className="text-xl font-semibold text-gray-700">Inventory is empty.</h3>
+                        <div className="col-span-1">
+                            <GraphInspectorPanel selectedNodeData={selectedNodeData} trades={completedTrades} userId={profileUser.id} />
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
         </div>

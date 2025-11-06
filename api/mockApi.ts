@@ -301,7 +301,7 @@ export const submitTracking = async (tradeId: string, userId: string, trackingNu
     return deepClone(trade);
 };
 
-export const verifySatisfaction = async (tradeId: string, userId: string): Promise<Trade> => {
+export const verifySatisfaction = async (tradeId: string, userId: string): Promise<{proposer: User, receiver: User}> => {
     await simulateDelay(250);
     const trade = trades.get(tradeId)!;
     if(trade.proposerId === userId) trade.proposerVerifiedSatisfaction = true;
@@ -309,9 +309,53 @@ export const verifySatisfaction = async (tradeId: string, userId: string): Promi
 
     if (trade.proposerVerifiedSatisfaction && trade.receiverVerifiedSatisfaction) {
         trade.status = TradeStatus.COMPLETED_AWAITING_RATING;
+
+        const proposer = users.get(trade.proposerId);
+        const receiver = users.get(trade.receiverId);
+        if (!proposer || !receiver) throw new Error("Users in trade not found");
+
+        // Calculate values
+        const getValue = (itemIds: string[]) => itemIds.reduce((sum, id) => sum + (items.get(id)?.estimatedMarketValue || 0), 0);
+        const proposerValue = getValue(trade.proposerItemIds) + trade.proposerCash;
+        const receiverValue = getValue(trade.receiverItemIds) + trade.receiverCash;
+
+        // Update reputation
+        if (proposerValue > receiverValue * 1.2) { // Proposer overvalued their offer by > 20%
+            _updateUserReputation(proposer, -10);
+            _updateUserReputation(receiver, 1);
+        } else { // Fair or favorable trade
+            _updateUserReputation(proposer, 1);
+            _updateUserReputation(receiver, 1);
+        }
+
+        // Update net trade surplus
+        proposer.netTradeSurplus += (receiverValue - proposerValue);
+        receiver.netTradeSurplus += (proposerValue - receiverValue);
+
+        // Swap items
+        const proposerItems = trade.proposerItemIds.map(id => items.get(id)!);
+        const receiverItems = trade.receiverItemIds.map(id => items.get(id)!);
+        proposerItems.forEach(item => { item.ownerId = receiver.id; });
+        receiverItems.forEach(item => { item.ownerId = proposer.id; });
+        proposer.inventory = proposer.inventory.filter(i => !trade.proposerItemIds.includes(i.id)).concat(receiverItems);
+        receiver.inventory = receiver.inventory.filter(i => !trade.receiverItemIds.includes(i.id)).concat(proposerItems);
+
+        // Swap cash
+        proposer.cash -= trade.proposerCash;
+        proposer.cash += trade.receiverCash;
+        receiver.cash -= trade.receiverCash;
+        receiver.cash += trade.proposerCash;
+        
+        const ratingDeadline = new Date();
+        ratingDeadline.setDate(ratingDeadline.getDate() + 7);
+        trade.ratingDeadline = ratingDeadline.toISOString();
     }
     trade.updatedAt = new Date().toISOString();
-    return deepClone(trade);
+    
+    const proposer = users.get(trade.proposerId);
+    const receiver = users.get(trade.receiverId);
+
+    return {proposer: deepClone(proposer!), receiver: deepClone(receiver!)};
 };
 
 export const openDispute = async (tradeId: string, initiatorId: string, disputeType: DisputeType, statement: string): Promise<DisputeTicket> => {
