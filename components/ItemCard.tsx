@@ -8,9 +8,11 @@ interface ItemCardProps {
     onSelect?: () => void;
     isSelected?: boolean;
     isCompact?: boolean; // For smaller displays like in the balancer
+    onEdit?: () => void;
+    onDelete?: () => void;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompact }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompact, onEdit, onDelete }) => {
     const cardClasses = `
         border-2 rounded-lg p-2 flex flex-col items-center text-center cursor-pointer transition-all duration-200
         ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-lg'}
@@ -36,6 +38,10 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
             </div>
             <h4 className="font-bold text-sm text-gray-800 truncate w-full">{item.name}</h4>
             <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue)}</p>
+            <div className="flex justify-around w-full mt-2">
+                <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">Edit</button>
+                <button onClick={onDelete} className="text-xs text-red-500 hover:underline">Delete</button>
+            </div>
         </div>
     );
 };
