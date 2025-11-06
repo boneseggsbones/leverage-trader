@@ -1,12 +1,32 @@
 import express from 'express';
 import cors from 'cors';
 import db from './database';
+import multer from 'multer';
+import fs from 'fs';
 
 const app = express();
 const port = 4000;
 
+// Create uploads directory if it doesn't exist
+const dir = './uploads';
+if (!fs.existsSync(dir)){
+    fs.mkdirSync(dir);
+}
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, './uploads')
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname)
+    }
+});
+
+const upload = multer({ storage: storage });
+
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // Example route
 app.get('/api/hello', (req, res) => {
@@ -58,12 +78,14 @@ app.get('/api/items', (req, res) => {
 });
 
 // Create a new item
-app.post('/api/items', (req, res) => {
+app.post('/api/items', upload.single('image'), (req, res) => {
   const { name, description, owner_id } = req.body;
+  const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
   if (!name || !description || !owner_id) {
     return res.status(400).json({ error: 'name, description, and owner_id are required' });
   }
-  db.run('INSERT INTO Item (name, description, owner_id) VALUES (?, ?, ?)', [name, description, owner_id], function(err) {
+  db.run('INSERT INTO Item (name, description, owner_id, imageUrl) VALUES (?, ?, ?, ?)', [name, description, owner_id, imageUrl], function(err) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -73,12 +95,26 @@ app.post('/api/items', (req, res) => {
 });
 
 // Update an item
-app.put('/api/items/:id', (req, res) => {
+app.put('/api/items/:id', upload.single('image'), (req, res) => {
   const { name, description } = req.body;
+  const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
   if (!name || !description) {
     return res.status(400).json({ error: 'name and description are required' });
   }
-  db.run('UPDATE Item SET name = ?, description = ? WHERE id = ?', [name, description, req.params.id], function(err) {
+
+  let query = 'UPDATE Item SET name = ?, description = ?';
+  const params = [name, description];
+
+  if (imageUrl) {
+    query += ', imageUrl = ?';
+    params.push(imageUrl);
+  }
+
+  query += ' WHERE id = ?';
+  params.push(req.params.id);
+
+  db.run(query, params, function(err) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;

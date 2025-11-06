@@ -11,7 +11,9 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
   console.log('Connected to the SQLite database.');
 
   db.serialize(() => {
-    console.log('Starting database initialization...');
+    // Drop tables if they exist
+    db.run(`DROP TABLE IF EXISTS User`);
+    db.run(`DROP TABLE IF EXISTS Item`);
 
     // Create User table
     db.run(`CREATE TABLE IF NOT EXISTS User (
@@ -19,8 +21,9 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
       name TEXT,
       email TEXT UNIQUE,
       password TEXT,
-      rating REAL
-    )`, (err) => { if(err) console.error('Create User table error:', err.message); else console.log('User table created.'); });
+      rating REAL,
+      avatarUrl TEXT
+    )`);
 
     // Create Item table
     db.run(`CREATE TABLE IF NOT EXISTS Item (
@@ -28,14 +31,15 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
       name TEXT,
       description TEXT,
       owner_id INTEGER,
+      imageUrl TEXT,
       FOREIGN KEY (owner_id) REFERENCES User(id)
-    )`, (err) => { if(err) console.error('Create Item table error:', err.message); else console.log('Item table created.'); });
+    )`);
 
     // Create TradeStatus table
     db.run(`CREATE TABLE IF NOT EXISTS TradeStatus (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE
-    )`, (err) => { if(err) console.error('Create TradeStatus table error:', err.message); else console.log('TradeStatus table created.'); });
+    )`);
 
     // Create Trade table
     db.run(`CREATE TABLE IF NOT EXISTS Trade (
@@ -50,19 +54,19 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
       FOREIGN KEY (user1_id) REFERENCES User(id),
       FOREIGN KEY (user2_id) REFERENCES User(id),
       FOREIGN KEY (status_id) REFERENCES TradeStatus(id)
-    )`, (err) => { if(err) console.error('Create Trade table error:', err.message); else console.log('Trade table created.'); });
+    )`);
 
     // Create DisputeStatus table
     db.run(`CREATE TABLE IF NOT EXISTS DisputeStatus (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE
-    )`, (err) => { if(err) console.error('Create DisputeStatus table error:', err.message); else console.log('DisputeStatus table created.'); });
+    )`);
 
     // Create DisputeType table
     db.run(`CREATE TABLE IF NOT EXISTS DisputeType (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE
-    )`, (err) => { if(err) console.error('Create DisputeType table error:', err.message); else console.log('DisputeType table created.'); });
+    )`);
 
     // Create DisputeTicket table
     db.run(`CREATE TABLE IF NOT EXISTS DisputeTicket (
@@ -74,7 +78,7 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
       FOREIGN KEY (trade_id) REFERENCES Trade(id),
       FOREIGN KEY (dispute_type_id) REFERENCES DisputeType(id),
       FOREIGN KEY (status_id) REFERENCES DisputeStatus(id)
-    )`, (err) => { if(err) console.error('Create DisputeTicket table error:', err.message); else console.log('DisputeTicket table created.'); });
+    )`);
 
     // Create TradeRating table
     db.run(`CREATE TABLE IF NOT EXISTS TradeRating (
@@ -83,33 +87,31 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
       rating REAL,
       comment TEXT,
       FOREIGN KEY (trade_id) REFERENCES Trade(id)
-    )`, (err) => { if(err) console.error('Create TradeRating table error:', err.message); else console.log('TradeRating table created.'); });
+    )`);
 
     // Create ApiMetadata table
     db.run(`CREATE TABLE IF NOT EXISTS ApiMetadata (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       version TEXT
-    )`, (err) => { if(err) console.error('Create ApiMetadata table error:', err.message); else console.log('ApiMetadata table created.'); });
+    )`);
 
     // Insert some seed data
-    const insertUsers = `INSERT OR IGNORE INTO User (name, email, password, rating) VALUES (?,?,?,?),(?,?,?,?)`;
-    db.run(insertUsers, ["Alice", "alice@example.com", "password123", 4.5, "Bob", "bob@example.com", "password456", 4.8], (err) => { if(err) console.error('Insert Users error:', err.message); else console.log('Users inserted.'); });
+    const insertUsers = `INSERT OR IGNORE INTO User (name, email, password, rating, avatarUrl) VALUES (?,?,?,?,?),(?,?,?,?,?)`;
+    db.run(insertUsers, ["Alice", "alice@example.com", "password123", 4.5, null, "Bob", "bob@example.com", "password456", 4.8, null]);
 
-    const insertItems = `INSERT OR IGNORE INTO Item (name, description, owner_id) VALUES (?,?,?),(?,?,?),(?,?,?),(?,?,?)`;
+    const insertItems = `INSERT OR IGNORE INTO Item (name, description, owner_id, imageUrl) VALUES (?,?,?,?),(?,?,?,?),(?,?,?,?),(?,?,?,?)`;
     db.run(insertItems, [
-      "Laptop", "A powerful laptop", 1,
-      "Mouse", "A wireless mouse", 1,
-      "Keyboard", "A mechanical keyboard", 2,
-      "Monitor", "A 27-inch monitor", 2
-    ], (err) => { if(err) console.error('Insert Items error:', err.message); else console.log('Items inserted.'); });
+      "Laptop", "A powerful laptop", 1, null,
+      "Mouse", "A wireless mouse", 1, null,
+      "Keyboard", "A mechanical keyboard", 2, null,
+      "Monitor", "A 27-inch monitor", 2, null
+    ]);
 
     const insertTradeStatus = `INSERT OR IGNORE INTO TradeStatus (name) VALUES (?),(?),(?)`;
-    db.run(insertTradeStatus, ["pending", "accepted", "rejected"], (err) => { if(err) console.error('Insert TradeStatus error:', err.message); else console.log('TradeStatus inserted.'); });
+    db.run(insertTradeStatus, ["pending", "accepted", "rejected"]);
 
     const insertTrades = `INSERT OR IGNORE INTO Trade (item1_id, item2_id, user1_id, user2_id, status_id) VALUES (?,?,?,?,?)`;
-    db.run(insertTrades, [1, 3, 1, 2, 1], (err) => { if(err) console.error('Insert Trades error:', err.message); else console.log('Trades inserted.'); });
-
-    console.log('Database initialization finished.');
+    db.run(insertTrades, [1, 3, 1, 2, 1]);
   });
 });
 

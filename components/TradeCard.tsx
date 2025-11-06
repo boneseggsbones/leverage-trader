@@ -22,15 +22,19 @@ const getStatusBadgeClass = (status: TradeStatus) => {
     }
 }
 
-const CompactItem: React.FC<{ item: Item }> = ({ item }) => (
-    <div className="flex items-center gap-2">
-        <img src={item.imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover border" />
-        <div>
-            <p className="text-xs font-semibold text-gray-700 leading-tight">{item.name}</p>
-            <p className="text-xs text-gray-500">{formatCurrency(item.estimatedMarketValue)}</p>
+const CompactItem: React.FC<{ item: Item }> = ({ item }) => {
+    const imageUrl = item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
+
+    return (
+        <div className="flex items-center gap-2">
+            <img src={imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover border" />
+            <div>
+                <p className="text-xs font-semibold text-gray-700 leading-tight">{item.name}</p>
+                <p className="text-xs text-gray-500">{formatCurrency(item.estimatedMarketValue)}</p>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const CompactCash: React.FC<{ amount: number }> = ({ amount }) => (
      <div className="flex items-center gap-2">

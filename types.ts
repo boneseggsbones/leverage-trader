@@ -23,7 +23,8 @@ export interface Item {
     category: ItemCategory;
     condition: ItemCondition;
     estimatedMarketValue: number; // in cents
-    imageUrl: string;
+    imageUrl?: string;
+    image?: File;
     valuationSource: ValuationSource;
     apiMetadata: ApiMetadata;
 }

@@ -29,7 +29,12 @@ const TradeBalancer: React.FC<TradeBalancerProps> = ({
     const otherUserValue = calculateTotalValue(otherUserItems, 0); // Assuming other user doesn't offer cash in this UI
     const valueDifference = currentUserValue - otherUserValue;
 
-    const renderSide = (user: User, items: Item[], cashInDollars: number, valueInCents: number, isCurrentUser: boolean) => (
+    const renderSide = (user: User, items: Item[], cashInDollars: number, valueInCents: number, isCurrentUser: boolean) => {
+        const getItemImageUrl = (item: Item) => {
+            return item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
+        }
+
+        return (
         <div className={`flex-1 p-4 rounded-lg ${isCurrentUser ? 'bg-blue-50' : 'bg-gray-50'}`}>
             <h3 className="font-bold text-lg text-gray-800 mb-4">{isCurrentUser ? "Your Offer" : `${user.name}'s Offer`}</h3>
             <div className="space-y-3 mb-4 min-h-[100px]">
@@ -38,7 +43,7 @@ const TradeBalancer: React.FC<TradeBalancerProps> = ({
                 )}
                 {items.map(item => (
                     <div key={item.id} className="flex items-center gap-3 bg-white p-2 rounded-md shadow-sm border border-gray-200">
-                        <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
+                        <img src={getItemImageUrl(item)} alt={item.name} className="w-10 h-10 rounded object-cover" />
                         <div>
                             <p className="font-semibold text-sm text-gray-800">{item.name}</p>
                             <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue)}</p>
@@ -60,7 +65,7 @@ const TradeBalancer: React.FC<TradeBalancerProps> = ({
                 <p className="text-2xl font-bold text-gray-800">{formatCurrency(valueInCents)}</p>
             </div>
         </div>
-    );
+    )};
 
     return (
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">

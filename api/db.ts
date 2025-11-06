@@ -34,7 +34,7 @@ db.serialize(() => {
             category TEXT NOT NULL,
             condition TEXT NOT NULL,
             estimatedMarketValue INTEGER NOT NULL,
-            imageUrl TEXT NOT NULL,
+            imageUrl TEXT,
             valuationSource TEXT NOT NULL,
             apiName TEXT,
             apiItemId TEXT,

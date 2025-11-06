@@ -14,6 +14,7 @@ interface DiscoveryItemCardProps {
 
 const DiscoveryItemCard: React.FC<DiscoveryItemCardProps> = ({ item, owner, onClick, isWishlisted, onToggleWishlist }) => {
     const navigate = useNavigate();
+    const imageUrl = item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
 
     const handleOwnerClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent the main card click
@@ -31,7 +32,7 @@ const DiscoveryItemCard: React.FC<DiscoveryItemCardProps> = ({ item, owner, onCl
             className="w-full text-left bg-white rounded-lg overflow-hidden border border-gray-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         >
             <div className="h-40 bg-gray-100 relative">
-                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                <img src={imageUrl} alt={item.name} className="w-full h-full object-cover" />
                 <button 
                     onClick={handleWishlistClick}
                     className="absolute top-2 right-2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"

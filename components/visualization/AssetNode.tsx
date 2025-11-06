@@ -4,6 +4,7 @@ import { Handle, Position } from 'reactflow';
 import { formatCurrency } from '../../utils/currency';
 
 const AssetNode = ({ data }: { data: any }) => {
+    const imageUrl = data.imageUrl && data.imageUrl.startsWith('/') ? `http://localhost:4000${data.imageUrl}` : data.imageUrl;
     const isCurrentClass = data.isCurrent ? 'ring-2 ring-blue-500' : 'opacity-60';
     const isRootClass = data.isRoot ? 'border-dashed' : '';
 
@@ -12,7 +13,7 @@ const AssetNode = ({ data }: { data: any }) => {
             <Handle type="target" position={Position.Left} />
             <div className="flex items-center">
                 <div className="w-12 h-12 mr-2">
-                    <img src={data.imageUrl} alt={data.label} className="w-full h-full object-cover rounded-md" />
+                    <img src={imageUrl} alt={data.label} className="w-full h-full object-cover rounded-md" />
                 </div>
                 <div>
                     <div className="font-bold">{data.label}</div>

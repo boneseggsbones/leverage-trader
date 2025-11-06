@@ -33,14 +33,19 @@ const InventoryPage: React.FC = () => {
         fetchItems();
     }, [currentUser]);
 
-    const handleAddItem = (item: { name: string; description: string }) => {
+    const handleAddItem = (item: { name: string; description: string; image: File | null }) => {
         if (currentUser) {
+            const formData = new FormData();
+            formData.append('name', item.name);
+            formData.append('description', item.description);
+            if (item.image) {
+                formData.append('image', item.image);
+            }
+            formData.append('owner_id', currentUser.id);
+
             fetch('http://localhost:4000/api/items', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ ...item, owner_id: currentUser.id }),
+                body: formData,
             })
                 .then(() => {
                     setShowAddItemModal(false);
@@ -50,15 +55,19 @@ const InventoryPage: React.FC = () => {
         }
     };
 
-    const handleEditItem = (item: { name: string; description: string }) => {
+    const handleEditItem = (item: { name: string; description: string; image: File | null }) => {
         if (selectedItem) {
+            const formData = new FormData();
+            formData.append('name', item.name);
+            formData.append('description', item.description);
+            if (item.image) {
+                formData.append('image', item.image);
+            }
+
             fetch(`http://localhost:4000/api/items/${selectedItem.id}`,
             {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(item),
+                body: formData,
             })
                 .then(() => {
                     setShowEditItemModal(false);

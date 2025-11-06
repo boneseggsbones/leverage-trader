@@ -4,24 +4,30 @@ import { Item } from '../types';
 interface EditItemModalProps {
     show: boolean;
     onClose: () => void;
-    onEditItem: (item: { name: string; description: string }) => void;
+    onEditItem: (item: { name: string; description: string; image: File | null }) => void;
     item: Item | null;
 }
 
 const EditItemModal: React.FC<EditItemModalProps> = ({ show, onClose, onEditItem, item }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
+    const [image, setImage] = useState<File | null>(null);
 
     useEffect(() => {
         if (item) {
             setName(item.name);
-            setDescription(item.description);
         }
     }, [item]);
 
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setImage(e.target.files[0]);
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onEditItem({ name, description });
+        onEditItem({ name, description, image });
     };
 
     if (!show) {
@@ -47,6 +53,10 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ show, onClose, onEditItem
                                 <div>
                                     <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
                                     <textarea name="description" id="description" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"></textarea>
+                                </div>
+                                <div className="mt-4">
+                                    <label htmlFor="image" className="block text-sm font-medium text-gray-700">Image</label>
+                                    <input type="file" name="image" id="image" onChange={handleImageChange} className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" />
                                 </div>
                             </div>
                         </div>
