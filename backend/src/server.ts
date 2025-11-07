@@ -1,8 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import db from './database';
+import { db } from './database';
 import multer from 'multer';
 import fs from 'fs';
+import sqlite3 from 'sqlite3';
 
 const app = express();
 const port = 4000;
@@ -37,7 +38,7 @@ app.get('/api/db-data', (req, res) => {
   const tables = ['User', 'Item', 'Trade', 'TradeStatus', 'DisputeTicket', 'DisputeStatus', 'TradeRating', 'DisputeType', 'ApiMetadata'];
   const promises = tables.map(table => {
     return new Promise((resolve, reject) => {
-      db.all(`SELECT * FROM ${table}`, [], (err, rows) => {
+      db.all(`SELECT * FROM ${table}`, [], (err: Error | null, rows: any[]) => {
         if (err) {
           reject(err);
         } else {
@@ -68,7 +69,7 @@ app.get('/api/items', (req, res) => {
   if (!userId) {
     return res.status(400).json({ error: 'userId is required' });
   }
-  db.all('SELECT * FROM Item WHERE owner_id = ?', [userId], (err, rows) => {
+  db.all('SELECT * FROM Item WHERE owner_id = ?', [userId], (err: Error | null, rows: any[]) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -85,7 +86,7 @@ app.post('/api/items', upload.single('image'), (req, res) => {
   if (!name || !description || !owner_id) {
     return res.status(400).json({ error: 'name, description, and owner_id are required' });
   }
-  db.run('INSERT INTO Item (name, description, owner_id, imageUrl) VALUES (?, ?, ?, ?)', [name, description, owner_id, imageUrl], function(err) {
+  db.run('INSERT INTO Item (name, description, owner_id, imageUrl) VALUES (?, ?, ?, ?)', [name, description, owner_id, imageUrl], function(this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -114,7 +115,7 @@ app.put('/api/items/:id', upload.single('image'), (req, res) => {
   query += ' WHERE id = ?';
   params.push(req.params.id);
 
-  db.run(query, params, function(err) {
+  db.run(query, params, function(this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -125,7 +126,7 @@ app.put('/api/items/:id', upload.single('image'), (req, res) => {
 
 // Delete an item
 app.delete('/api/items/:id', (req, res) => {
-  db.run('DELETE FROM Item WHERE id = ?', [req.params.id], function(err) {
+  db.run('DELETE FROM Item WHERE id = ?', [req.params.id], function(this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -134,6 +135,30 @@ app.delete('/api/items/:id', (req, res) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+// Get a single user by id
+app.get('/api/users/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+  db.get('SELECT * FROM User WHERE id = ?', [id], (err: Error | null, row: any) => {
+    if (err) {
+      console.log(err);
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (!row) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    db.all('SELECT * FROM Item WHERE owner_id = ?', [id], (err: Error | null, items: any[]) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ ...row, inventory: items });
+    });
+  });
 });
+
+export default app;
