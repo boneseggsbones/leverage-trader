@@ -6,7 +6,7 @@ import EditItemModal from './EditItemModal.tsx';
 import { Item } from '../types';
 
 const InventoryPage: React.FC = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, updateUser } = useAuth();
     const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -50,6 +50,9 @@ const InventoryPage: React.FC = () => {
                 .then(() => {
                     setShowAddItemModal(false);
                     fetchItems();
+                    fetch(`http://localhost:4000/api/users/${currentUser.id}`)
+                        .then(res => res.json())
+                        .then(user => updateUser(user));
                 })
                 .catch(err => console.error('Error adding item:', err));
         }
@@ -73,6 +76,9 @@ const InventoryPage: React.FC = () => {
                     setShowEditItemModal(false);
                     setSelectedItem(null);
                     fetchItems();
+                    fetch(`http://localhost:4000/api/users/${currentUser.id}`)
+                        .then(res => res.json())
+                        .then(user => updateUser(user));
                 })
                 .catch(err => console.error('Error editing item:', err));
         }
