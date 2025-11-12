@@ -88,7 +88,9 @@ export const fetchUser = async (id: string | number): Promise<User> => {
 };
 
 export const fetchAllItems = async (userId?: string | number): Promise<Item[]> => {
-    const q = userId ? `?userId=${userId}` : '';
+    // Defensive: avoid sending literal 'undefined' or 'null' strings in query params
+    const hasUserId = userId !== undefined && userId !== null && String(userId).toLowerCase() !== 'undefined' && String(userId).toLowerCase() !== 'null';
+    const q = hasUserId ? `?userId=${userId}` : '';
     const response = await fetch(`${API_URL}/items${q}`);
     if (!response.ok) throw new Error('Failed to fetch items');
     const raw = await response.json();
@@ -96,6 +98,9 @@ export const fetchAllItems = async (userId?: string | number): Promise<Item[]> =
 };
 
 export const fetchTradesForUser = async (userId: string | number): Promise<Trade[]> => {
+    if (userId === undefined || userId === null || String(userId).toLowerCase() === 'undefined') {
+        throw new Error('fetchTradesForUser requires a valid userId');
+    }
     const response = await fetch(`${API_URL}/trades?userId=${userId}`);
     if (!response.ok) throw new Error('Failed to fetch trades');
     const raw = await response.json();
