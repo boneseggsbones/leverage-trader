@@ -39,3 +39,26 @@ export const fetchUser = async (id: number): Promise<User> => {
     }
     return response.json();
 };
+
+export const proposeTrade = async (
+    proposerId: number | string,
+    receiverId: number | string,
+    proposerItemIds: (number | string)[],
+    receiverItemIds: (number | string)[],
+    proposerCash: number
+): Promise<{ updatedProposer: User }> => {
+    const response = await fetch(`${API_URL}/trades`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash }),
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to propose trade: ${text}`);
+    }
+
+    return response.json();
+};

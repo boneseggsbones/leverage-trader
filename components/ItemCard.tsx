@@ -1,7 +1,7 @@
 import React from 'react';
 // Fix: Add .tsx extension to module imports
 import { Item } from '../types.ts';
-import { formatCurrency } from '../utils/currency.ts';
+import { formatCurrencyOptional } from '../utils/currency.ts';
 
 interface ItemCardProps {
     item: Item;
@@ -27,7 +27,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
                 <img src={imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
                 <div>
                     <p className="font-semibold text-sm text-gray-800">{item.name}</p>
-                    <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue)}</p>
+                    <p className="text-xs text-slate-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
                 </div>
             </div>
         )
@@ -39,7 +39,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
                 <img src={imageUrl} alt={item.name} className="w-full h-full object-cover" />
             </div>
             <h4 className="font-bold text-sm text-gray-800 truncate w-full">{item.name}</h4>
-            <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue)}</p>
+            <p className="text-xs text-slate-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
             <div className="flex justify-around w-full mt-2">
                 <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">Edit</button>
                 <button onClick={onDelete} className="text-xs text-red-500 hover:underline">Delete</button>

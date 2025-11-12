@@ -4,6 +4,7 @@ import ItemCard from './ItemCard.tsx';
 import AddItemModal from './AddItemModal.tsx';
 import EditItemModal from './EditItemModal.tsx';
 import { Item } from '../types';
+import { dollarsToCents } from '../utils/currency.ts';
 
 const InventoryPage: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -34,6 +35,7 @@ const InventoryPage: React.FC = () => {
     }, [currentUser]);
 
     const handleAddItem = (item: { name: string; description: string; image: File | null }) => {
+        // Updated to accept estimatedMarketValueDollars if provided by the modal
         if (currentUser) {
             const formData = new FormData();
             formData.append('name', item.name);
@@ -42,6 +44,11 @@ const InventoryPage: React.FC = () => {
                 formData.append('image', item.image);
             }
             formData.append('owner_id', currentUser.id);
+            // If modal supplied an estimatedMarketValue in dollars, convert to cents and send
+            if ((item as any).estimatedMarketValueDollars !== undefined) {
+                const cents = dollarsToCents((item as any).estimatedMarketValueDollars);
+                formData.append('estimatedMarketValue', String(cents));
+            }
 
             fetch('http://localhost:4000/api/items', {
                 method: 'POST',
@@ -58,13 +65,16 @@ const InventoryPage: React.FC = () => {
         }
     };
 
-    const handleEditItem = (item: { name: string; description: string; image: File | null }) => {
+    const handleEditItem = (item: { name: string; description: string; image: File | null, estimatedMarketValueDollars?: number }) => {
         if (selectedItem) {
             const formData = new FormData();
             formData.append('name', item.name);
             formData.append('description', item.description);
             if (item.image) {
                 formData.append('image', item.image);
+            }
+            if (typeof (item as any).estimatedMarketValueDollars === 'number') {
+                formData.append('estimatedMarketValue', String(dollarsToCents((item as any).estimatedMarketValueDollars)));
             }
 
             fetch(`http://localhost:4000/api/items/${selectedItem.id}`,
@@ -89,7 +99,7 @@ const InventoryPage: React.FC = () => {
         setShowEditItemModal(true);
     };
 
-    const handleDeleteItem = (itemId: number) => {
+    const handleDeleteItem = (itemId: string | number) => {
         if (window.confirm('Are you sure you want to delete this item?')) {
             fetch(`http://localhost:4000/api/items/${itemId}`, {
                 method: 'DELETE',

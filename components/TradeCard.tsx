@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trade, User, Item, TradeStatus } from '../types.ts';
-import { formatCurrency } from '../utils/currency.ts';
+import { formatCurrencyOptional, formatCurrency } from '../utils/currency.ts';
 
 interface TradeCardProps {
     trade: Trade;
@@ -30,7 +30,7 @@ const CompactItem: React.FC<{ item: Item }> = ({ item }) => {
             <img src={imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover border" />
             <div>
                 <p className="text-xs font-semibold text-gray-700 leading-tight">{item.name}</p>
-                <p className="text-xs text-gray-500">{formatCurrency(item.estimatedMarketValue)}</p>
+                <p className="text-xs text-gray-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
             </div>
         </div>
     );
@@ -67,8 +67,8 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                     <p className="text-xs text-gray-400 italic">Nothing offered</p>
                 ) : (
                     <>
-                        {items.map(item => <CompactItem key={item.id} item={item} />)}
-                        {cash > 0 && <CompactCash amount={cash} />}
+                    {items.map(item => <CompactItem key={item.id} item={item} />)}
+                    {cash > 0 && <CompactCash amount={cash} />}
                     </>
                 )}
             </div>

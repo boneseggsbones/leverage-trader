@@ -13,6 +13,11 @@ export const formatCurrency = (cents: number): string => {
   }).format(dollars);
 };
 
+export const formatCurrencyOptional = (cents?: number | null): string => {
+  if (cents === undefined || cents === null) return '—';
+  return formatCurrency(cents);
+};
+
 /**
  * Converts a dollar amount to cents, rounding to avoid floating-point errors.
  * @param dollars The value in dollars.

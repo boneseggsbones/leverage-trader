@@ -20,9 +20,10 @@ export interface Item {
     id: string;
     ownerId: string;
     name: string;
+    description?: string;
     category: ItemCategory;
     condition: ItemCondition;
-    estimatedMarketValue: number; // in cents
+    estimatedMarketValue?: number; // in cents
     imageUrl?: string;
     image?: File;
     valuationSource: ValuationSource;

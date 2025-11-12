@@ -3,13 +3,14 @@ import React, { useState } from 'react';
 interface AddItemModalProps {
     show: boolean;
     onClose: () => void;
-    onAddItem: (item: { name: string; description: string; image: File | null }) => void;
+    onAddItem: (item: { name: string; description: string; image: File | null, estimatedMarketValueDollars: number }) => void;
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ show, onClose, onAddItem }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [image, setImage] = useState<File | null>(null);
+    const [estimatedMarketValue, setEstimatedMarketValue] = useState<number>(0);
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -17,9 +18,16 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ show, onClose, onAddItem })
         }
     };
 
+    const [error, setError] = useState<string | null>(null);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onAddItem({ name, description, image });
+        setError(null);
+        if (estimatedMarketValue < 0) {
+            setError('Estimated value must be 0 or greater');
+            return;
+        }
+        onAddItem({ name, description, image, estimatedMarketValueDollars: estimatedMarketValue });
     };
 
     if (!show) {
@@ -49,6 +57,21 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ show, onClose, onAddItem })
                                 <div className="mt-4">
                                     <label htmlFor="image" className="block text-sm font-medium text-gray-700">Image</label>
                                     <input type="file" name="image" id="image" onChange={handleImageChange} className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" />
+                                </div>
+                                <div className="mt-4">
+                                    <label htmlFor="estimatedMarketValue" className="block text-sm font-medium text-gray-700">Estimated Value (USD)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        name="estimatedMarketValue"
+                                        id="estimatedMarketValue"
+                                        value={estimatedMarketValue}
+                                        onChange={(e) => setEstimatedMarketValue(parseFloat(e.target.value) || 0)}
+                                        className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                                        placeholder="0.00"
+                                    />
+                                    {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
                                 </div>
                             </div>
                         </div>
