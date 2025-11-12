@@ -4,6 +4,7 @@ import ItemCard from './ItemCard.tsx';
 import AddItemModal from './AddItemModal.tsx';
 import EditItemModal from './EditItemModal.tsx';
 import { Item } from '../types';
+import { fetchAllItems, fetchUser } from '../api/api';
 import { dollarsToCents } from '../utils/currency.ts';
 
 const InventoryPage: React.FC = () => {
@@ -17,14 +18,14 @@ const InventoryPage: React.FC = () => {
     const fetchItems = () => {
         if (currentUser) {
             setLoading(true);
-            fetch(`http://localhost:4000/api/items?userId=${currentUser.id}`)
-                .then(res => res.json())
+            fetchAllItems(currentUser.id)
                 .then(data => {
                     setItems(data);
-                    setLoading(false);
                 })
                 .catch(err => {
                     console.error('Error fetching items:', err);
+                })
+                .finally(() => {
                     setLoading(false);
                 });
         }
@@ -57,9 +58,7 @@ const InventoryPage: React.FC = () => {
                 .then(() => {
                     setShowAddItemModal(false);
                     fetchItems();
-                    fetch(`http://localhost:4000/api/users/${currentUser.id}`)
-                        .then(res => res.json())
-                        .then(user => updateUser(user));
+                    fetchUser(currentUser.id).then(user => updateUser(user)).catch(err => console.error('Failed to refresh user after add:', err));
                 })
                 .catch(err => console.error('Error adding item:', err));
         }
@@ -86,9 +85,7 @@ const InventoryPage: React.FC = () => {
                     setShowEditItemModal(false);
                     setSelectedItem(null);
                     fetchItems();
-                    fetch(`http://localhost:4000/api/users/${currentUser.id}`)
-                        .then(res => res.json())
-                        .then(user => updateUser(user));
+                    fetchUser(currentUser.id).then(user => updateUser(user)).catch(err => console.error('Failed to refresh user after edit:', err));
                 })
                 .catch(err => console.error('Error editing item:', err));
         }

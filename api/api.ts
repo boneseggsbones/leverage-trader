@@ -1,13 +1,58 @@
-import { User } from '../types';
+import { User, Item, Trade } from '../types';
 
 const API_URL = 'http://localhost:4000/api';
+
+const normalizeItem = (raw: any): Item => ({
+    ...raw,
+    id: String(raw.id),
+    ownerId: String(raw.owner_id ?? raw.ownerId ?? raw.ownerId),
+    estimatedMarketValue: raw.estimatedMarketValue ?? raw.estimatedMarketValue ?? null,
+});
+
+const normalizeUser = (raw: any): User => ({
+    id: String(raw.id),
+    name: raw.name,
+    inventory: Array.isArray(raw.inventory) ? raw.inventory.map(normalizeItem) : [],
+    balance: Number(raw.balance ?? raw.cash ?? 0),
+    valuationReputationScore: Number(raw.valuationReputationScore ?? raw.rating ?? 0),
+    netTradeSurplus: Number(raw.netTradeSurplus ?? 0),
+    city: raw.city,
+    state: raw.state,
+    interests: raw.interests || [],
+    profilePictureUrl: raw.profilePictureUrl || raw.avatarUrl || null,
+    aboutMe: raw.aboutMe || '',
+    accountCreatedAt: raw.accountCreatedAt || new Date().toISOString(),
+    wishlist: Array.isArray(raw.wishlist) ? raw.wishlist.map(String) : [],
+});
+
+const normalizeTrade = (raw: any): Trade => ({
+    ...raw,
+    id: String(raw.id),
+    proposerId: String(raw.proposerId),
+    receiverId: String(raw.receiverId),
+    proposerItemIds: ((): string[] => {
+        const v = raw.proposerItemIds;
+        if (!v) return [];
+        if (Array.isArray(v)) return v.map(String);
+        try { return JSON.parse(v).map(String); } catch (e) { return [] }
+    })(),
+    receiverItemIds: ((): string[] => {
+        const v = raw.receiverItemIds;
+        if (!v) return [];
+        if (Array.isArray(v)) return v.map(String);
+        try { return JSON.parse(v).map(String); } catch (e) { return [] }
+    })(),
+    proposerCash: Number(raw.proposerCash || 0),
+    receiverCash: Number(raw.receiverCash || 0),
+});
 
 export const fetchAllUsers = async (): Promise<User[]> => {
     const response = await fetch(`${API_URL}/users`);
     if (!response.ok) {
         throw new Error('Failed to fetch users');
     }
-    return response.json();
+    const raw = await response.json();
+    return raw.map(normalizeUser);
 };
 
 export const fetchDashboardData = async (): Promise<any> => {
@@ -18,7 +63,7 @@ export const fetchDashboardData = async (): Promise<any> => {
     return response.json();
 };
 
-export const toggleWishlistItem = async (userId: number, itemId: number): Promise<User> => {
+export const toggleWishlistItem = async (userId: string | number, itemId: string | number): Promise<User> => {
     const response = await fetch(`${API_URL}/wishlist/toggle`, {
         method: 'POST',
         headers: {
@@ -29,27 +74,32 @@ export const toggleWishlistItem = async (userId: number, itemId: number): Promis
     if (!response.ok) {
         throw new Error('Failed to toggle wishlist item');
     }
-    return response.json();
+    const raw = await response.json();
+    return normalizeUser(raw);
 };
 
-export const fetchUser = async (id: number): Promise<User> => {
+export const fetchUser = async (id: string | number): Promise<User> => {
     const response = await fetch(`${API_URL}/users/${id}`);
     if (!response.ok) {
         throw new Error('Failed to fetch user');
     }
-    return response.json();
+    const raw = await response.json();
+    return normalizeUser(raw);
 };
 
-export const fetchAllItems = async (): Promise<any[]> => {
-    const response = await fetch(`${API_URL}/items?userId=1`); // consumer may override with query
+export const fetchAllItems = async (userId?: string | number): Promise<Item[]> => {
+    const q = userId ? `?userId=${userId}` : '';
+    const response = await fetch(`${API_URL}/items${q}`);
     if (!response.ok) throw new Error('Failed to fetch items');
-    return response.json();
+    const raw = await response.json();
+    return raw.map(normalizeItem);
 };
 
-export const fetchTradesForUser = async (userId: number | string): Promise<any[]> => {
+export const fetchTradesForUser = async (userId: string | number): Promise<Trade[]> => {
     const response = await fetch(`${API_URL}/trades?userId=${userId}`);
     if (!response.ok) throw new Error('Failed to fetch trades');
-    return response.json();
+    const raw = await response.json();
+    return raw.map(normalizeTrade);
 };
 
 export const respondToTrade = async (tradeId: string, responseValue: 'accept' | 'reject'): Promise<any> => {
@@ -62,7 +112,8 @@ export const respondToTrade = async (tradeId: string, responseValue: 'accept' | 
         const text = await response.text();
         throw new Error(`Failed to respond to trade: ${text}`);
     }
-    return response.json();
+    const raw = await response.json();
+    return raw;
 };
 
 export const cancelTrade = async (tradeId: string, userId: number | string): Promise<any> => {
@@ -75,7 +126,8 @@ export const cancelTrade = async (tradeId: string, userId: number | string): Pro
         const text = await response.text();
         throw new Error(`Failed to cancel trade: ${text}`);
     }
-    return response.json();
+    const raw = await response.json();
+    return raw;
 };
 
 export const submitPayment = async (tradeId: string, userId: number | string): Promise<any> => {
@@ -114,7 +166,12 @@ export const verifySatisfaction = async (tradeId: string, userId: number | strin
         const text = await response.text();
         throw new Error(`Failed to verify satisfaction: ${text}`);
     }
-    return response.json();
+    const raw = await response.json();
+    // Expecting { proposer: {...}, receiver: {...} }
+    return {
+        proposer: normalizeUser(raw.proposer),
+        receiver: normalizeUser(raw.receiver),
+    };
 };
 
 export const openDispute = async (tradeId: string, initiatorId: number | string, disputeType: string, statement: string): Promise<any> => {
@@ -136,7 +193,7 @@ export const proposeTrade = async (
     proposerItemIds: (number | string)[],
     receiverItemIds: (number | string)[],
     proposerCash: number
-): Promise<{ updatedProposer: User }> => {
+): Promise<{ trade: Trade; updatedProposer: User }> => {
     const response = await fetch(`${API_URL}/trades`, {
         method: 'POST',
         headers: {
@@ -150,5 +207,9 @@ export const proposeTrade = async (
         throw new Error(`Failed to propose trade: ${text}`);
     }
 
-    return response.json();
+    const raw = await response.json();
+    return {
+        trade: normalizeTrade(raw.trade),
+        updatedProposer: normalizeUser(raw.updatedProposer),
+    };
 };

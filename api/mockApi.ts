@@ -50,10 +50,10 @@ const initializeDb = () => {
 
     // Create Users
     const allUsers: User[] = [
-        { id: 'user-1', name: 'Alice', inventory: user1Items, cash: 20000, valuationReputationScore: 105, netTradeSurplus: 1500, city: 'San Francisco', state: 'CA', interests: ['VIDEO_GAMES', 'TCG'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-1', aboutMe: "Collector of retro games and rare cards. Always looking for a fair trade!", accountCreatedAt: '2023-01-15T10:00:00Z', wishlist: ['item-6'] },
-        { id: 'user-2', name: 'Bob', inventory: user2Items, cash: 5000, valuationReputationScore: 98, netTradeSurplus: -500, city: 'Los Angeles', state: 'CA', interests: ['ELECTRONICS'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-2', aboutMe: "Tech enthusiast. I trade up my gadgets every year.", accountCreatedAt: '2023-05-20T12:00:00Z', wishlist: [] },
-        { id: 'user-3', name: 'Charlie', inventory: user3Items, cash: 10000, valuationReputationScore: 115, netTradeSurplus: 8000, city: 'New York', state: 'NY', interests: ['SNEAKERS', 'TCG'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-3', aboutMe: "Sneakerhead and TCG player. Let's make a deal.", accountCreatedAt: '2022-11-01T18:00:00Z', wishlist: ['item-2', 'item-4'] },
-        { id: 'user-4', name: 'Diana', inventory: user4Items, cash: 2500, valuationReputationScore: 100, netTradeSurplus: 0, city: 'San Francisco', state: 'CA', interests: ['VIDEO_GAMES', 'ELECTRONICS'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-4', aboutMe: "Just getting started here, looking for some cool retro games.", accountCreatedAt: '2023-08-01T09:00:00Z', wishlist: ['item-1'] },
+    { id: 'user-1', name: 'Alice', inventory: user1Items, balance: 20000, valuationReputationScore: 105, netTradeSurplus: 1500, city: 'San Francisco', state: 'CA', interests: ['VIDEO_GAMES', 'TCG'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-1', aboutMe: "Collector of retro games and rare cards. Always looking for a fair trade!", accountCreatedAt: '2023-01-15T10:00:00Z', wishlist: ['item-6'] },
+    { id: 'user-2', name: 'Bob', inventory: user2Items, balance: 5000, valuationReputationScore: 98, netTradeSurplus: -500, city: 'Los Angeles', state: 'CA', interests: ['ELECTRONICS'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-2', aboutMe: "Tech enthusiast. I trade up my gadgets every year.", accountCreatedAt: '2023-05-20T12:00:00Z', wishlist: [] },
+    { id: 'user-3', name: 'Charlie', inventory: user3Items, balance: 10000, valuationReputationScore: 115, netTradeSurplus: 8000, city: 'New York', state: 'NY', interests: ['SNEAKERS', 'TCG'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-3', aboutMe: "Sneakerhead and TCG player. Let's make a deal.", accountCreatedAt: '2022-11-01T18:00:00Z', wishlist: ['item-2', 'item-4'] },
+    { id: 'user-4', name: 'Diana', inventory: user4Items, balance: 2500, valuationReputationScore: 100, netTradeSurplus: 0, city: 'San Francisco', state: 'CA', interests: ['VIDEO_GAMES', 'ELECTRONICS'], profilePictureUrl: 'https://i.pravatar.cc/150?u=user-4', aboutMe: "Just getting started here, looking for some cool retro games.", accountCreatedAt: '2023-08-01T09:00:00Z', wishlist: ['item-1'] },
     ];
     allUsers.forEach(user => users.set(user.id, user));
 
@@ -101,7 +101,7 @@ export const proposeTrade = async (proposerId: string, receiverId: string, propo
     await simulateDelay(300);
     const proposer = users.get(proposerId);
     if (!proposer) throw new Error("Proposer not found");
-    if (proposer.cash < proposerCash) throw new Error("Insufficient funds");
+    if (proposer.balance < proposerCash) throw new Error("Insufficient funds");
 
     const newTrade: Trade = {
         id: `trade-${Date.now()}`,
@@ -178,11 +178,11 @@ export const respondToTrade = async (tradeId: string, response: 'accept' | 'reje
     proposer.inventory = proposer.inventory.filter(i => !trade.proposerItemIds.includes(i.id)).concat(receiverItems);
     receiver.inventory = receiver.inventory.filter(i => !trade.receiverItemIds.includes(i.id)).concat(proposerItems);
 
-    // Swap cash
-    proposer.cash -= trade.proposerCash;
-    proposer.cash += trade.receiverCash;
-    receiver.cash -= trade.receiverCash;
-    receiver.cash += trade.proposerCash;
+    // Swap balances
+    proposer.balance -= trade.proposerCash;
+    proposer.balance += trade.receiverCash;
+    receiver.balance -= trade.receiverCash;
+    receiver.balance += trade.proposerCash;
 
     // Update trade status (simplified flow for mock)
     const ratingDeadline = new Date();
@@ -341,10 +341,10 @@ export const verifySatisfaction = async (tradeId: string, userId: string): Promi
         receiver.inventory = receiver.inventory.filter(i => !trade.receiverItemIds.includes(i.id)).concat(proposerItems);
 
         // Swap cash
-        proposer.cash -= trade.proposerCash;
-        proposer.cash += trade.receiverCash;
-        receiver.cash -= trade.receiverCash;
-        receiver.cash += trade.proposerCash;
+        proposer.balance -= trade.proposerCash;
+        proposer.balance += trade.receiverCash;
+        receiver.balance -= trade.receiverCash;
+        receiver.balance += trade.proposerCash;
         
         const ratingDeadline = new Date();
         ratingDeadline.setDate(ratingDeadline.getDate() + 7);

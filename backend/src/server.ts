@@ -66,10 +66,21 @@ app.get('/api/db-data', (req, res) => {
 // Get all items for a user
 app.get('/api/items', (req, res) => {
   const { userId } = req.query;
-  if (!userId) {
-    return res.status(400).json({ error: 'userId is required' });
+  console.log('GET /api/items called with userId=', userId);
+  if (userId) {
+    db.all('SELECT * FROM Item WHERE owner_id = ?', [userId], (err: Error | null, rows: any[]) => {
+      if (err) {
+        console.error('DB error fetching items for user', userId, err);
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json(rows);
+    });
+    return;
   }
-  db.all('SELECT * FROM Item WHERE owner_id = ?', [userId], (err: Error | null, rows: any[]) => {
+
+  // No userId provided: return all items
+  db.all('SELECT * FROM Item', [], (err: Error | null, rows: any[]) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -319,12 +330,22 @@ app.post('/api/trades', (req, res) => {
 // Get trades for a user
 app.get('/api/trades', (req, res) => {
   const userId = req.query.userId;
+  console.log('GET /api/trades called with userId=', userId);
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   db.all('SELECT * FROM trades WHERE proposerId = ? OR receiverId = ?', [userId, userId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    // parse JSON arrays
-    const parsed = rows.map((r: any) => ({ ...r, proposerItemIds: JSON.parse(r.proposerItemIds || '[]'), receiverItemIds: JSON.parse(r.receiverItemIds || '[]') }));
-    res.json(parsed);
+    if (err) {
+      console.error('DB error fetching trades for user', userId, err);
+      return res.status(500).json({ error: err.message });
+    }
+    try {
+      // parse JSON arrays
+      const parsed = rows.map((r: any) => ({ ...r, proposerItemIds: JSON.parse(r.proposerItemIds || '[]'), receiverItemIds: JSON.parse(r.receiverItemIds || '[]') }));
+      console.log(`GET /api/trades returning ${parsed.length} rows for userId=${userId}`);
+      res.json(parsed);
+    } catch (e: any) {
+      console.error('Failed to parse trade rows for user', userId, e);
+      res.status(500).json({ error: 'Failed to parse trades' });
+    }
   });
 });
 

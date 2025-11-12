@@ -4,7 +4,7 @@ export interface User {
     id: string;
     name: string;
     inventory: Item[];
-    cash: number; // in cents
+    balance: number; // in cents
     valuationReputationScore: number; // Starts at 100
     netTradeSurplus: number; // in cents, cumulative
     city: string;
@@ -13,7 +13,7 @@ export interface User {
     profilePictureUrl: string;
     aboutMe: string;
     accountCreatedAt: string;
-    wishlist: number[]; // Array of Item IDs
+    wishlist: string[]; // Array of Item IDs
 }
 
 export interface Item {

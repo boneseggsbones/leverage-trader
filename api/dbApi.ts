@@ -1,18 +1,17 @@
 
 import db from './db';
 import { User, Item, Trade, TradeStatus } from '../types';
-import { resetDb as resetMockDb, fetchAllUsers as fetchAllMockUsers, fetchAllItems as fetchAllMockItems, fetchAllTrades as fetchAllMockTrades } from './mockApi';
+import { resetDb as resetMockDb, fetchAllUsers as fetchAllMockUsers, fetchAllItems as fetchAllMockItems } from './mockApi';
 
-const insertInitialData = () => {
+const insertInitialData = async () => {
     resetMockDb();
-    const mockUsers = fetchAllMockUsers();
-    const mockItems = fetchAllMockItems();
-    const mockTrades = fetchAllMockTrades();
+    const mockUsers = await fetchAllMockUsers();
+    const mockItems = await fetchAllMockItems();
 
     db.serialize(() => {
         const userStmt = db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         mockUsers.forEach(user => {
-            userStmt.run(user.id, user.name, user.cash, user.valuationReputationScore, user.netTradeSurplus, user.city, user.state, JSON.stringify(user.interests), user.profilePictureUrl, user.aboutMe, user.accountCreatedAt, JSON.stringify(user.wishlist));
+            userStmt.run(user.id, user.name, user.balance, user.valuationReputationScore, user.netTradeSurplus, user.city, user.state, JSON.stringify(user.interests), user.profilePictureUrl, user.aboutMe, user.accountCreatedAt, JSON.stringify(user.wishlist));
         });
         userStmt.finalize();
 
@@ -21,12 +20,6 @@ const insertInitialData = () => {
             itemStmt.run(item.id, item.ownerId, item.name, item.category, item.condition, item.estimatedMarketValue, item.imageUrl, item.valuationSource, item.apiMetadata.apiName, item.apiMetadata.apiItemId, item.apiMetadata.baselineApiValue, item.apiMetadata.apiConditionUsed, item.apiMetadata.confidenceScore, item.apiMetadata.lastApiSyncTimestamp?.toISOString(), JSON.stringify(item.apiMetadata.rawDataSnapshot));
         });
         itemStmt.finalize();
-
-        const tradeStmt = db.prepare("INSERT INTO trades VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        mockTrades.forEach(trade => {
-            tradeStmt.run(trade.id, trade.proposerId, trade.receiverId, JSON.stringify(trade.proposerItemIds), JSON.stringify(trade.receiverItemIds), trade.proposerCash, trade.receiverCash, trade.status, trade.createdAt, trade.updatedAt, trade.disputeTicketId, trade.proposerSubmittedTracking, trade.receiverSubmittedTracking, trade.proposerTrackingNumber, trade.receiverTrackingNumber, trade.proposerVerifiedSatisfaction, trade.receiverVerifiedSatisfaction, trade.proposerRated, trade.receiverRated, trade.ratingDeadline);
-        });
-        tradeStmt.finalize();
     });
 };
 
@@ -80,7 +73,7 @@ export const fetchAllUsers = (): Promise<User[]> => {
                         id: row.id,
                         name: row.name,
                         inventory: inventory,
-                        cash: row.cash,
+                        balance: row.balance,
                         valuationReputationScore: row.valuationReputationScore,
                         netTradeSurplus: row.netTradeSurplus,
                         city: row.city,
@@ -109,7 +102,7 @@ export const fetchUser = (id: string): Promise<User | undefined> => {
                     id: row.id,
                     name: row.name,
                     inventory: inventory,
-                    cash: row.cash,
+                        balance: row.balance,
                     valuationReputationScore: row.valuationReputationScore,
                     netTradeSurplus: row.netTradeSurplus,
                     city: row.city,

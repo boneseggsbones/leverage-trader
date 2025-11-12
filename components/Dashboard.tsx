@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext.tsx';
-import { fetchAllUsers, toggleWishlistItem, fetchDashboardData } from '../api/api';
+import { fetchAllUsers, toggleWishlistItem, fetchDashboardData, fetchUser } from '../api/api';
 import { User, Item } from '../types.ts';
 import ItemCarousel from './ItemCarousel.tsx';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
@@ -14,6 +14,12 @@ const Dashboard: React.FC = () => {
     const { addNotification } = useNotification();
 
     const [users, setUsers] = useState<User[]>([]);
+    interface DashboardData {
+        nearbyItems: Item[];
+        recommendedItems: Item[];
+        topTraderItems: Item[];
+    }
+
     const [dashboardData, setDashboardData] = useState<DashboardData>({
         nearbyItems: [],
         recommendedItems: [],
@@ -45,14 +51,13 @@ const Dashboard: React.FC = () => {
         loadDashboardData();
     }, [currentUser]);
     
-    const handleToggleWishlist = async (itemId: number) => {
+    const handleToggleWishlist = async (itemId: string) => {
         if (!currentUser) return;
         try {
             await toggleWishlistItem(currentUser.id, itemId);
-            const response = await fetch(`http://localhost:4000/api/users/${currentUser.id}`);
-            const updatedUser = await response.json();
+            const updatedUser = await fetchUser(currentUser.id);
             updateUser(updatedUser);
-             const isInWishlist = updatedUser.wishlist.includes(itemId);
+            const isInWishlist = updatedUser.wishlist.includes(itemId);
             addNotification(isInWishlist ? 'Added to wishlist!' : 'Removed from wishlist.', 'success');
         } catch (error) {
             addNotification('Failed to update wishlist.', 'error');

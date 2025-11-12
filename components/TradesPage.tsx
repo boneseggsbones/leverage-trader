@@ -73,6 +73,8 @@ const TradesPage: React.FC = () => {
                     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
             );
         } catch (err) {
+            // Log the real error for diagnostics (Playwright captures console)
+            console.error('loadTrades error:', err);
             setError('Failed to load active trades.');
         } finally {
             setIsLoading(false);

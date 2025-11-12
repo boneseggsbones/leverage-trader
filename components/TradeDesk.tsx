@@ -138,7 +138,7 @@ const TradeDesk: React.FC = () => {
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
     if (!otherUser) return <div className="p-8 text-center text-red-500">Could not load trade partner.</div>;
     
-    const currentUserCashInDollars = currentUser.cash / 100;
+    const currentUserCashInDollars = currentUser.balance / 100;
 
     return (
         <div className="p-4 sm:p-6 lg:p-8">
@@ -179,7 +179,7 @@ const TradeDesk: React.FC = () => {
                                     if (parseInt(e.target.value) > currentUserCashInDollars) {
                                         setCurrentUserCash(currentUserCashInDollars);
                                         // Fix: Correctly display available cash in dollars.
-                                        addNotification(`You only have ${formatCurrency(currentUser.cash)} available.`, 'warning');
+                                        addNotification(`You only have ${formatCurrency(currentUser.balance)} available.`, 'warning');
                                     }
                                 }}
                                 className="w-full max-w-xs p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
@@ -189,7 +189,7 @@ const TradeDesk: React.FC = () => {
                                 max={currentUserCashInDollars}
                             />
                             {/* Fix: Display user's available cash in dollars. */}
-                            <span className="text-sm text-slate-500">/ {formatCurrency(currentUser.cash)} available</span>
+                            <span className="text-sm text-slate-500">/ {formatCurrency(currentUser.balance)} available</span>
                         </div>
                     </div>
 
