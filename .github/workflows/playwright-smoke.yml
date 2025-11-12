@@ -1,0 +1,45 @@
+name: Playwright smoke
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Start backend
+        run: npm --prefix backend run dev &
+
+      - name: Start frontend
+        # start frontend in background; it will serve at http://localhost:3000 or 3001
+        run: npm run dev &
+
+      - name: Wait for services
+        # wait until both servers are available
+        run: npx wait-on http://localhost:4000 http://localhost:3000 --timeout 60000
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright smoke test
+        env:
+          CI: true
+        run: npx playwright test -c playwright.config.ts -g "propose trade as Alice and accept as Bob via UI" --reporter=github
