@@ -122,7 +122,7 @@ const init = () => {
               if (err) return resolve();
               if (row && row.count === 0) {
                 db.exec(`
-                  INSERT INTO User (name, email, password, rating, avatarUrl) VALUES ('Alice', 'alice@example.com', 'password123', 4.5, null), ('Bob', 'bob@example.com', 'password456', 4.8, null);
+                  INSERT INTO User (name, email, password, rating, avatarUrl, balance) VALUES ('Alice', 'alice@example.com', 'password123', 4.5, null, 20000), ('Bob', 'bob@example.com', 'password456', 4.8, null, 5000);
                   INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES
                     ('Laptop', 'A powerful laptop', 1, 150000, null),
                     ('Mouse', 'A wireless mouse', 1, 2000, null),
@@ -144,16 +144,40 @@ const init = () => {
 // Non-destructive migration: ensure estimatedMarketValue column exists on items
 const migrate = () => {
   return new Promise<void>((resolve, reject) => {
+    // Ensure Item has estimatedMarketValue
     db.all("PRAGMA table_info('Item')", (err, rows: any[]) => {
       if (err) return reject(err);
-      const hasColumn = rows.some(r => r.name === 'estimatedMarketValue');
-      if (hasColumn) return resolve();
-      db.run('ALTER TABLE Item ADD COLUMN estimatedMarketValue INTEGER DEFAULT 0', (err) => {
-        if (err) return reject(err);
-        db.run('UPDATE Item SET estimatedMarketValue = 0 WHERE estimatedMarketValue IS NULL', (err) => {
-          if (err) return reject(err);
-          resolve();
-        });
+      const hasEstimated = rows.some(r => r.name === 'estimatedMarketValue');
+      const tasks: Promise<void>[] = [];
+      if (!hasEstimated) {
+        tasks.push(new Promise((res, rej) => {
+          db.run('ALTER TABLE Item ADD COLUMN estimatedMarketValue INTEGER DEFAULT 0', (err) => {
+            if (err) return rej(err);
+            db.run('UPDATE Item SET estimatedMarketValue = 0 WHERE estimatedMarketValue IS NULL', (err) => {
+              if (err) return rej(err);
+              res();
+            });
+          });
+        }));
+      }
+
+      // Ensure User has balance column for cash transfers
+      db.all("PRAGMA table_info('User')", (err2, userRows: any[]) => {
+        if (err2) return reject(err2);
+        const hasBalance = userRows.some(r => r.name === 'balance');
+        if (!hasBalance) {
+          tasks.push(new Promise((res, rej) => {
+            db.run('ALTER TABLE User ADD COLUMN balance INTEGER DEFAULT 0', (err) => {
+              if (err) return rej(err);
+              db.run('UPDATE User SET balance = 0 WHERE balance IS NULL', (err) => {
+                if (err) return rej(err);
+                res();
+              });
+            });
+          }));
+        }
+
+        Promise.all(tasks).then(() => resolve()).catch(reject);
       });
     });
   });

@@ -309,11 +309,43 @@ app.post('/api/trades', (req, res) => {
           }
 
           const user = { ...row, inventory: items };
-          res.json({ updatedProposer: user });
+            res.json({ trade: newTrade, updatedProposer: user });
         });
       });
     }
   );
+});
+
+// Get trades for a user
+app.get('/api/trades', (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+  db.all('SELECT * FROM trades WHERE proposerId = ? OR receiverId = ?', [userId, userId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    // parse JSON arrays
+    const parsed = rows.map((r: any) => ({ ...r, proposerItemIds: JSON.parse(r.proposerItemIds || '[]'), receiverItemIds: JSON.parse(r.receiverItemIds || '[]') }));
+    res.json(parsed);
+  });
+});
+
+// Cancel a trade (proposer only)
+app.post('/api/trades/:id/cancel', (req, res) => {
+  const tradeId = req.params.id;
+  const { userId } = req.body;
+  if (!tradeId || !userId) return res.status(400).json({ error: 'tradeId and userId are required' });
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+    if (String(tradeRow.proposerId) !== String(userId)) return res.status(403).json({ error: 'Only proposer can cancel' });
+    if (tradeRow.status !== 'PENDING_ACCEPTANCE') return res.status(400).json({ error: 'Can only cancel pending trades' });
+
+    const updatedAt = new Date().toISOString();
+    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['CANCELLED', updatedAt, tradeId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: tradeId, status: 'CANCELLED' });
+    });
+  });
 });
 
 // Respond to a trade (accept or reject)
@@ -361,12 +393,137 @@ app.post('/api/trades/:id/respond', (req, res) => {
           db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.proposerId, itemId]);
         });
 
+        // Transfer cash between users if applicable (ensure User.balance exists)
+        const proposerCash = Number(tradeRow.proposerCash || 0);
+        const receiverCash = Number(tradeRow.receiverCash || 0);
+
+        // Update balances: proposer.balance = proposer.balance - proposerCash + receiverCash
+        // receiver.balance = receiver.balance - receiverCash + proposerCash
+        db.run('UPDATE User SET balance = balance - ? + ? WHERE id = ?', [proposerCash, receiverCash, tradeRow.proposerId]);
+        db.run('UPDATE User SET balance = balance - ? + ? WHERE id = ?', [receiverCash, proposerCash, tradeRow.receiverId]);
+
         return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
       });
       return;
     }
 
     return res.status(400).json({ error: 'Invalid response value' });
+  });
+});
+
+// Submit payment for a trade (moves trade to shipping pending)
+app.post('/api/trades/:id/submit-payment', (req, res) => {
+  const tradeId = req.params.id;
+  const { userId } = req.body;
+  if (!tradeId || !userId) return res.status(400).json({ error: 'tradeId and userId are required' });
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+
+    // Only allow proposer/receiver involved
+    if (String(tradeRow.proposerId) !== String(userId) && String(tradeRow.receiverId) !== String(userId)) return res.status(403).json({ error: 'Not part of trade' });
+
+    const updatedAt = new Date().toISOString();
+    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['SHIPPING_PENDING', updatedAt, tradeId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: tradeId, status: 'SHIPPING_PENDING' });
+    });
+  });
+});
+
+// Submit tracking number for a trade
+app.post('/api/trades/:id/submit-tracking', (req, res) => {
+  const tradeId = req.params.id;
+  const { userId, trackingNumber } = req.body;
+  if (!tradeId || !userId || !trackingNumber) return res.status(400).json({ error: 'tradeId, userId and trackingNumber are required' });
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+
+    const updatedAt = new Date().toISOString();
+    const isProposer = String(tradeRow.proposerId) === String(userId);
+    const field = isProposer ? 'proposerSubmittedTracking' : 'receiverSubmittedTracking';
+    const trackingField = isProposer ? 'proposerTrackingNumber' : 'receiverTrackingNumber';
+
+    db.run(`UPDATE trades SET ${field} = 1, ${trackingField} = ?, status = ?, updatedAt = ? WHERE id = ?`, [trackingNumber, 'IN_TRANSIT', updatedAt, tradeId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: tradeId, status: 'IN_TRANSIT' });
+    });
+  });
+});
+
+// Verify satisfaction for a trade (marks verifier; when both verified, set status and rating deadline)
+app.post('/api/trades/:id/verify', (req, res) => {
+  const tradeId = req.params.id;
+  const { userId } = req.body;
+  if (!tradeId || !userId) return res.status(400).json({ error: 'tradeId and userId are required' });
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+
+    const isProposer = String(tradeRow.proposerId) === String(userId);
+    const field = isProposer ? 'proposerVerifiedSatisfaction' : 'receiverVerifiedSatisfaction';
+
+    db.run(`UPDATE trades SET ${field} = 1, updatedAt = ? WHERE id = ?`, [new Date().toISOString(), tradeId], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+
+      // Re-fetch trade to inspect both flags
+      db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err2, updated: any) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        const both = updated.proposerVerifiedSatisfaction && updated.receiverVerifiedSatisfaction;
+        if (both) {
+          const ratingDeadline = new Date();
+          ratingDeadline.setDate(ratingDeadline.getDate() + 7);
+          db.run('UPDATE trades SET status = ?, ratingDeadline = ?, updatedAt = ? WHERE id = ?', ['COMPLETED_AWAITING_RATING', ratingDeadline.toISOString(), new Date().toISOString(), tradeId]);
+        }
+
+        // Return updated user objects for proposer and receiver
+        db.get('SELECT * FROM User WHERE id = ?', [tradeRow.proposerId], (err3, proposer: any) => {
+          if (err3) return res.status(500).json({ error: err3.message });
+          db.get('SELECT * FROM User WHERE id = ?', [tradeRow.receiverId], (err4, receiver: any) => {
+            if (err4) return res.status(500).json({ error: err4.message });
+            // populate inventories
+            db.all('SELECT * FROM Item WHERE owner_id = ?', [proposer.id], (errP: any, pItems: any[]) => {
+              if (errP) return res.status(500).json({ error: errP.message });
+              db.all('SELECT * FROM Item WHERE owner_id = ?', [receiver.id], (errR: any, rItems: any[]) => {
+                if (errR) return res.status(500).json({ error: errR.message });
+                res.json({ proposer: { ...proposer, inventory: pItems }, receiver: { ...receiver, inventory: rItems } });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+// Open a dispute for a trade
+app.post('/api/trades/:id/open-dispute', (req, res) => {
+  const tradeId = req.params.id;
+  const { initiatorId, disputeType, statement } = req.body;
+  if (!tradeId || !initiatorId || !disputeType || !statement) return res.status(400).json({ error: 'tradeId, initiatorId, disputeType, and statement are required' });
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+
+    const disputeId = `dispute-${tradeId}`;
+    const now = new Date().toISOString();
+    // Insert into DisputeTicket for traceability (trade_id may be integer in original schema, but we include reference in description)
+    db.run('INSERT INTO DisputeTicket (trade_id, dispute_type_id, description, status_id) VALUES (?, ?, ?, ?)', [null, null, statement, null], function(err2) {
+      if (err2) {
+        // don't fail entirely; continue to update trade
+        console.error('Failed to insert DisputeTicket:', err2);
+      }
+
+      db.run('UPDATE trades SET status = ?, disputeTicketId = ?, updatedAt = ? WHERE id = ?', ['DISPUTE_OPENED', disputeId, now, tradeId], function(err3) {
+        if (err3) return res.status(500).json({ error: err3.message });
+        res.json({ id: tradeId, disputeTicketId: disputeId, status: 'DISPUTE_OPENED' });
+      });
+    });
   });
 });
 

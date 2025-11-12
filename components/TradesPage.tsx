@@ -13,7 +13,7 @@ import {
     submitTracking,
     verifySatisfaction,
     openDispute
-} from '../api/mockApi.ts';
+} from '../api/api.ts';
 import { Trade, User, Item, TradeStatus, DisputeType } from '../types.ts';
 import TradeCard from './TradeCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
