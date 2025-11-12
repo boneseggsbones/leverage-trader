@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 // Fix: Add .tsx extension to module imports
-import { fetchUser, proposeTrade } from '../api/mockApi.ts';
+import { fetchUser, proposeTrade } from '../api/api';
 import { User, Item } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
 // Fix: Add .tsx extension to local component imports
@@ -39,7 +39,12 @@ const TradeDesk: React.FC = () => {
         
         const loadOtherUser = async () => {
             try {
-                const user = await fetchUser(otherUserId);
+                const userId = parseInt(otherUserId, 10);
+                if (isNaN(userId)) {
+                    setError("Invalid user ID.");
+                    return;
+                }
+                const user = await fetchUser(userId);
                 if (user) {
                     setOtherUser(user);
                 } else {

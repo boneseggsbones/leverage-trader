@@ -13,7 +13,7 @@ export interface User {
     profilePictureUrl: string;
     aboutMe: string;
     accountCreatedAt: string;
-    wishlist: string[]; // Array of Item IDs
+    wishlist: number[]; // Array of Item IDs
 }
 
 export interface Item {

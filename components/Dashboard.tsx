@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext.tsx';
-import { fetchAllUsers, toggleWishlistItem, fetchDashboardData, DashboardData } from '../api/mockApi.ts';
+import { fetchAllUsers, toggleWishlistItem, fetchDashboardData } from '../api/api';
 import { User, Item } from '../types.ts';
 import ItemCarousel from './ItemCarousel.tsx';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
@@ -23,38 +23,35 @@ const Dashboard: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!currentUser) {
-            navigate('/login');
-            return;
-        }
-
         const loadDashboardData = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                // Fetch pre-filtered data from the new endpoint and all users for display purposes
-                const [data, allUsers] = await Promise.all([
-                    fetchDashboardData(currentUser.id),
-                    fetchAllUsers()
-                ]);
-                setDashboardData(data);
-                setUsers(allUsers);
-            } catch (err) {
-                setError("Failed to load discovery data.");
-                console.error(err);
-            } finally {
-                setIsLoading(false);
+            if (currentUser) {
+                try {
+                    setIsLoading(true);
+                    const [usersData, data] = await Promise.all([
+                        fetchAllUsers(),
+                        fetchDashboardData()
+                    ]);
+                    setUsers(usersData);
+                    setDashboardData(data);
+                } catch (err) {
+                    setError("Failed to load dashboard data.");
+                    console.error(err);
+                } finally {
+                    setIsLoading(false);
+                }
             }
         };
 
         loadDashboardData();
-    }, [currentUser, navigate]);
+    }, [currentUser]);
     
-    const handleToggleWishlist = async (itemId: string) => {
+    const handleToggleWishlist = async (itemId: number) => {
         if (!currentUser) return;
         try {
-            const updatedUser = await toggleWishlistItem(currentUser.id, itemId);
-            updateUser(updatedUser); // Update user in global context
+            await toggleWishlistItem(currentUser.id, itemId);
+            const response = await fetch(`http://localhost:4000/api/users/${currentUser.id}`);
+            const updatedUser = await response.json();
+            updateUser(updatedUser);
              const isInWishlist = updatedUser.wishlist.includes(itemId);
             addNotification(isInWishlist ? 'Added to wishlist!' : 'Removed from wishlist.', 'success');
         } catch (error) {

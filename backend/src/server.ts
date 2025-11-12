@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { db } from './database';
+import { db, init, migrate } from './database';
 import multer from 'multer';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
@@ -86,8 +86,10 @@ app.post('/api/items', upload.single('image'), (req, res) => {
   if (!name || !description || !owner_id) {
     return res.status(400).json({ error: 'name, description, and owner_id are required' });
   }
-  db.run('INSERT INTO Item (name, description, owner_id, imageUrl) VALUES (?, ?, ?, ?)', [name, description, owner_id, imageUrl], function(this: sqlite3.RunResult, err: Error | null) {
+  const estimatedMarketValue = req.body.estimatedMarketValue ? parseInt(req.body.estimatedMarketValue, 10) : 0;
+  db.run('INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES (?, ?, ?, ?, ?)', [name, description, owner_id, estimatedMarketValue, imageUrl], function(this: sqlite3.RunResult, err: Error | null) {
     if (err) {
+      console.error('Error inserting item:', err);
       res.status(500).json({ error: err.message });
       return;
     }
@@ -99,13 +101,19 @@ app.post('/api/items', upload.single('image'), (req, res) => {
 app.put('/api/items/:id', upload.single('image'), (req, res) => {
   const { name, description } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
-
   if (!name || !description) {
     return res.status(400).json({ error: 'name and description are required' });
   }
 
+  const estimatedMarketValue = req.body.estimatedMarketValue ? parseInt(req.body.estimatedMarketValue, 10) : undefined;
+
   let query = 'UPDATE Item SET name = ?, description = ?';
-  const params = [name, description];
+  const params: any[] = [name, description];
+
+  if (typeof estimatedMarketValue === 'number') {
+    query += ', estimatedMarketValue = ?';
+    params.push(estimatedMarketValue);
+  }
 
   if (imageUrl) {
     query += ', imageUrl = ?';
@@ -135,6 +143,64 @@ app.delete('/api/items/:id', (req, res) => {
   });
 });
 
+// Get all users
+app.get('/api/users', (req, res) => {
+  db.all('SELECT * FROM User', [], (err: Error | null, rows: any[]) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/wishlist/toggle', (req, res) => {
+  const { userId, itemId } = req.body;
+  if (!userId || !itemId) {
+    return res.status(400).json({ error: 'userId and itemId are required' });
+  }
+
+  db.get('SELECT * FROM Wishlist WHERE userId = ? AND itemId = ?', [userId, itemId], (err: Error | null, row: any) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (row) {
+      // Item is in wishlist, so remove it
+      db.run('DELETE FROM Wishlist WHERE userId = ? AND itemId = ?', [userId, itemId], (err: Error | null) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Item removed from wishlist' });
+      });
+    } else {
+      // Item is not in wishlist, so add it
+      db.run('INSERT INTO Wishlist (userId, itemId) VALUES (?, ?)', [userId, itemId], (err: Error | null) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Item added to wishlist' });
+      });
+    }
+  });
+});
+
+app.get('/api/dashboard', (req, res) => {
+  // For now, return a simplified set of data.
+  // A full implementation would require more complex queries.
+  db.all('SELECT * FROM Item LIMIT 10', [], (err: Error | null, rows: any[]) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json({
+      nearbyItems: rows,
+      recommendedItems: rows,
+      topTraderItems: rows,
+    });
+  });
+});
+
 // Get a single user by id
 app.get('/api/users/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -160,5 +226,163 @@ app.get('/api/users/:id', (req, res) => {
     });
   });
 });
+
+// Propose a new trade
+app.post('/api/trades', (req, res) => {
+  const { proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash } = req.body;
+
+  if (!proposerId || !receiverId) {
+    return res.status(400).json({ error: 'proposerId and receiverId are required' });
+  }
+
+  // Build a full trade record and insert into the new `trades` table.
+  const now = new Date().toISOString();
+  const tradeId = `trade-${Date.now()}`;
+  const newTrade = {
+    id: tradeId,
+    proposerId,
+    receiverId,
+    proposerItemIds: Array.isArray(proposerItemIds) ? proposerItemIds : [],
+    receiverItemIds: Array.isArray(receiverItemIds) ? receiverItemIds : [],
+    proposerCash: typeof proposerCash === 'number' ? proposerCash : 0,
+    receiverCash: 0,
+    status: 'PENDING_ACCEPTANCE',
+    createdAt: now,
+    updatedAt: now,
+    disputeTicketId: null,
+    proposerSubmittedTracking: 0,
+    receiverSubmittedTracking: 0,
+    proposerTrackingNumber: null,
+    receiverTrackingNumber: null,
+    proposerVerifiedSatisfaction: 0,
+    receiverVerifiedSatisfaction: 0,
+    proposerRated: 0,
+    receiverRated: 0,
+    ratingDeadline: null,
+  };
+
+  db.run(
+    'INSERT INTO trades (id, proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, status, createdAt, updatedAt, disputeTicketId, proposerSubmittedTracking, receiverSubmittedTracking, proposerTrackingNumber, receiverTrackingNumber, proposerVerifiedSatisfaction, receiverVerifiedSatisfaction, proposerRated, receiverRated, ratingDeadline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      newTrade.id,
+      newTrade.proposerId,
+      newTrade.receiverId,
+      JSON.stringify(newTrade.proposerItemIds),
+      JSON.stringify(newTrade.receiverItemIds),
+      newTrade.proposerCash,
+      newTrade.receiverCash,
+      newTrade.status,
+      newTrade.createdAt,
+      newTrade.updatedAt,
+      newTrade.disputeTicketId,
+      newTrade.proposerSubmittedTracking,
+      newTrade.receiverSubmittedTracking,
+      newTrade.proposerTrackingNumber,
+      newTrade.receiverTrackingNumber,
+      newTrade.proposerVerifiedSatisfaction,
+      newTrade.receiverVerifiedSatisfaction,
+      newTrade.proposerRated,
+      newTrade.receiverRated,
+      newTrade.ratingDeadline,
+    ],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      // Return updated proposer user object using existing GET logic
+      db.get('SELECT * FROM User WHERE id = ?', [proposerId], (err, row) => {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        if (!row) {
+          res.status(404).json({ error: 'Proposer not found' });
+          return;
+        }
+
+        db.all('SELECT * FROM Item WHERE owner_id = ?', [proposerId], (err, items) => {
+          if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+          }
+
+          const user = { ...row, inventory: items };
+          res.json({ updatedProposer: user });
+        });
+      });
+    }
+  );
+});
+
+// Respond to a trade (accept or reject)
+app.post('/api/trades/:id/respond', (req, res) => {
+  const tradeId = req.params.id;
+  const { response } = req.body; // 'accept' | 'reject'
+
+  if (!tradeId || !response) {
+    return res.status(400).json({ error: 'tradeId and response are required' });
+  }
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+
+    if (tradeRow.status !== 'PENDING_ACCEPTANCE') {
+      return res.status(400).json({ error: 'Trade not pending' });
+    }
+
+    if (response === 'reject') {
+      const updatedAt = new Date().toISOString();
+      db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['REJECTED', updatedAt, tradeId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        return res.json({ id: tradeId, status: 'REJECTED' });
+      });
+      return;
+    }
+
+    if (response === 'accept') {
+      const updatedAt = new Date().toISOString();
+
+      // Update status to completed awaiting rating and transfer item ownership
+      db.serialize(() => {
+        db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COMPLETED_AWAITING_RATING', updatedAt, tradeId]);
+
+        // Transfer items: proposerItemIds -> receiver, receiverItemIds -> proposer
+        const proposerItemIds = JSON.parse(tradeRow.proposerItemIds || '[]');
+        const receiverItemIds = JSON.parse(tradeRow.receiverItemIds || '[]');
+
+        proposerItemIds.forEach((itemId: string) => {
+          db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.receiverId, itemId]);
+        });
+
+        receiverItemIds.forEach((itemId: string) => {
+          db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.proposerId, itemId]);
+        });
+
+        return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
+      });
+      return;
+    }
+
+    return res.status(400).json({ error: 'Invalid response value' });
+  });
+});
+
+if (require.main === module) {
+  // Run non-destructive migrations, then initialize (if needed), then start server
+  migrate()
+    .then(() => init())
+    .then(() => {
+      app.listen(port, '127.0.0.1', () => {
+        console.log(`Server is running on http://localhost:${port}`);
+      });
+    })
+    .catch((err: any) => {
+      console.error('Failed to initialize/migrate database:', err);
+      process.exit(1);
+    });
+}
 
 export default app;

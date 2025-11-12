@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 // Fix: Add .tsx extension to module imports
-import { fetchAllUsers } from '../api/mockApi.ts';
+import { fetchAllUsers } from '../api/api';
 import { User } from '../types.ts';
 
 const LoginScreen: React.FC = () => {

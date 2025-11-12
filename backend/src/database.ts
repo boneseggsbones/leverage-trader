@@ -7,17 +7,7 @@ const db = new sqlite3.Database(DBSOURCE);
 const init = () => {
   return new Promise<void>((resolve, reject) => {
     db.exec(`
-      DROP TABLE IF EXISTS User;
-      DROP TABLE IF EXISTS Item;
-      DROP TABLE IF EXISTS TradeStatus;
-      DROP TABLE IF EXISTS Trade;
-      DROP TABLE IF EXISTS DisputeStatus;
-      DROP TABLE IF EXISTS DisputeType;
-      DROP TABLE IF EXISTS DisputeTicket;
-      DROP TABLE IF EXISTS TradeRating;
-      DROP TABLE IF EXISTS ApiMetadata;
-
-      CREATE TABLE User (
+      CREATE TABLE IF NOT EXISTS User (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         email TEXT UNIQUE,
@@ -26,21 +16,22 @@ const init = () => {
         avatarUrl TEXT
       );
 
-      CREATE TABLE Item (
+      CREATE TABLE IF NOT EXISTS Item (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         description TEXT,
         owner_id INTEGER,
+        estimatedMarketValue INTEGER DEFAULT 0,
         imageUrl TEXT,
         FOREIGN KEY (owner_id) REFERENCES User(id)
       );
 
-      CREATE TABLE TradeStatus (
+      CREATE TABLE IF NOT EXISTS TradeStatus (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
       );
 
-      CREATE TABLE Trade (
+      CREATE TABLE IF NOT EXISTS Trade (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         item1_id INTEGER,
         item2_id INTEGER,
@@ -54,17 +45,41 @@ const init = () => {
         FOREIGN KEY (status_id) REFERENCES TradeStatus(id)
       );
 
-      CREATE TABLE DisputeStatus (
+      /* New multi-item trades table (keeps arrays as JSON strings) */
+      CREATE TABLE IF NOT EXISTS trades (
+        id TEXT PRIMARY KEY,
+        proposerId TEXT NOT NULL,
+        receiverId TEXT NOT NULL,
+        proposerItemIds TEXT NOT NULL,
+        receiverItemIds TEXT NOT NULL,
+        proposerCash INTEGER NOT NULL,
+        receiverCash INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        disputeTicketId TEXT,
+        proposerSubmittedTracking INTEGER NOT NULL,
+        receiverSubmittedTracking INTEGER NOT NULL,
+        proposerTrackingNumber TEXT,
+        receiverTrackingNumber TEXT,
+        proposerVerifiedSatisfaction INTEGER NOT NULL,
+        receiverVerifiedSatisfaction INTEGER NOT NULL,
+        proposerRated INTEGER NOT NULL,
+        receiverRated INTEGER NOT NULL,
+        ratingDeadline TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS DisputeStatus (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
       );
 
-      CREATE TABLE DisputeType (
+      CREATE TABLE IF NOT EXISTS DisputeType (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
       );
 
-      CREATE TABLE DisputeTicket (
+      CREATE TABLE IF NOT EXISTS DisputeTicket (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         trade_id INTEGER,
         dispute_type_id INTEGER,
@@ -75,7 +90,7 @@ const init = () => {
         FOREIGN KEY (status_id) REFERENCES DisputeStatus(id)
       );
 
-      CREATE TABLE TradeRating (
+      CREATE TABLE IF NOT EXISTS TradeRating (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         trade_id INTEGER,
         rating REAL,
@@ -83,23 +98,65 @@ const init = () => {
         FOREIGN KEY (trade_id) REFERENCES Trade(id)
       );
 
-      CREATE TABLE ApiMetadata (
+      CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT
       );
 
-      INSERT INTO User (name, email, password, rating, avatarUrl) VALUES ('Alice', 'alice@example.com', 'password123', 4.5, null), ('Bob', 'bob@example.com', 'password456', 4.8, null);
-      INSERT INTO Item (name, description, owner_id, imageUrl) VALUES ('Laptop', 'A powerful laptop', 1, null), ('Mouse', 'A wireless mouse', 1, null), ('Keyboard', 'A mechanical keyboard', 2, null), ('Monitor', 'A 27-inch monitor', 2, null);
-      INSERT INTO TradeStatus (name) VALUES ('pending'), ('accepted'), ('rejected');
-      INSERT INTO Trade (item1_id, item2_id, user1_id, user2_id, status_id) VALUES (1, 3, 1, 2, 1);
+      CREATE TABLE IF NOT EXISTS Wishlist (
+        userId INTEGER,
+        itemId INTEGER,
+        PRIMARY KEY (userId, itemId),
+        FOREIGN KEY (userId) REFERENCES User(id),
+        FOREIGN KEY (itemId) REFERENCES Item(id)
+      );
     `, (err) => {
       if (err) {
         reject(err);
       } else {
-        resolve();
+        // Ensure migrations are applied before seeding so tests and runtime have the latest schema
+        migrate()
+          .then(() => {
+            // Optionally seed minimal data if tables are empty
+            db.get('SELECT COUNT(*) as count FROM User', (err, row: any) => {
+              if (err) return resolve();
+              if (row && row.count === 0) {
+                db.exec(`
+                  INSERT INTO User (name, email, password, rating, avatarUrl) VALUES ('Alice', 'alice@example.com', 'password123', 4.5, null), ('Bob', 'bob@example.com', 'password456', 4.8, null);
+                  INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES
+                    ('Laptop', 'A powerful laptop', 1, 150000, null),
+                    ('Mouse', 'A wireless mouse', 1, 2000, null),
+                    ('Keyboard', 'A mechanical keyboard', 2, 12000, null),
+                    ('Monitor', 'A 27-inch monitor', 2, 25000, null);
+                  INSERT INTO TradeStatus (name) VALUES ('pending'), ('accepted'), ('rejected');
+                `, () => resolve());
+              } else {
+                resolve();
+              }
+            });
+          })
+          .catch(reject);
       }
     });
   });
 };
 
-export { db, init };
+// Non-destructive migration: ensure estimatedMarketValue column exists on items
+const migrate = () => {
+  return new Promise<void>((resolve, reject) => {
+    db.all("PRAGMA table_info('Item')", (err, rows: any[]) => {
+      if (err) return reject(err);
+      const hasColumn = rows.some(r => r.name === 'estimatedMarketValue');
+      if (hasColumn) return resolve();
+      db.run('ALTER TABLE Item ADD COLUMN estimatedMarketValue INTEGER DEFAULT 0', (err) => {
+        if (err) return reject(err);
+        db.run('UPDATE Item SET estimatedMarketValue = 0 WHERE estimatedMarketValue IS NULL', (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    });
+  });
+};
+
+export { db, init, migrate };
