@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured } from './pricingService';
+import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
 
 const app = express();
 const port = 4000;
@@ -478,6 +479,13 @@ app.post('/api/trades/:id/respond', (req, res) => {
         db.run('UPDATE User SET balance = balance - ? + ? WHERE id = ?', [proposerCash, receiverCash, tradeRow.proposerId]);
         db.run('UPDATE User SET balance = balance - ? + ? WHERE id = ?', [receiverCash, proposerCash, tradeRow.receiverId]);
 
+        // Generate price signals for all items in the completed trade
+        generatePriceSignalsForTrade(tradeId).then(result => {
+          console.log(`Price signals generated for trade ${tradeId}:`, result);
+        }).catch(err => {
+          console.error(`Failed to generate price signals for trade ${tradeId}:`, err);
+        });
+
         return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
       });
       return;
@@ -750,6 +758,22 @@ app.get('/api/items/:id/similar-prices', (req, res) => {
       });
     });
   });
+});
+
+// Get price signals for an item (direct signals from trades involving this item)
+app.get('/api/items/:id/price-signals', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+
+  if (isNaN(itemId)) {
+    return res.status(400).json({ error: 'Invalid item ID' });
+  }
+
+  try {
+    const result = await getPriceSignalsForItem(itemId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // =====================================================
