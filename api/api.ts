@@ -223,3 +223,115 @@ export const proposeTrade = async (
         updatedProposer: normalizeUser(raw.updatedProposer),
     };
 };
+
+// =====================================================
+// VALUATION API FUNCTIONS
+// =====================================================
+
+export interface CategoryData {
+    id: number;
+    slug: string;
+    name: string;
+    parent_id: number | null;
+    default_api_provider: string | null;
+    condition_scale: string;
+}
+
+export interface ItemValuationData {
+    item: {
+        id: number;
+        name: string;
+        current_emv_cents: number | null;
+        emv_source: string | null;
+        emv_confidence: number | null;
+        condition: string | null;
+    };
+    apiValuations: Array<{
+        id: number;
+        api_provider: string;
+        value_cents: number;
+        confidence_score: number | null;
+        fetched_at: string;
+        expires_at: string | null;
+    }>;
+    userOverrides: Array<{
+        id: number;
+        override_value_cents: number;
+        reason: string | null;
+        justification: string | null;
+        status: string;
+        created_at: string;
+    }>;
+    conditionAssessment: {
+        grade: string;
+        value_modifier_percent: number;
+    } | null;
+}
+
+export interface SimilarPricesData {
+    item: {
+        id: number;
+        name: string;
+        product_id: number | null;
+        category_id: number | null;
+    };
+    signals: Array<{
+        id: number;
+        item_name: string;
+        condition: string | null;
+        implied_value_cents: number;
+        trade_completed_at: string;
+        relevance: number;
+    }>;
+    stats: {
+        count: number;
+        avgPriceCents: number;
+        minPriceCents: number;
+        maxPriceCents: number;
+    } | null;
+}
+
+export const fetchCategories = async (): Promise<CategoryData[]> => {
+    const response = await fetch(`${API_URL}/categories`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch categories');
+    }
+    return response.json();
+};
+
+export const fetchItemValuations = async (itemId: string | number): Promise<ItemValuationData> => {
+    const response = await fetch(`${API_URL}/items/${itemId}/valuations`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch item valuations');
+    }
+    return response.json();
+};
+
+export const submitValueOverride = async (
+    itemId: string | number,
+    userId: string | number,
+    overrideValueCents: number,
+    reason?: string,
+    justification?: string
+): Promise<{ id: number; status: string }> => {
+    const response = await fetch(`${API_URL}/items/${itemId}/valuations/override`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId, overrideValueCents, reason, justification }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to submit value override: ${text}`);
+    }
+    return response.json();
+};
+
+export const fetchSimilarPrices = async (itemId: string | number): Promise<SimilarPricesData> => {
+    const response = await fetch(`${API_URL}/items/${itemId}/similar-prices`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch similar prices');
+    }
+    return response.json();
+};

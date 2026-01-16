@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import ItemCard from './ItemCard.tsx';
 import AddItemModal from './AddItemModal.tsx';
 import EditItemModal from './EditItemModal.tsx';
+import ItemValuationModal from './ItemValuationModal.tsx';
 import { Item } from '../types';
 import { fetchAllItems, fetchUser } from '../api/api';
 import { dollarsToCents } from '../utils/currency.ts';
@@ -13,6 +14,7 @@ const InventoryPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
     const [showEditItemModal, setShowEditItemModal] = useState(false);
+    const [showValuationModal, setShowValuationModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
     const fetchItems = () => {
@@ -77,10 +79,10 @@ const InventoryPage: React.FC = () => {
             }
 
             fetch(`http://localhost:4000/api/items/${selectedItem.id}`,
-            {
-                method: 'PUT',
-                body: formData,
-            })
+                {
+                    method: 'PUT',
+                    body: formData,
+                })
                 .then(() => {
                     setShowEditItemModal(false);
                     setSelectedItem(null);
@@ -122,28 +124,41 @@ const InventoryPage: React.FC = () => {
                     Add Item
                 </button>
             </div>
-            <AddItemModal 
-                show={showAddItemModal} 
-                onClose={() => setShowAddItemModal(false)} 
-                onAddItem={handleAddItem} 
+            <AddItemModal
+                show={showAddItemModal}
+                onClose={() => setShowAddItemModal(false)}
+                onAddItem={handleAddItem}
             />
-            <EditItemModal 
-                show={showEditItemModal} 
+            <EditItemModal
+                show={showEditItemModal}
                 onClose={() => {
                     setShowEditItemModal(false);
                     setSelectedItem(null);
                 }}
-                onEditItem={handleEditItem} 
+                onEditItem={handleEditItem}
                 item={selectedItem}
+            />
+            <ItemValuationModal
+                show={showValuationModal}
+                onClose={() => {
+                    setShowValuationModal(false);
+                    setSelectedItem(null);
+                }}
+                item={selectedItem}
+                onValuationUpdated={fetchItems}
             />
             {items.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {items.map(item => (
-                        <ItemCard 
-                            key={item.id} 
+                        <ItemCard
+                            key={item.id}
                             item={item}
                             onEdit={() => openEditModal(item)}
                             onDelete={() => handleDeleteItem(item.id)}
+                            onViewValuation={() => {
+                                setSelectedItem(item);
+                                setShowValuationModal(true);
+                            }}
                         />
                     ))}
                 </div>

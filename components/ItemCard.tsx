@@ -2,6 +2,7 @@ import React from 'react';
 // Fix: Add .tsx extension to module imports
 import { Item } from '../types.ts';
 import { formatCurrencyOptional } from '../utils/currency.ts';
+import ValuationBadge from './ValuationBadge.tsx';
 
 interface ItemCardProps {
     item: Item;
@@ -10,10 +11,14 @@ interface ItemCardProps {
     isCompact?: boolean; // For smaller displays like in the balancer
     onEdit?: () => void;
     onDelete?: () => void;
+    onViewValuation?: () => void;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompact, onEdit, onDelete }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompact, onEdit, onDelete, onViewValuation }) => {
     const imageUrl = item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
+
+    // Get emv_source from item (may be in different formats)
+    const emvSource = (item as any).emv_source || (item as any).emvSource || item.valuationSource;
 
     const cardClasses = `
         border-2 rounded-lg p-2 flex flex-col items-center text-center cursor-pointer transition-all duration-200
@@ -23,7 +28,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
 
     if (isCompact) {
         return (
-             <div className="flex items-center gap-3 bg-white p-2 rounded-md shadow-sm border border-gray-200">
+            <div className="flex items-center gap-3 bg-white p-2 rounded-md shadow-sm border border-gray-200">
                 <img src={imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
                 <div>
                     <p className="font-semibold text-sm text-gray-800">{item.name}</p>
@@ -40,12 +45,27 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
             </div>
             <h4 className="font-bold text-sm text-gray-800 truncate w-full">{item.name}</h4>
             <p className="text-xs text-slate-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
-            <div className="flex justify-around w-full mt-2">
-                <button onClick={onEdit} className="text-xs text-blue-500 hover:underline">Edit</button>
-                <button onClick={onDelete} className="text-xs text-red-500 hover:underline">Delete</button>
+
+            {/* Valuation Badge */}
+            <div className="mt-1">
+                <ValuationBadge source={emvSource} size="sm" />
+            </div>
+
+            <div className="flex justify-around w-full mt-2 flex-wrap gap-1">
+                {onViewValuation && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onViewValuation(); }}
+                        className="text-xs text-indigo-600 hover:underline font-medium"
+                    >
+                        💰 Value
+                    </button>
+                )}
+                <button onClick={(e) => { e.stopPropagation(); onEdit?.(); }} className="text-xs text-blue-500 hover:underline">Edit</button>
+                <button onClick={(e) => { e.stopPropagation(); onDelete?.(); }} className="text-xs text-red-500 hover:underline">Delete</button>
             </div>
         </div>
     );
 };
 
 export default ItemCard;
+
