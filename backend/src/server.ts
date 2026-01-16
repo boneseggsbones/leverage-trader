@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { db, init, migrate } from './database';
 import multer from 'multer';
+import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
 
@@ -162,6 +163,45 @@ app.get('/api/users', (req, res) => {
       return;
     }
     res.json(rows);
+  });
+});
+
+// Create a new user (simple signup — demo only)
+app.post('/api/users', (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password are required' });
+
+  // Hash the password before storing
+  const hashed = bcrypt.hashSync(String(password), 10);
+
+  db.run('INSERT INTO User (name, email, password, rating, avatarUrl, balance) VALUES (?, ?, ?, ?, ?, ?)', [name, email, hashed, 0, null, 0], function(err) {
+    if (err) {
+      if ((err as any).code === 'SQLITE_CONSTRAINT') return res.status(409).json({ error: 'Email already registered' });
+      return res.status(500).json({ error: err.message });
+    }
+    const id = this.lastID;
+    db.get('SELECT * FROM User WHERE id = ?', [id], (err2, row) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({ ...(row as any), inventory: [] });
+    });
+  });
+});
+
+// Simple login endpoint (demo only). Returns user with inventory on success.
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+
+  db.get('SELECT * FROM User WHERE email = ?', [email], (err, row: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(401).json({ error: 'Invalid credentials' });
+    // Compare hashed password
+    if (!bcrypt.compareSync(String(password), String(row.password))) return res.status(401).json({ error: 'Invalid credentials' });
+
+    db.all('SELECT * FROM Item WHERE owner_id = ?', [row.id], (err2: Error | null, items: any[]) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({ ...(row as any), inventory: items });
+    });
   });
 });
 

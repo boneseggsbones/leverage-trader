@@ -1,4 +1,5 @@
 import sqlite3 from 'sqlite3';
+import bcrypt from 'bcryptjs';
 
 const DBSOURCE = 'db.sqlite';
 
@@ -121,8 +122,10 @@ const init = () => {
             db.get('SELECT COUNT(*) as count FROM User', (err, row: any) => {
               if (err) return resolve();
               if (row && row.count === 0) {
+                const alicePass = bcrypt.hashSync('password123', 10);
+                const bobPass = bcrypt.hashSync('password456', 10);
                 db.exec(`
-                  INSERT INTO User (name, email, password, rating, avatarUrl, balance) VALUES ('Alice', 'alice@example.com', 'password123', 4.5, null, 20000), ('Bob', 'bob@example.com', 'password456', 4.8, null, 5000);
+                  INSERT INTO User (name, email, password, rating, avatarUrl, balance) VALUES ('Alice', 'alice@example.com', '${alicePass}', 4.5, null, 20000), ('Bob', 'bob@example.com', '${bobPass}', 4.8, null, 5000);
                   INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES
                     ('Laptop', 'A powerful laptop', 1, 150000, null),
                     ('Mouse', 'A wireless mouse', 1, 2000, null),
