@@ -413,3 +413,134 @@ export const getPricingStatus = async (): Promise<PricingStatus> => {
     }
     return response.json();
 };
+
+// =====================================================
+// TRUST & SAFETY: RATINGS API FUNCTIONS
+// =====================================================
+
+export interface RatingSubmission {
+    overallScore: number;
+    itemAccuracyScore?: number;
+    communicationScore?: number;
+    shippingSpeedScore?: number;
+    publicComment?: string | null;
+    privateFeedback?: string | null;
+}
+
+export interface RatingResult {
+    ratingId: number;
+    tradeId: string;
+    bothRated: boolean;
+    tradeStatus: string;
+}
+
+export interface UserRatingsData {
+    ratings: Array<{
+        id: number;
+        trade_id: string;
+        rater_id: number;
+        rater_name: string;
+        overall_score: number;
+        item_accuracy_score: number;
+        communication_score: number;
+        shipping_speed_score: number;
+        public_comment: string | null;
+        created_at: string;
+    }>;
+    stats: {
+        totalRatings: number;
+        avgOverall: number | null;
+        avgItemAccuracy: number | null;
+        avgCommunication: number | null;
+        avgShippingSpeed: number | null;
+    } | null;
+}
+
+export const submitRating = async (
+    tradeId: string,
+    raterId: string | number,
+    ratingData: RatingSubmission
+): Promise<RatingResult> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raterId, ...ratingData }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to submit rating: ${text}`);
+    }
+    return response.json();
+};
+
+export const fetchUserRatings = async (userId: string | number): Promise<UserRatingsData> => {
+    const response = await fetch(`${API_URL}/users/${userId}/ratings`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch user ratings');
+    }
+    return response.json();
+};
+
+// =====================================================
+// TRUST & SAFETY: DISPUTE API FUNCTIONS
+// =====================================================
+
+export interface DisputeData {
+    id: string;
+    trade_id: string;
+    initiator_id: number;
+    respondent_id: number;
+    initiator_name: string;
+    respondent_name: string;
+    dispute_type: string;
+    status: string;
+    initiator_statement: string | null;
+    respondent_statement: string | null;
+    resolution: string | null;
+    resolution_notes: string | null;
+    created_at: string;
+    updated_at: string;
+    resolved_at: string | null;
+}
+
+export const fetchDispute = async (disputeId: string): Promise<DisputeData> => {
+    const response = await fetch(`${API_URL}/disputes/${disputeId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch dispute');
+    }
+    return response.json();
+};
+
+export const respondToDispute = async (
+    disputeId: string,
+    respondentId: string | number,
+    statement: string
+): Promise<{ id: string; status: string }> => {
+    const response = await fetch(`${API_URL}/disputes/${disputeId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ respondentId, statement }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to respond to dispute: ${text}`);
+    }
+    return response.json();
+};
+
+export const resolveDispute = async (
+    disputeId: string,
+    resolution: string,
+    resolverNotes?: string
+): Promise<{ id: string; status: string; resolution: string }> => {
+    const response = await fetch(`${API_URL}/disputes/${disputeId}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution, resolverNotes }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to resolve dispute: ${text}`);
+    }
+    return response.json();
+};

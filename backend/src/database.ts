@@ -99,6 +99,48 @@ const init = () => {
         FOREIGN KEY (trade_id) REFERENCES Trade(id)
       );
 
+      -- Full trade ratings table for Trust & Safety
+      CREATE TABLE IF NOT EXISTS trade_ratings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        rater_id INTEGER NOT NULL,
+        ratee_id INTEGER NOT NULL,
+        overall_score INTEGER NOT NULL CHECK (overall_score BETWEEN 1 AND 5),
+        item_accuracy_score INTEGER CHECK (item_accuracy_score BETWEEN 0 AND 5),
+        communication_score INTEGER CHECK (communication_score BETWEEN 0 AND 5),
+        shipping_speed_score INTEGER CHECK (shipping_speed_score BETWEEN 0 AND 5),
+        public_comment TEXT,
+        private_feedback TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        is_revealed INTEGER DEFAULT 0,
+        UNIQUE(trade_id, rater_id),
+        FOREIGN KEY (rater_id) REFERENCES User(id),
+        FOREIGN KEY (ratee_id) REFERENCES User(id)
+      );
+
+      -- Disputes table with enhanced fields
+      CREATE TABLE IF NOT EXISTS disputes (
+        id TEXT PRIMARY KEY,
+        trade_id TEXT NOT NULL,
+        initiator_id INTEGER NOT NULL,
+        respondent_id INTEGER NOT NULL,
+        dispute_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'OPEN_AWAITING_RESPONSE',
+        initiator_statement TEXT,
+        respondent_statement TEXT,
+        resolution TEXT,
+        resolution_notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        resolved_at TEXT,
+        FOREIGN KEY (initiator_id) REFERENCES User(id),
+        FOREIGN KEY (respondent_id) REFERENCES User(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_trade_ratings_ratee ON trade_ratings(ratee_id);
+      CREATE INDEX IF NOT EXISTS idx_trade_ratings_trade ON trade_ratings(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_disputes_trade ON disputes(trade_id);
+
       CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT

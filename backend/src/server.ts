@@ -594,20 +594,272 @@ app.post('/api/trades/:id/open-dispute', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
 
-    const disputeId = `dispute-${tradeId}`;
-    const now = new Date().toISOString();
-    // Insert into DisputeTicket for traceability (trade_id may be integer in original schema, but we include reference in description)
-    db.run('INSERT INTO DisputeTicket (trade_id, dispute_type_id, description, status_id) VALUES (?, ?, ?, ?)', [null, null, statement, null], function (err2) {
-      if (err2) {
-        // don't fail entirely; continue to update trade
-        console.error('Failed to insert DisputeTicket:', err2);
-      }
+    // Verify initiator is part of the trade
+    const isProposer = String(tradeRow.proposerId) === String(initiatorId);
+    const isReceiver = String(tradeRow.receiverId) === String(initiatorId);
+    if (!isProposer && !isReceiver) {
+      return res.status(403).json({ error: 'You are not part of this trade' });
+    }
 
-      db.run('UPDATE trades SET status = ?, disputeTicketId = ?, updatedAt = ? WHERE id = ?', ['DISPUTE_OPENED', disputeId, now, tradeId], function (err3) {
-        if (err3) return res.status(500).json({ error: err3.message });
-        res.json({ id: tradeId, disputeTicketId: disputeId, status: 'DISPUTE_OPENED' });
+    // Determine respondent (the other party)
+    const respondentId = isProposer ? tradeRow.receiverId : tradeRow.proposerId;
+
+    const disputeId = `dispute-${tradeId}-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    // Insert into new disputes table
+    db.run(`INSERT INTO disputes (id, trade_id, initiator_id, respondent_id, dispute_type, status, initiator_statement, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'OPEN_AWAITING_RESPONSE', ?, ?, ?)`,
+      [disputeId, tradeId, initiatorId, respondentId, disputeType, statement, now, now],
+      function (err2) {
+        if (err2) {
+          console.error('Failed to insert dispute:', err2);
+          return res.status(500).json({ error: err2.message });
+        }
+
+        // Update trade status
+        db.run('UPDATE trades SET status = ?, disputeTicketId = ?, updatedAt = ? WHERE id = ?', ['DISPUTE_OPENED', disputeId, now, tradeId], function (err3) {
+          if (err3) return res.status(500).json({ error: err3.message });
+          res.json({
+            id: tradeId,
+            disputeId,
+            disputeTicketId: disputeId,
+            status: 'DISPUTE_OPENED'
+          });
+        });
+      });
+  });
+});
+
+// =====================================================
+// TRUST & SAFETY: RATINGS ENDPOINTS
+// =====================================================
+
+// Submit a rating for a trade partner
+app.post('/api/trades/:id/rate', (req, res) => {
+  const tradeId = req.params.id;
+  const { raterId, overallScore, itemAccuracyScore, communicationScore, shippingSpeedScore, publicComment, privateFeedback } = req.body;
+
+  if (!tradeId || !raterId || !overallScore) {
+    return res.status(400).json({ error: 'tradeId, raterId, and overallScore are required' });
+  }
+
+  if (overallScore < 1 || overallScore > 5) {
+    return res.status(400).json({ error: 'overallScore must be between 1 and 5' });
+  }
+
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+
+    // Verify trade is in completed awaiting rating status
+    if (tradeRow.status !== 'COMPLETED_AWAITING_RATING' && tradeRow.status !== 'COMPLETED') {
+      return res.status(400).json({ error: 'Trade is not ready for rating' });
+    }
+
+    // Verify rater is part of the trade
+    const isProposer = String(tradeRow.proposerId) === String(raterId);
+    const isReceiver = String(tradeRow.receiverId) === String(raterId);
+    if (!isProposer && !isReceiver) {
+      return res.status(403).json({ error: 'You are not part of this trade' });
+    }
+
+    // Check if already rated
+    const ratedFlag = isProposer ? 'proposerRated' : 'receiverRated';
+    if (tradeRow[ratedFlag]) {
+      return res.status(400).json({ error: 'You have already rated this trade' });
+    }
+
+    // Determine ratee (the other party)
+    const rateeId = isProposer ? tradeRow.receiverId : tradeRow.proposerId;
+
+    // Insert rating
+    const now = new Date().toISOString();
+    db.run(`INSERT INTO trade_ratings 
+            (trade_id, rater_id, ratee_id, overall_score, item_accuracy_score, communication_score, shipping_speed_score, public_comment, private_feedback, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tradeId, raterId, rateeId, overallScore, itemAccuracyScore || 0, communicationScore || 0, shippingSpeedScore || 0, publicComment || null, privateFeedback || null, now],
+      function (this: sqlite3.RunResult, err2: Error | null) {
+        if (err2) {
+          if ((err2 as any).code === 'SQLITE_CONSTRAINT') {
+            return res.status(400).json({ error: 'Rating already exists' });
+          }
+          return res.status(500).json({ error: err2.message });
+        }
+
+        const ratingId = this.lastID;
+
+        // Update trade to mark this user as rated
+        const updateField = isProposer ? 'proposerRated' : 'receiverRated';
+        db.run(`UPDATE trades SET ${updateField} = 1, updatedAt = ? WHERE id = ?`, [now, tradeId], (err3: Error | null) => {
+          if (err3) console.error('Failed to update trade rated flag:', err3);
+
+          // Check if both have rated
+          db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err4, updatedTrade: any) => {
+            if (err4) return res.status(500).json({ error: err4.message });
+
+            const bothRated = updatedTrade.proposerRated && updatedTrade.receiverRated;
+
+            if (bothRated) {
+              // Mark trade as fully completed
+              db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COMPLETED', now, tradeId]);
+
+              // Reveal ratings
+              db.run('UPDATE trade_ratings SET is_revealed = 1 WHERE trade_id = ?', [tradeId]);
+
+              // Update both users' aggregate ratings
+              [tradeRow.proposerId, tradeRow.receiverId].forEach(userId => {
+                db.get('SELECT AVG(overall_score) as avg_rating FROM trade_ratings WHERE ratee_id = ?', [userId], (err5, result: any) => {
+                  if (!err5 && result && result.avg_rating !== null) {
+                    db.run('UPDATE User SET rating = ? WHERE id = ?', [result.avg_rating, userId]);
+                  }
+                });
+              });
+            }
+
+            res.json({
+              ratingId,
+              tradeId,
+              bothRated,
+              tradeStatus: bothRated ? 'COMPLETED' : 'COMPLETED_AWAITING_RATING'
+            });
+          });
+        });
+      });
+  });
+});
+
+// Get all ratings received by a user
+app.get('/api/users/:id/ratings', (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  db.all(`SELECT tr.*, 
+          u.name as rater_name,
+          t.proposerItemIds, t.receiverItemIds
+          FROM trade_ratings tr
+          LEFT JOIN User u ON tr.rater_id = u.id
+          LEFT JOIN trades t ON tr.trade_id = t.id
+          WHERE tr.ratee_id = ? AND tr.is_revealed = 1
+          ORDER BY tr.created_at DESC`,
+    [userId], (err: Error | null, ratings: any[]) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      // Also get aggregate stats
+      db.get(`SELECT 
+              COUNT(*) as total_ratings,
+              AVG(overall_score) as avg_overall,
+              AVG(item_accuracy_score) as avg_item_accuracy,
+              AVG(communication_score) as avg_communication,
+              AVG(shipping_speed_score) as avg_shipping_speed
+              FROM trade_ratings WHERE ratee_id = ?`, [userId], (err2: Error | null, stats: any) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        res.json({
+          ratings: ratings || [],
+          stats: stats ? {
+            totalRatings: stats.total_ratings || 0,
+            avgOverall: stats.avg_overall ? Math.round(stats.avg_overall * 10) / 10 : null,
+            avgItemAccuracy: stats.avg_item_accuracy ? Math.round(stats.avg_item_accuracy * 10) / 10 : null,
+            avgCommunication: stats.avg_communication ? Math.round(stats.avg_communication * 10) / 10 : null,
+            avgShippingSpeed: stats.avg_shipping_speed ? Math.round(stats.avg_shipping_speed * 10) / 10 : null
+          } : null
+        });
       });
     });
+});
+
+// =====================================================
+// TRUST & SAFETY: DISPUTE ENDPOINTS
+// =====================================================
+
+// Get dispute details
+app.get('/api/disputes/:id', (req, res) => {
+  const disputeId = req.params.id;
+
+  db.get('SELECT * FROM disputes WHERE id = ?', [disputeId], (err: Error | null, dispute: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+
+    // Get initiator and respondent names
+    db.get('SELECT name FROM User WHERE id = ?', [dispute.initiator_id], (err2: Error | null, initiator: any) => {
+      db.get('SELECT name FROM User WHERE id = ?', [dispute.respondent_id], (err3: Error | null, respondent: any) => {
+        res.json({
+          ...dispute,
+          initiator_name: initiator?.name || 'Unknown',
+          respondent_name: respondent?.name || 'Unknown'
+        });
+      });
+    });
+  });
+});
+
+// Respondent submits their response to a dispute
+app.post('/api/disputes/:id/respond', (req, res) => {
+  const disputeId = req.params.id;
+  const { respondentId, statement } = req.body;
+
+  if (!disputeId || !respondentId || !statement) {
+    return res.status(400).json({ error: 'disputeId, respondentId, and statement are required' });
+  }
+
+  db.get('SELECT * FROM disputes WHERE id = ?', [disputeId], (err: Error | null, dispute: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+
+    if (String(dispute.respondent_id) !== String(respondentId)) {
+      return res.status(403).json({ error: 'Only the respondent can respond to this dispute' });
+    }
+
+    if (dispute.status !== 'OPEN_AWAITING_RESPONSE') {
+      return res.status(400).json({ error: 'Dispute is not awaiting response' });
+    }
+
+    const now = new Date().toISOString();
+    db.run(`UPDATE disputes SET respondent_statement = ?, status = 'IN_MEDIATION', updated_at = ? WHERE id = ?`,
+      [statement, now, disputeId], (err2: Error | null) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({ id: disputeId, status: 'IN_MEDIATION' });
+      });
+  });
+});
+
+// Resolve a dispute (basic v1 - self-resolution or moderator)
+app.post('/api/disputes/:id/resolve', (req, res) => {
+  const disputeId = req.params.id;
+  const { resolution, resolverNotes } = req.body;
+
+  if (!disputeId || !resolution) {
+    return res.status(400).json({ error: 'disputeId and resolution are required' });
+  }
+
+  const validResolutions = ['TRADE_UPHELD', 'FULL_REFUND', 'PARTIAL_REFUND', 'TRADE_REVERSAL', 'MUTUALLY_RESOLVED'];
+  if (!validResolutions.includes(resolution)) {
+    return res.status(400).json({ error: `Invalid resolution. Must be one of: ${validResolutions.join(', ')}` });
+  }
+
+  db.get('SELECT * FROM disputes WHERE id = ?', [disputeId], (err: Error | null, dispute: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+
+    if (dispute.status === 'RESOLVED') {
+      return res.status(400).json({ error: 'Dispute is already resolved' });
+    }
+
+    const now = new Date().toISOString();
+    db.run(`UPDATE disputes SET resolution = ?, resolution_notes = ?, status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?`,
+      [resolution, resolverNotes || null, now, now, disputeId], (err2: Error | null) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        // Update the associated trade status
+        db.run(`UPDATE trades SET status = 'DISPUTE_RESOLVED', updatedAt = ? WHERE disputeTicketId = ?`,
+          [now, disputeId], (err3: Error | null) => {
+            if (err3) console.error('Failed to update trade status:', err3);
+            res.json({ id: disputeId, status: 'RESOLVED', resolution });
+          });
+      });
   });
 });
 
