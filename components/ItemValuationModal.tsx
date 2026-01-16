@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Item } from '../types';
-import { fetchItemValuations, fetchSimilarPrices, submitValueOverride, ItemValuationData, SimilarPricesData } from '../api/api';
+import { fetchItemValuations, fetchSimilarPrices, submitValueOverride, refreshItemValuation as refreshItemValuationApi, searchExternalProducts, linkItemToProduct as linkItemToProductApi, ExternalProduct, ItemValuationData, SimilarPricesData } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import ValuationBadge from './ValuationBadge';
 
@@ -11,7 +11,7 @@ interface ItemValuationModalProps {
     onValuationUpdated?: () => void;
 }
 
-type TabType = 'overview' | 'history' | 'override';
+type TabType = 'overview' | 'history' | 'override' | 'link';
 
 const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, item, onValuationUpdated }) => {
     const { currentUser } = useAuth();
@@ -28,6 +28,17 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
     const [overrideJustification, setOverrideJustification] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
+
+    // Refresh state
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+
+    // Product search/link state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<ExternalProduct[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [linking, setLinking] = useState(false);
+    const [linkMessage, setLinkMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (show && item) {
@@ -168,14 +179,15 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                     {[
                                         { key: 'overview', label: '📊 Overview' },
                                         { key: 'history', label: '📈 Trade History' },
+                                        { key: 'link', label: '🔗 Link Product' },
                                         { key: 'override', label: '✏️ Set Value' },
                                     ].map(tab => (
                                         <button
                                             key={tab.key}
                                             onClick={() => setActiveTab(tab.key as TabType)}
                                             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key
-                                                    ? 'border-blue-500 text-blue-600'
-                                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700'
                                                 }`}
                                         >
                                             {tab.label}
@@ -190,7 +202,37 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                     <div className="space-y-6">
                                         {/* API Valuations */}
                                         <div>
-                                            <h4 className="text-sm font-semibold text-gray-700 mb-2">API Valuations</h4>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="text-sm font-semibold text-gray-700">API Valuations</h4>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!item) return;
+                                                        setRefreshing(true);
+                                                        setRefreshMessage(null);
+                                                        try {
+                                                            const result = await refreshItemValuationApi(item.id);
+                                                            setRefreshMessage(result.message);
+                                                            if (result.success) {
+                                                                loadData();
+                                                                if (onValuationUpdated) onValuationUpdated();
+                                                            }
+                                                        } catch (err) {
+                                                            setRefreshMessage('Failed to refresh');
+                                                        } finally {
+                                                            setRefreshing(false);
+                                                        }
+                                                    }}
+                                                    disabled={refreshing}
+                                                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 disabled:opacity-50 transition-colors"
+                                                >
+                                                    {refreshing ? '🔄 Refreshing...' : '🔄 Refresh from API'}
+                                                </button>
+                                            </div>
+                                            {refreshMessage && (
+                                                <p className={`text-xs mb-2 ${refreshMessage.includes('Failed') ? 'text-red-500' : 'text-green-600'}`}>
+                                                    {refreshMessage}
+                                                </p>
+                                            )}
                                             {valuationData.apiValuations.length > 0 ? (
                                                 <div className="space-y-2">
                                                     {valuationData.apiValuations.map(av => (
@@ -226,8 +268,8 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                         <div key={ov.id} className="flex justify-between items-center bg-yellow-50 rounded-lg p-3">
                                                             <div>
                                                                 <span className={`text-xs px-2 py-0.5 rounded-full ${ov.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                                                        ov.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                                            'bg-red-100 text-red-800'
+                                                                    ov.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                                        'bg-red-100 text-red-800'
                                                                     }`}>
                                                                     {ov.status}
                                                                 </span>
@@ -308,6 +350,124 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                         </div>
                                                     </div>
                                                 ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'link' && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Search PriceCharting Catalog
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={e => setSearchQuery(e.target.value)}
+                                                    placeholder="e.g. EarthBound SNES, Pokemon Red..."
+                                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    onKeyDown={async (e) => {
+                                                        if (e.key === 'Enter' && searchQuery.length >= 2) {
+                                                            e.preventDefault();
+                                                            setSearching(true);
+                                                            setLinkMessage(null);
+                                                            try {
+                                                                const result = await searchExternalProducts(searchQuery);
+                                                                setSearchResults(result.products);
+                                                            } catch (err) {
+                                                                setLinkMessage('Search failed');
+                                                            } finally {
+                                                                setSearching(false);
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={searching || searchQuery.length < 2}
+                                                    onClick={async () => {
+                                                        setSearching(true);
+                                                        setLinkMessage(null);
+                                                        try {
+                                                            const result = await searchExternalProducts(searchQuery);
+                                                            setSearchResults(result.products);
+                                                        } catch (err) {
+                                                            setLinkMessage('Search failed');
+                                                        } finally {
+                                                            setSearching(false);
+                                                        }
+                                                    }}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+                                                >
+                                                    {searching ? '...' : '🔍'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {linkMessage && (
+                                            <p className={`text-sm ${linkMessage.includes('✓') ? 'text-green-600' : 'text-gray-600'}`}>
+                                                {linkMessage}
+                                            </p>
+                                        )}
+
+                                        {searchResults.length > 0 ? (
+                                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                                                <h4 className="text-sm font-semibold text-gray-700">
+                                                    Found {searchResults.length} products
+                                                </h4>
+                                                {searchResults.slice(0, 10).map(product => (
+                                                    <div key={product.id} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
+                                                        <div className="flex-1">
+                                                            <span className="font-medium text-gray-800">{product.name}</span>
+                                                            <span className="text-xs text-gray-500 block">{product.platform}</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={linking}
+                                                            onClick={async () => {
+                                                                if (!item) return;
+                                                                setLinking(true);
+                                                                setLinkMessage(null);
+                                                                try {
+                                                                    const result = await linkItemToProductApi(
+                                                                        item.id,
+                                                                        product.id,
+                                                                        product.name,
+                                                                        product.platform
+                                                                    );
+                                                                    if (result.success) {
+                                                                        setLinkMessage(`✓ Linked to ${product.name}! Refreshing...`);
+                                                                        setSearchResults([]);
+                                                                        loadData();
+                                                                        if (onValuationUpdated) onValuationUpdated();
+                                                                    } else {
+                                                                        setLinkMessage(result.message);
+                                                                    }
+                                                                } catch (err) {
+                                                                    setLinkMessage('Failed to link product');
+                                                                } finally {
+                                                                    setLinking(false);
+                                                                }
+                                                            }}
+                                                            className="ml-2 text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-full hover:bg-green-200 disabled:opacity-50"
+                                                        >
+                                                            {linking ? '...' : 'Link'}
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : searchQuery.length >= 2 ? (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <p className="text-4xl mb-2">🔍</p>
+                                                <p>Press Enter or click Search to find products</p>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <p className="text-4xl mb-2">🔗</p>
+                                                <p>Link this item to a PriceCharting product</p>
+                                                <p className="text-sm mt-1">for automated price updates</p>
                                             </div>
                                         )}
                                     </div>

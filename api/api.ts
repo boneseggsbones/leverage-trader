@@ -335,3 +335,81 @@ export const fetchSimilarPrices = async (itemId: string | number): Promise<Simil
     }
     return response.json();
 };
+
+// =====================================================
+// PRICING API FUNCTIONS
+// =====================================================
+
+export interface RefreshValuationResult {
+    success: boolean;
+    emvCents: number | null;
+    source: string;
+    confidence: number | null;
+    message: string;
+}
+
+export interface ExternalProduct {
+    id: string;
+    name: string;
+    platform: string;
+    provider: string;
+}
+
+export interface ExternalSearchResult {
+    products: ExternalProduct[];
+    apiConfigured: boolean;
+}
+
+export interface PricingStatus {
+    configured: boolean;
+    providers: Array<{
+        name: string;
+        configured: boolean;
+        description: string;
+    }>;
+}
+
+export const refreshItemValuation = async (itemId: string | number): Promise<RefreshValuationResult> => {
+    const response = await fetch(`${API_URL}/items/${itemId}/refresh-valuation`, {
+        method: 'POST',
+    });
+    if (!response.ok) {
+        throw new Error('Failed to refresh valuation');
+    }
+    return response.json();
+};
+
+export const searchExternalProducts = async (query: string): Promise<ExternalSearchResult> => {
+    const response = await fetch(`${API_URL}/external/products/search?q=${encodeURIComponent(query)}`);
+    if (!response.ok) {
+        throw new Error('Failed to search external products');
+    }
+    return response.json();
+};
+
+export const linkItemToProduct = async (
+    itemId: string | number,
+    pricechartingId: string,
+    productName: string,
+    consoleName: string
+): Promise<{ success: boolean; productId: number | null; message: string; valuation?: RefreshValuationResult }> => {
+    const response = await fetch(`${API_URL}/items/${itemId}/link-product`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pricechartingId, productName, consoleName }),
+    });
+    if (!response.ok) {
+        throw new Error('Failed to link item to product');
+    }
+    return response.json();
+};
+
+export const getPricingStatus = async (): Promise<PricingStatus> => {
+    const response = await fetch(`${API_URL}/pricing/status`);
+    if (!response.ok) {
+        throw new Error('Failed to get pricing status');
+    }
+    return response.json();
+};

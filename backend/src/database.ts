@@ -354,6 +354,14 @@ const seedValuationData = () => {
             ('Wireless Mouse', 4, 'Generic', 'Mouse'),
             ('Mechanical Keyboard', 4, 'Generic', 'Keyboard'),
             ('27-inch Monitor', 4, 'Generic', 'Monitor');
+          
+          -- Seed video game products with PriceCharting IDs
+          INSERT INTO product_catalog (name, category_id, brand, model, pricecharting_id) VALUES 
+            ('EarthBound', 1, 'Super Nintendo', 'SNES', '6910'),
+            ('Chrono Trigger', 1, 'Super Nintendo', 'SNES', '778'),
+            ('Pokemon Red', 1, 'GameBoy', 'GB', '5152'),
+            ('Legend of Zelda Ocarina of Time', 1, 'Nintendo 64', 'N64', '1484'),
+            ('Super Mario World', 1, 'Super Nintendo', 'SNES', '6872');
 
           -- Link existing items to products and categories
           UPDATE Item SET category_id = 4, product_id = 1, condition = 'GOOD', emv_source = 'user_defined', status = 'active' WHERE name = 'Laptop';
@@ -364,7 +372,26 @@ const seedValuationData = () => {
           if (err) {
             console.error('Error seeding valuation data:', err);
           }
-          resolve();
+
+          // Also seed video game items for testing
+          db.get('SELECT COUNT(*) as count FROM Item WHERE category_id = 1', (err2, row2: any) => {
+            if (err2 || (row2 && row2.count > 0)) {
+              return resolve();
+            }
+
+            db.exec(`
+              -- Add sample video game items linked to products
+              INSERT INTO Item (name, description, imageUrl, estimatedMarketValue, owner_id, category_id, product_id, condition, emv_source, status)
+              VALUES 
+                ('EarthBound', 'Classic SNES RPG - Cart Only', 'https://images.unsplash.com/photo-1551103782-8ab07afd45c1?w=200', 17244, 1, 1, 5, 'LOOSE', 'user_defined', 'active'),
+                ('Chrono Trigger', 'Complete in Box - Great condition', 'https://images.unsplash.com/photo-1551103782-8ab07afd45c1?w=200', 35000, 1, 1, 6, 'CIB', 'user_defined', 'active'),
+                ('Pokemon Red', 'Working save battery', 'https://images.unsplash.com/photo-1551103782-8ab07afd45c1?w=200', 4200, 2, 1, 7, 'LOOSE', 'user_defined', 'active'),
+                ('Zelda Ocarina of Time', 'Gold Cart N64', 'https://images.unsplash.com/photo-1551103782-8ab07afd45c1?w=200', 3500, 2, 1, 8, 'LOOSE', 'user_defined', 'active');
+            `, (err3) => {
+              if (err3) console.error('Error seeding video game items:', err3);
+              resolve();
+            });
+          });
         });
       } else {
         resolve();

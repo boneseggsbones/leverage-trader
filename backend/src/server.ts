@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { db, init, migrate, seedValuationData } from './database';
@@ -5,6 +6,7 @@ import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
+import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured } from './pricingService';
 
 const app = express();
 const port = 4000;
@@ -747,6 +749,83 @@ app.get('/api/items/:id/similar-prices', (req, res) => {
         stats,
       });
     });
+  });
+});
+
+// =====================================================
+// PRICING API ENDPOINTS
+// =====================================================
+
+// Refresh item valuation from external API
+app.post('/api/items/:id/refresh-valuation', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+
+  try {
+    const result = await refreshItemValuation(itemId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to refresh valuation'
+    });
+  }
+});
+
+// Search external pricing API for products to link
+app.get('/api/external/products/search', async (req, res) => {
+  const q = req.query.q as string;
+
+  if (!q || q.length < 2) {
+    return res.json({ products: [], apiConfigured: isApiConfigured() });
+  }
+
+  try {
+    const products = await searchPriceChartingProducts(q);
+    res.json({
+      products: products.map(p => ({
+        id: p.id,
+        name: p['product-name'],
+        platform: p['console-name'],
+        provider: 'pricecharting'
+      })),
+      apiConfigured: isApiConfigured()
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Link an item to an external product
+app.post('/api/items/:id/link-product', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const { pricechartingId, productName, consoleName } = req.body;
+
+  if (!pricechartingId) {
+    return res.status(400).json({ success: false, message: 'pricechartingId is required' });
+  }
+
+  try {
+    const result = await linkItemToProduct(itemId, pricechartingId, productName, consoleName);
+
+    if (result.success) {
+      // Immediately refresh the valuation after linking
+      const valuationResult = await refreshItemValuation(itemId);
+      res.json({ ...result, valuation: valuationResult });
+    } else {
+      res.json(result);
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Check if pricing API is configured
+app.get('/api/pricing/status', (req, res) => {
+  res.json({
+    configured: isApiConfigured(),
+    providers: [
+      { name: 'pricecharting', configured: isApiConfigured(), description: 'Video Games, TCG, Comics' }
+    ]
   });
 });
 
