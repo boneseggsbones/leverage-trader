@@ -111,6 +111,114 @@ const init = () => {
         FOREIGN KEY (userId) REFERENCES User(id),
         FOREIGN KEY (itemId) REFERENCES Item(id)
       );
+
+      -- =====================================================
+      -- HYBRID VALUATION SYSTEM TABLES
+      -- =====================================================
+
+      -- Item Categories with valuation provider settings
+      CREATE TABLE IF NOT EXISTS item_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        parent_id INTEGER REFERENCES item_categories(id),
+        default_api_provider TEXT,
+        condition_scale TEXT DEFAULT 'standard',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Product Catalog - canonical products with external API IDs
+      CREATE TABLE IF NOT EXISTS product_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pricecharting_id TEXT,
+        tcgplayer_id TEXT,
+        ebay_epid TEXT,
+        stockx_id TEXT,
+        name TEXT NOT NULL,
+        category_id INTEGER REFERENCES item_categories(id),
+        brand TEXT,
+        model TEXT,
+        year INTEGER,
+        variant TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- API Valuations - cached API lookup results
+      CREATE TABLE IF NOT EXISTS api_valuations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER REFERENCES product_catalog(id),
+        item_id INTEGER REFERENCES Item(id),
+        api_provider TEXT NOT NULL,
+        api_item_id TEXT,
+        condition_queried TEXT,
+        value_cents INTEGER NOT NULL,
+        currency TEXT DEFAULT 'USD',
+        confidence_score INTEGER CHECK (confidence_score BETWEEN 0 AND 100),
+        sample_size INTEGER,
+        price_range_low_cents INTEGER,
+        price_range_high_cents INTEGER,
+        raw_response TEXT,
+        fetched_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT
+      );
+
+      -- User Value Overrides - user-defined valuations
+      CREATE TABLE IF NOT EXISTS user_value_overrides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL REFERENCES Item(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        override_value_cents INTEGER NOT NULL,
+        reason TEXT,
+        justification TEXT,
+        evidence_urls TEXT,
+        status TEXT DEFAULT 'pending',
+        reviewed_by INTEGER REFERENCES User(id),
+        reviewed_at TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Condition Assessments - structured condition data
+      CREATE TABLE IF NOT EXISTS condition_assessments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL REFERENCES Item(id) ON DELETE CASCADE,
+        grade TEXT NOT NULL,
+        completeness TEXT,
+        packaging_condition TEXT,
+        functionality TEXT,
+        centering_score INTEGER CHECK (centering_score BETWEEN 0 AND 100),
+        surface_score INTEGER CHECK (surface_score BETWEEN 0 AND 100),
+        edges_score INTEGER CHECK (edges_score BETWEEN 0 AND 100),
+        corners_score INTEGER CHECK (corners_score BETWEEN 0 AND 100),
+        value_modifier_percent INTEGER DEFAULT 0,
+        ai_assessed INTEGER DEFAULT 0,
+        ai_confidence INTEGER,
+        assessed_at TEXT DEFAULT (datetime('now')),
+        assessed_by INTEGER REFERENCES User(id)
+      );
+
+      -- Trade Price Signals - historical pricing from completed trades
+      CREATE TABLE IF NOT EXISTS trade_price_signals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        item_id INTEGER REFERENCES Item(id),
+        product_id INTEGER REFERENCES product_catalog(id),
+        category_id INTEGER REFERENCES item_categories(id),
+        item_name TEXT NOT NULL,
+        condition TEXT,
+        implied_value_cents INTEGER NOT NULL,
+        signal_confidence INTEGER CHECK (signal_confidence BETWEEN 0 AND 100),
+        trade_completed_at TEXT NOT NULL
+      );
+
+      -- Indexes for valuation queries
+      CREATE INDEX IF NOT EXISTS idx_api_valuations_product ON api_valuations(product_id, api_provider);
+      CREATE INDEX IF NOT EXISTS idx_api_valuations_item ON api_valuations(item_id);
+      CREATE INDEX IF NOT EXISTS idx_user_overrides_item ON user_value_overrides(item_id);
+      CREATE INDEX IF NOT EXISTS idx_condition_item ON condition_assessments(item_id);
+      CREATE INDEX IF NOT EXISTS idx_price_signals_product ON trade_price_signals(product_id);
+      CREATE INDEX IF NOT EXISTS idx_price_signals_category ON trade_price_signals(category_id);
+      CREATE INDEX IF NOT EXISTS idx_product_catalog_category ON product_catalog(category_id);
     `, (err) => {
       if (err) {
         reject(err);
@@ -144,40 +252,75 @@ const init = () => {
   });
 };
 
-// Non-destructive migration: ensure estimatedMarketValue column exists on items
+// Non-destructive migration: ensure all required columns exist
 const migrate = () => {
   return new Promise<void>((resolve, reject) => {
-    // Ensure Item has estimatedMarketValue
-    db.all("PRAGMA table_info('Item')", (err, rows: any[]) => {
-      if (err) return reject(err);
-      const hasEstimated = rows.some(r => r.name === 'estimatedMarketValue');
-      const tasks: Promise<void>[] = [];
-      if (!hasEstimated) {
-        tasks.push(new Promise((res, rej) => {
-          db.run('ALTER TABLE Item ADD COLUMN estimatedMarketValue INTEGER DEFAULT 0', (err) => {
-            if (err) return rej(err);
-            db.run('UPDATE Item SET estimatedMarketValue = 0 WHERE estimatedMarketValue IS NULL', (err) => {
-              if (err) return rej(err);
+    const tasks: Promise<void>[] = [];
+
+    // Helper to add column if it doesn't exist
+    const addColumnIfMissing = (table: string, column: string, definition: string): Promise<void> => {
+      return new Promise((res, rej) => {
+        db.all(`PRAGMA table_info('${table}')`, (err, rows: any[]) => {
+          if (err) return rej(err);
+          const hasColumn = rows.some(r => r.name === column);
+          if (!hasColumn) {
+            db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`, (err) => {
+              if (err) {
+                console.log(`Migration: Column ${column} may already exist or error: ${err.message}`);
+              }
               res();
             });
-          });
-        }));
+          } else {
+            res();
+          }
+        });
+      });
+    };
+
+    // Item table migrations
+    db.all("PRAGMA table_info('Item')", (err, rows: any[]) => {
+      if (err) return reject(err);
+
+      const itemColumns = rows.map((r: any) => r.name);
+
+      // Original migrations
+      if (!itemColumns.includes('estimatedMarketValue')) {
+        tasks.push(addColumnIfMissing('Item', 'estimatedMarketValue', 'INTEGER DEFAULT 0'));
       }
 
-      // Ensure User has balance column for cash transfers
+      // New valuation columns
+      if (!itemColumns.includes('product_id')) {
+        tasks.push(addColumnIfMissing('Item', 'product_id', 'INTEGER REFERENCES product_catalog(id)'));
+      }
+      if (!itemColumns.includes('category_id')) {
+        tasks.push(addColumnIfMissing('Item', 'category_id', 'INTEGER REFERENCES item_categories(id)'));
+      }
+      if (!itemColumns.includes('condition')) {
+        tasks.push(addColumnIfMissing('Item', 'condition', "TEXT DEFAULT 'GOOD'"));
+      }
+      if (!itemColumns.includes('emv_source')) {
+        tasks.push(addColumnIfMissing('Item', 'emv_source', 'TEXT'));
+      }
+      if (!itemColumns.includes('emv_confidence')) {
+        tasks.push(addColumnIfMissing('Item', 'emv_confidence', 'INTEGER'));
+      }
+      if (!itemColumns.includes('emv_updated_at')) {
+        tasks.push(addColumnIfMissing('Item', 'emv_updated_at', 'TEXT'));
+      }
+      if (!itemColumns.includes('user_asking_cents')) {
+        tasks.push(addColumnIfMissing('Item', 'user_asking_cents', 'INTEGER'));
+      }
+      if (!itemColumns.includes('status')) {
+        tasks.push(addColumnIfMissing('Item', 'status', "TEXT DEFAULT 'active'"));
+      }
+
+      // User table migrations
       db.all("PRAGMA table_info('User')", (err2, userRows: any[]) => {
         if (err2) return reject(err2);
-        const hasBalance = userRows.some(r => r.name === 'balance');
-        if (!hasBalance) {
-          tasks.push(new Promise((res, rej) => {
-            db.run('ALTER TABLE User ADD COLUMN balance INTEGER DEFAULT 0', (err) => {
-              if (err) return rej(err);
-              db.run('UPDATE User SET balance = 0 WHERE balance IS NULL', (err) => {
-                if (err) return rej(err);
-                res();
-              });
-            });
-          }));
+        const userColumns = userRows.map((r: any) => r.name);
+
+        if (!userColumns.includes('balance')) {
+          tasks.push(addColumnIfMissing('User', 'balance', 'INTEGER DEFAULT 0'));
         }
 
         Promise.all(tasks).then(() => resolve()).catch(reject);
@@ -186,4 +329,48 @@ const migrate = () => {
   });
 };
 
-export { db, init, migrate };
+// Seed valuation data (categories and sample products)
+const seedValuationData = () => {
+  return new Promise<void>((resolve, reject) => {
+    // Check if categories already seeded
+    db.get('SELECT COUNT(*) as count FROM item_categories', (err, row: any) => {
+      if (err) {
+        console.log('item_categories table may not exist yet, skipping seed');
+        return resolve();
+      }
+      if (row && row.count === 0) {
+        db.exec(`
+          -- Seed item categories
+          INSERT INTO item_categories (slug, name, default_api_provider, condition_scale) VALUES 
+            ('video-games', 'Video Games', 'pricecharting', 'standard'),
+            ('tcg', 'Trading Card Games', 'tcgplayer', 'tcg'),
+            ('sneakers', 'Sneakers', 'stockx', 'sneaker'),
+            ('electronics', 'Electronics', null, 'standard'),
+            ('other', 'Other', null, 'standard');
+
+          -- Seed sample product catalog entries matching existing items
+          INSERT INTO product_catalog (name, category_id, brand, model) VALUES 
+            ('Gaming Laptop', 4, 'Generic', 'Laptop'),
+            ('Wireless Mouse', 4, 'Generic', 'Mouse'),
+            ('Mechanical Keyboard', 4, 'Generic', 'Keyboard'),
+            ('27-inch Monitor', 4, 'Generic', 'Monitor');
+
+          -- Link existing items to products and categories
+          UPDATE Item SET category_id = 4, product_id = 1, condition = 'GOOD', emv_source = 'user_defined', status = 'active' WHERE name = 'Laptop';
+          UPDATE Item SET category_id = 4, product_id = 2, condition = 'GOOD', emv_source = 'user_defined', status = 'active' WHERE name = 'Mouse';
+          UPDATE Item SET category_id = 4, product_id = 3, condition = 'GOOD', emv_source = 'user_defined', status = 'active' WHERE name = 'Keyboard';
+          UPDATE Item SET category_id = 4, product_id = 4, condition = 'GOOD', emv_source = 'user_defined', status = 'active' WHERE name = 'Monitor';
+        `, (err) => {
+          if (err) {
+            console.error('Error seeding valuation data:', err);
+          }
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
+  });
+};
+
+export { db, init, migrate, seedValuationData };

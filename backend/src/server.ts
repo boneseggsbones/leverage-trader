@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { db, init, migrate } from './database';
+import { db, init, migrate, seedValuationData } from './database';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
@@ -601,10 +601,160 @@ app.post('/api/trades/:id/open-dispute', (req, res) => {
   });
 });
 
+// =====================================================
+// VALUATION API ENDPOINTS
+// =====================================================
+
+// Get all item categories
+app.get('/api/categories', (req, res) => {
+  db.all('SELECT * FROM item_categories ORDER BY name', [], (err: Error | null, rows: any[]) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Search product catalog
+app.get('/api/products/search', (req, res) => {
+  const { q, category_id } = req.query;
+  let query = 'SELECT * FROM product_catalog WHERE 1=1';
+  const params: any[] = [];
+
+  if (q) {
+    query += ' AND name LIKE ?';
+    params.push(`%${q}%`);
+  }
+  if (category_id) {
+    query += ' AND category_id = ?';
+    params.push(category_id);
+  }
+  query += ' LIMIT 50';
+
+  db.all(query, params, (err: Error | null, rows: any[]) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Get all valuation sources for an item
+app.get('/api/items/:id/valuations', (req, res) => {
+  const itemId = req.params.id;
+
+  // Get the item first
+  db.get('SELECT * FROM Item WHERE id = ?', [itemId], (err: Error | null, item: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    // Get API valuations
+    db.all('SELECT * FROM api_valuations WHERE item_id = ? OR product_id = ? ORDER BY fetched_at DESC',
+      [itemId, item.product_id], (err2: Error | null, apiValuations: any[]) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        // Get user overrides
+        db.all('SELECT * FROM user_value_overrides WHERE item_id = ? ORDER BY created_at DESC',
+          [itemId], (err3: Error | null, userOverrides: any[]) => {
+            if (err3) return res.status(500).json({ error: err3.message });
+
+            // Get condition assessment
+            db.get('SELECT * FROM condition_assessments WHERE item_id = ? ORDER BY assessed_at DESC LIMIT 1',
+              [itemId], (err4: Error | null, condition: any) => {
+                if (err4) return res.status(500).json({ error: err4.message });
+
+                res.json({
+                  item: {
+                    id: item.id,
+                    name: item.name,
+                    current_emv_cents: item.estimatedMarketValue,
+                    emv_source: item.emv_source,
+                    emv_confidence: item.emv_confidence,
+                    condition: item.condition,
+                  },
+                  apiValuations: apiValuations || [],
+                  userOverrides: userOverrides || [],
+                  conditionAssessment: condition || null,
+                });
+              });
+          });
+      });
+  });
+});
+
+// Submit user value override
+app.post('/api/items/:id/valuations/override', (req, res) => {
+  const itemId = req.params.id;
+  const { userId, overrideValueCents, reason, justification } = req.body;
+
+  if (!userId || !overrideValueCents) {
+    return res.status(400).json({ error: 'userId and overrideValueCents are required' });
+  }
+
+  db.run(`INSERT INTO user_value_overrides (item_id, user_id, override_value_cents, reason, justification, status)
+          VALUES (?, ?, ?, ?, ?, 'pending')`,
+    [itemId, userId, overrideValueCents, reason || null, justification || null],
+    function (this: sqlite3.RunResult, err: Error | null) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ id: this.lastID, status: 'pending' });
+    });
+});
+
+// Get historical trade prices for similar items
+app.get('/api/items/:id/similar-prices', (req, res) => {
+  const itemId = req.params.id;
+
+  // Get the item to find its product/category
+  db.get('SELECT * FROM Item WHERE id = ?', [itemId], (err: Error | null, item: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    // Find similar trade price signals
+    let query = `
+      SELECT tps.*, 
+             CASE WHEN tps.product_id = ? THEN 1.0 ELSE 0.7 END as relevance
+      FROM trade_price_signals tps
+      WHERE (tps.product_id = ? OR tps.category_id = ?)
+        AND tps.implied_value_cents BETWEEN ? AND ?
+      ORDER BY relevance DESC, trade_completed_at DESC
+      LIMIT 20
+    `;
+
+    const emv = item.estimatedMarketValue || 10000; // Default to $100 if no EMV
+    db.all(query, [
+      item.product_id,
+      item.product_id,
+      item.category_id,
+      Math.floor(emv * 0.5),
+      Math.floor(emv * 1.5)
+    ], (err2: Error | null, signals: any[]) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      // Calculate aggregate stats
+      const prices = (signals || []).map(s => s.implied_value_cents);
+      const stats = prices.length > 0 ? {
+        count: prices.length,
+        avgPriceCents: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
+        minPriceCents: Math.min(...prices),
+        maxPriceCents: Math.max(...prices),
+      } : null;
+
+      res.json({
+        item: { id: item.id, name: item.name, product_id: item.product_id, category_id: item.category_id },
+        signals: signals || [],
+        stats,
+      });
+    });
+  });
+});
+
 if (require.main === module) {
-  // Run non-destructive migrations, then initialize (if needed), then start server
+  // Run non-destructive migrations, then initialize (if needed), seed data, then start server
   migrate()
     .then(() => init())
+    .then(() => seedValuationData())
     .then(() => {
       app.listen(port, '127.0.0.1', () => {
         console.log(`Server is running on http://localhost:${port}`);

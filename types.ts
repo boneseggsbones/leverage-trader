@@ -46,6 +46,95 @@ export interface ApiMetadata {
     rawDataSnapshot: Record<string, any> | null;
 }
 
+// --- Hybrid Valuation System Types ---
+
+export interface ItemCategoryRecord {
+    id: number;
+    slug: string;
+    name: string;
+    parentId: number | null;
+    defaultApiProvider: string | null;
+    conditionScale: 'standard' | 'tcg' | 'sneaker';
+}
+
+export interface ProductCatalog {
+    id: number;
+    pricechartingId: string | null;
+    tcgplayerId: string | null;
+    ebayEpid: string | null;
+    stockxId: string | null;
+    name: string;
+    categoryId: number;
+    brand: string | null;
+    model: string | null;
+    year: number | null;
+    variant: string | null;
+}
+
+export interface ApiValuation {
+    id: number;
+    productId: number | null;
+    itemId: number | null;
+    apiProvider: string;
+    apiItemId: string | null;
+    conditionQueried: string | null;
+    valueCents: number;
+    currency: string;
+    confidenceScore: number | null;
+    sampleSize: number | null;
+    priceRangeLowCents: number | null;
+    priceRangeHighCents: number | null;
+    fetchedAt: string;
+    expiresAt: string | null;
+}
+
+export interface UserValueOverride {
+    id: number;
+    itemId: number;
+    userId: number;
+    overrideValueCents: number;
+    reason: 'unique_item' | 'rare_variant' | 'disagree_with_api' | 'sentimental' | null;
+    justification: string | null;
+    evidenceUrls: string[] | null;
+    status: 'pending' | 'approved' | 'flagged' | 'rejected';
+    reviewedBy: number | null;
+    reviewedAt: string | null;
+    createdAt: string;
+}
+
+export interface ConditionAssessment {
+    id: number;
+    itemId: number;
+    grade: 'MINT' | 'NEAR_MINT' | 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR';
+    completeness: string | null;
+    packagingCondition: string | null;
+    functionality: string | null;
+    centeringScore: number | null;
+    surfaceScore: number | null;
+    edgesScore: number | null;
+    cornersScore: number | null;
+    valueModifierPercent: number;
+    aiAssessed: boolean;
+    aiConfidence: number | null;
+    assessedAt: string;
+    assessedBy: number | null;
+}
+
+export interface TradePriceSignal {
+    id: number;
+    tradeId: string;
+    itemId: number | null;
+    productId: number | null;
+    categoryId: number | null;
+    itemName: string;
+    condition: string | null;
+    impliedValueCents: number;
+    signalConfidence: number | null;
+    tradeCompletedAt: string;
+}
+
+export type EmvSource = 'api' | 'user_override' | 'trade_history' | 'user_defined' | 'ai_estimate';
+
 
 // --- Trade Lifecycle ---
 
