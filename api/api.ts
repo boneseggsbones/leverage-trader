@@ -60,7 +60,12 @@ export const fetchDashboardData = async (): Promise<any> => {
     if (!response.ok) {
         throw new Error('Failed to fetch dashboard data');
     }
-    return response.json();
+    const raw = await response.json();
+    return {
+        nearbyItems: (raw.nearbyItems || []).map(normalizeItem),
+        recommendedItems: (raw.recommendedItems || []).map(normalizeItem),
+        topTraderItems: (raw.topTraderItems || []).map(normalizeItem),
+    };
 };
 
 export const toggleWishlistItem = async (userId: string | number, itemId: string | number): Promise<User> => {

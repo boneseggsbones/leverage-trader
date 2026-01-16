@@ -50,7 +50,7 @@ const Dashboard: React.FC = () => {
 
         loadDashboardData();
     }, [currentUser]);
-    
+
     const handleToggleWishlist = async (itemId: string) => {
         if (!currentUser) return;
         try {
@@ -76,12 +76,12 @@ const Dashboard: React.FC = () => {
         return items.map(item => {
             const owner = users.find(u => u.id === item.ownerId);
             return owner ? (
-                <DiscoveryItemCard 
-                    key={item.id} 
-                    item={item} 
-                    owner={owner} 
+                <DiscoveryItemCard
+                    key={item.id}
+                    item={item}
+                    owner={owner}
                     onClick={() => handleItemClick(owner.id)}
-                    isWishlisted={currentUser.wishlist.includes(item.id)}
+                    isWishlisted={(currentUser.wishlist || []).includes(item.id)}
                     onToggleWishlist={() => handleToggleWishlist(item.id)}
                 />
             ) : null;
@@ -97,11 +97,11 @@ const Dashboard: React.FC = () => {
                     </ItemCarousel>
 
                     <ItemCarousel title="Recommended For You">
-                         {renderCarouselItems(dashboardData.recommendedItems)}
+                        {renderCarouselItems(dashboardData.recommendedItems)}
                     </ItemCarousel>
-                    
+
                     <ItemCarousel title="From Top-Rated Traders">
-                         {renderCarouselItems(dashboardData.topTraderItems)}
+                        {renderCarouselItems(dashboardData.topTraderItems)}
                     </ItemCarousel>
                 </div>
             </div>

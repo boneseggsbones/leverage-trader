@@ -11,17 +11,17 @@ const port = 4000;
 
 // Create uploads directory if it doesn't exist
 const dir = './uploads';
-if (!fs.existsSync(dir)){
-    fs.mkdirSync(dir);
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir);
 }
 
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, './uploads')
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname)
-    }
+  destination: function (req, file, cb) {
+    cb(null, './uploads')
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname)
+  }
 });
 
 const upload = multer({ storage: storage });
@@ -99,7 +99,7 @@ app.post('/api/items', upload.single('image'), (req, res) => {
     return res.status(400).json({ error: 'name, description, and owner_id are required' });
   }
   const estimatedMarketValue = req.body.estimatedMarketValue ? parseInt(req.body.estimatedMarketValue, 10) : 0;
-  db.run('INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES (?, ?, ?, ?, ?)', [name, description, owner_id, estimatedMarketValue, imageUrl], function(this: sqlite3.RunResult, err: Error | null) {
+  db.run('INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES (?, ?, ?, ?, ?)', [name, description, owner_id, estimatedMarketValue, imageUrl], function (this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       console.error('Error inserting item:', err);
       res.status(500).json({ error: err.message });
@@ -135,7 +135,7 @@ app.put('/api/items/:id', upload.single('image'), (req, res) => {
   query += ' WHERE id = ?';
   params.push(req.params.id);
 
-  db.run(query, params, function(this: sqlite3.RunResult, err: Error | null) {
+  db.run(query, params, function (this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -146,7 +146,7 @@ app.put('/api/items/:id', upload.single('image'), (req, res) => {
 
 // Delete an item
 app.delete('/api/items/:id', (req, res) => {
-  db.run('DELETE FROM Item WHERE id = ?', [req.params.id], function(this: sqlite3.RunResult, err: Error | null) {
+  db.run('DELETE FROM Item WHERE id = ?', [req.params.id], function (this: sqlite3.RunResult, err: Error | null) {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -174,7 +174,7 @@ app.post('/api/users', (req, res) => {
   // Hash the password before storing
   const hashed = bcrypt.hashSync(String(password), 10);
 
-  db.run('INSERT INTO User (name, email, password, rating, avatarUrl, balance) VALUES (?, ?, ?, ?, ?, ?)', [name, email, hashed, 0, null, 0], function(err) {
+  db.run('INSERT INTO User (name, email, password, rating, avatarUrl, balance) VALUES (?, ?, ?, ?, ?, ?)', [name, email, hashed, 0, null, 0], function (err) {
     if (err) {
       if ((err as any).code === 'SQLITE_CONSTRAINT') return res.status(409).json({ error: 'Email already registered' });
       return res.status(500).json({ error: err.message });
@@ -200,7 +200,12 @@ app.post('/api/login', (req, res) => {
 
     db.all('SELECT * FROM Item WHERE owner_id = ?', [row.id], (err2: Error | null, items: any[]) => {
       if (err2) return res.status(500).json({ error: err2.message });
-      res.json({ ...(row as any), inventory: items });
+      // Fetch wishlist items for this user
+      db.all('SELECT itemId FROM Wishlist WHERE userId = ?', [row.id], (err3: Error | null, wishlistRows: any[]) => {
+        if (err3) return res.status(500).json({ error: err3.message });
+        const wishlist = wishlistRows.map((w: any) => w.itemId);
+        res.json({ ...(row as any), inventory: items, wishlist });
+      });
     });
   });
 });
@@ -273,7 +278,15 @@ app.get('/api/users/:id', (req, res) => {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.json({ ...row, inventory: items });
+      // Fetch wishlist items for this user
+      db.all('SELECT itemId FROM Wishlist WHERE userId = ?', [id], (err2: Error | null, wishlistRows: any[]) => {
+        if (err2) {
+          res.status(500).json({ error: err2.message });
+          return;
+        }
+        const wishlist = wishlistRows.map((w: any) => w.itemId);
+        res.json({ ...row, inventory: items, wishlist });
+      });
     });
   });
 });
@@ -336,7 +349,7 @@ app.post('/api/trades', (req, res) => {
       newTrade.receiverRated,
       newTrade.ratingDeadline,
     ],
-    function(err) {
+    function (err) {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
@@ -360,7 +373,7 @@ app.post('/api/trades', (req, res) => {
           }
 
           const user = { ...row, inventory: items };
-            res.json({ trade: newTrade, updatedProposer: user });
+          res.json({ trade: newTrade, updatedProposer: user });
         });
       });
     }
@@ -402,7 +415,7 @@ app.post('/api/trades/:id/cancel', (req, res) => {
     if (tradeRow.status !== 'PENDING_ACCEPTANCE') return res.status(400).json({ error: 'Can only cancel pending trades' });
 
     const updatedAt = new Date().toISOString();
-    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['CANCELLED', updatedAt, tradeId], function(err) {
+    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['CANCELLED', updatedAt, tradeId], function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: tradeId, status: 'CANCELLED' });
     });
@@ -428,7 +441,7 @@ app.post('/api/trades/:id/respond', (req, res) => {
 
     if (response === 'reject') {
       const updatedAt = new Date().toISOString();
-      db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['REJECTED', updatedAt, tradeId], function(err) {
+      db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['REJECTED', updatedAt, tradeId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         return res.json({ id: tradeId, status: 'REJECTED' });
       });
@@ -486,7 +499,7 @@ app.post('/api/trades/:id/submit-payment', (req, res) => {
     if (String(tradeRow.proposerId) !== String(userId) && String(tradeRow.receiverId) !== String(userId)) return res.status(403).json({ error: 'Not part of trade' });
 
     const updatedAt = new Date().toISOString();
-    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['SHIPPING_PENDING', updatedAt, tradeId], function(err) {
+    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['SHIPPING_PENDING', updatedAt, tradeId], function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: tradeId, status: 'SHIPPING_PENDING' });
     });
@@ -508,7 +521,7 @@ app.post('/api/trades/:id/submit-tracking', (req, res) => {
     const field = isProposer ? 'proposerSubmittedTracking' : 'receiverSubmittedTracking';
     const trackingField = isProposer ? 'proposerTrackingNumber' : 'receiverTrackingNumber';
 
-    db.run(`UPDATE trades SET ${field} = 1, ${trackingField} = ?, status = ?, updatedAt = ? WHERE id = ?`, [trackingNumber, 'IN_TRANSIT', updatedAt, tradeId], function(err) {
+    db.run(`UPDATE trades SET ${field} = 1, ${trackingField} = ?, status = ?, updatedAt = ? WHERE id = ?`, [trackingNumber, 'IN_TRANSIT', updatedAt, tradeId], function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: tradeId, status: 'IN_TRANSIT' });
     });
@@ -528,7 +541,7 @@ app.post('/api/trades/:id/verify', (req, res) => {
     const isProposer = String(tradeRow.proposerId) === String(userId);
     const field = isProposer ? 'proposerVerifiedSatisfaction' : 'receiverVerifiedSatisfaction';
 
-    db.run(`UPDATE trades SET ${field} = 1, updatedAt = ? WHERE id = ?`, [new Date().toISOString(), tradeId], function(err) {
+    db.run(`UPDATE trades SET ${field} = 1, updatedAt = ? WHERE id = ?`, [new Date().toISOString(), tradeId], function (err) {
       if (err) return res.status(500).json({ error: err.message });
 
       // Re-fetch trade to inspect both flags
@@ -574,13 +587,13 @@ app.post('/api/trades/:id/open-dispute', (req, res) => {
     const disputeId = `dispute-${tradeId}`;
     const now = new Date().toISOString();
     // Insert into DisputeTicket for traceability (trade_id may be integer in original schema, but we include reference in description)
-    db.run('INSERT INTO DisputeTicket (trade_id, dispute_type_id, description, status_id) VALUES (?, ?, ?, ?)', [null, null, statement, null], function(err2) {
+    db.run('INSERT INTO DisputeTicket (trade_id, dispute_type_id, description, status_id) VALUES (?, ?, ?, ?)', [null, null, statement, null], function (err2) {
       if (err2) {
         // don't fail entirely; continue to update trade
         console.error('Failed to insert DisputeTicket:', err2);
       }
 
-      db.run('UPDATE trades SET status = ?, disputeTicketId = ?, updatedAt = ? WHERE id = ?', ['DISPUTE_OPENED', disputeId, now, tradeId], function(err3) {
+      db.run('UPDATE trades SET status = ?, disputeTicketId = ?, updatedAt = ? WHERE id = ?', ['DISPUTE_OPENED', disputeId, now, tradeId], function (err3) {
         if (err3) return res.status(500).json({ error: err3.message });
         res.json({ id: tradeId, disputeTicketId: disputeId, status: 'DISPUTE_OPENED' });
       });
