@@ -150,12 +150,12 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
         <div className="fixed z-50 inset-0 overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={onClose}>
-                    <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+                    <div className="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
                 </div>
 
                 <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-                <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full" onClick={e => e.stopPropagation()}>
+                <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full" onClick={e => e.stopPropagation()}>
                     {/* Header */}
                     <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
                         <div className="flex justify-between items-start">
@@ -168,17 +168,17 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                     </div>
 
                     {loading ? (
-                        <div className="p-8 text-center text-gray-500">Loading valuation data...</div>
+                        <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading valuation data...</div>
                     ) : error && !valuationData ? (
                         <div className="p-8 text-center text-red-500">{error}</div>
                     ) : valuationData ? (
                         <>
                             {/* Current Value Summary */}
-                            <div className="bg-gray-50 px-6 py-4 border-b">
+                            <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 border-b dark:border-gray-600">
                                 <div className="flex justify-between items-center">
                                     <div>
-                                        <p className="text-sm text-gray-500">Current Estimated Value</p>
-                                        <p className="text-3xl font-bold text-gray-900">
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">Current Estimated Value</p>
+                                        <p className="text-3xl font-bold text-gray-900 dark:text-white">
                                             {formatCurrency(valuationData.item.current_emv_cents)}
                                         </p>
                                     </div>
@@ -189,7 +189,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                             size="md"
                                         />
                                         {valuationData.item.condition && (
-                                            <p className="text-sm text-gray-500 mt-2">
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                                                 Condition: <span className="font-medium">{valuationData.item.condition}</span>
                                             </p>
                                         )}
@@ -198,7 +198,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                             </div>
 
                             {/* Tabs */}
-                            <div className="border-b">
+                            <div className="border-b dark:border-gray-600">
                                 <nav className="flex">
                                     {[
                                         { key: 'overview', label: '📊 Overview' },
@@ -210,8 +210,8 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                             key={tab.key}
                                             onClick={() => setActiveTab(tab.key as TabType)}
                                             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key
-                                                ? 'border-blue-500 text-blue-600'
-                                                : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                                 }`}
                                         >
                                             {tab.label}

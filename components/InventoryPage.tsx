@@ -4,6 +4,7 @@ import ItemCard from './ItemCard.tsx';
 import AddItemModal from './AddItemModal.tsx';
 import EditItemModal from './EditItemModal.tsx';
 import ItemValuationModal from './ItemValuationModal.tsx';
+import { ItemCardSkeleton } from './Skeleton.tsx';
 import { Item } from '../types';
 import { fetchAllItems, fetchUser } from '../api/api';
 import { dollarsToCents } from '../utils/currency.ts';
@@ -113,7 +114,27 @@ const InventoryPage: React.FC = () => {
     if (!currentUser) return null;
 
     if (loading) {
-        return <div>Loading...</div>;
+        return (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-emerald-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm">
+                    <div className="animate-pulse flex items-start justify-between">
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-xl"></div>
+                            <div>
+                                <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-40 mb-2"></div>
+                                <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-64"></div>
+                            </div>
+                        </div>
+                        <div className="h-10 bg-gray-300 dark:bg-gray-600 rounded-xl w-28"></div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                        <ItemCardSkeleton key={i} />
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     return (

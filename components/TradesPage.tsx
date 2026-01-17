@@ -20,6 +20,7 @@ import TradeCard, { TradeTrackingData } from './TradeCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
 import DisputeModal from './DisputeModal.tsx';
 import CounterOfferModal from './CounterOfferModal.tsx';
+import { TradeCardSkeleton } from './Skeleton.tsx';
 
 const TradesPage: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -243,7 +244,26 @@ const TradesPage: React.FC = () => {
         </div>
     );
 
-    if (isLoading) return <div className="p-8 text-center">Loading trades...</div>;
+    if (isLoading) {
+        return (
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-amber-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm">
+                    <div className="animate-pulse flex items-start gap-4">
+                        <div className="flex-shrink-0 w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-xl"></div>
+                        <div className="flex-1">
+                            <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-40 mb-2"></div>
+                            <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+                <div className="space-y-4">
+                    {[1, 2, 3].map(i => (
+                        <TradeCardSkeleton key={i} />
+                    ))}
+                </div>
+            </div>
+        );
+    }
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
     return (

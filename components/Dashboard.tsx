@@ -7,11 +7,14 @@ import { fetchAllUsers, toggleWishlistItem, fetchDashboardData, fetchUser } from
 import { User, Item } from '../types.ts';
 import ItemCarousel from './ItemCarousel.tsx';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
+import { DiscoveryCardSkeleton } from './Skeleton.tsx';
+import OnboardingModal, { useOnboarding } from './OnboardingModal.tsx';
 
 const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
     const { addNotification } = useNotification();
+    const { showOnboarding, closeOnboarding } = useOnboarding();
 
     const [users, setUsers] = useState<User[]>([]);
     interface DashboardData {
@@ -68,7 +71,45 @@ const Dashboard: React.FC = () => {
         navigate(`/trade-desk/${itemOwnerId}`);
     };
 
-    if (isLoading) return <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading Discovery...</div>;
+    if (isLoading) {
+        return (
+            <div className="bg-white dark:bg-gray-900 transition-colors">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <div className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm">
+                        <div className="animate-pulse flex items-start gap-4">
+                            <div className="flex-shrink-0 w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-xl"></div>
+                            <div className="flex-1">
+                                <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-1/4 mb-2"></div>
+                                <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="space-y-12">
+                        <section>
+                            <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-40 mb-4"></div>
+                            <div className="flex space-x-6 overflow-x-auto pb-4">
+                                {[1, 2, 3, 4].map(i => (
+                                    <div key={i} className="flex-shrink-0 w-64">
+                                        <DiscoveryCardSkeleton />
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                        <section>
+                            <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-56 mb-4"></div>
+                            <div className="flex space-x-6 overflow-x-auto pb-4">
+                                {[1, 2, 3, 4].map(i => (
+                                    <div key={i} className="flex-shrink-0 w-64">
+                                        <DiscoveryCardSkeleton />
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
     if (!currentUser) return null;
 
@@ -121,6 +162,7 @@ const Dashboard: React.FC = () => {
                     </ItemCarousel>
                 </div>
             </div>
+            <OnboardingModal show={showOnboarding} onClose={closeOnboarding} />
         </div>
     );
 };

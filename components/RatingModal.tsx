@@ -58,70 +58,70 @@ const RatingModal: React.FC<RatingModalProps> = ({ isOpen, onClose, onSubmit, tr
     const isFormInvalid = overallScore === 0;
 
     return (
-        <div 
+        <div
             className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center"
             onClick={onClose}
         >
-            <div 
-                className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl m-4 transform transition-all"
+            <div
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl m-4 transform transition-all"
                 onClick={e => e.stopPropagation()}
             >
                 <form onSubmit={handleSubmit}>
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">Leave Feedback</h3>
-                    <p className="text-sm text-slate-500 mb-6">Your feedback will be hidden until the other party leaves theirs.</p>
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Leave Feedback</h3>
+                    <p className="text-sm text-slate-500 dark:text-gray-400 mb-6">Your feedback will be hidden until the other party leaves theirs.</p>
 
                     <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                         <div className="flex justify-between items-center">
-                            <label className="text-md font-medium text-gray-700">Overall Experience*</label>
+                            <label className="text-md font-medium text-gray-700 dark:text-gray-300">Overall Experience*</label>
                             <StarRating count={5} value={overallScore} onChange={setOverallScore} />
                         </div>
                         <div className="flex justify-between items-center">
-                            <label className="text-md font-medium text-gray-700">Item Accuracy</label>
+                            <label className="text-md font-medium text-gray-700 dark:text-gray-300">Item Accuracy</label>
                             <StarRating count={5} value={itemAccuracyScore} onChange={setItemAccuracyScore} />
                         </div>
                         <div className="flex justify-between items-center">
-                            <label className="text-md font-medium text-gray-700">Communication</label>
+                            <label className="text-md font-medium text-gray-700 dark:text-gray-300">Communication</label>
                             <StarRating count={5} value={communicationScore} onChange={setCommunicationScore} />
                         </div>
                         <div className="flex justify-between items-center">
-                            <label className="text-md font-medium text-gray-700">Shipping Speed</label>
+                            <label className="text-md font-medium text-gray-700 dark:text-gray-300">Shipping Speed</label>
                             <StarRating count={5} value={shippingSpeedScore} onChange={setShippingSpeedScore} />
                         </div>
 
                         <div>
-                            <label htmlFor="publicComment" className="block text-sm font-medium text-gray-700 mb-1">Public Comment (Optional)</label>
-                             <textarea 
+                            <label htmlFor="publicComment" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Public Comment (Optional)</label>
+                            <textarea
                                 id="publicComment"
                                 value={publicComment}
                                 onChange={e => setPublicComment(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                                className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:ring-2 focus:ring-blue-500"
                                 rows={3}
                                 placeholder="Describe your experience. This will be visible on the user's profile."
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="privateFeedback" className="block text-sm font-medium text-gray-700 mb-1">Private Feedback (Optional)</label>
-                             <textarea 
+                            <label htmlFor="privateFeedback" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Private Feedback (Optional)</label>
+                            <textarea
                                 id="privateFeedback"
                                 value={privateFeedback}
                                 onChange={e => setPrivateFeedback(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                                className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md focus:ring-2 focus:ring-blue-500"
                                 rows={2}
                                 placeholder="This feedback is only visible to Leverage moderators."
                             />
                         </div>
                     </div>
 
-                    <div className="flex justify-end gap-4 mt-8 pt-4 border-t border-gray-200">
-                        <button 
+                    <div className="flex justify-end gap-4 mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <button
                             type="button"
                             onClick={onClose}
-                            className="px-6 py-2 text-sm font-semibold text-slate-700 bg-slate-200 hover:bg-slate-300 rounded-md transition-colors"
+                            className="px-6 py-2 text-sm font-semibold text-slate-700 dark:text-white bg-slate-200 dark:bg-gray-600 hover:bg-slate-300 dark:hover:bg-gray-500 rounded-md transition-colors"
                         >
                             Cancel
                         </button>
-                        <button 
+                        <button
                             type="submit"
                             disabled={isFormInvalid || isSubmitting}
                             className="px-6 py-2 text-sm font-semibold text-white rounded-md transition-colors shadow-sm bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"

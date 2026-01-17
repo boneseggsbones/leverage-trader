@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { fetchAllUsers } from '../api/mockApi.ts';
 import { User } from '../types.ts';
+import { TraderCardSkeleton } from './Skeleton.tsx';
 
 const StartTradePage: React.FC = () => {
     const { currentUser } = useAuth();
@@ -23,7 +24,24 @@ const StartTradePage: React.FC = () => {
     }, [currentUser]);
 
     if (isLoading) {
-        return <div className="p-8 text-center text-gray-500">Loading users...</div>;
+        return (
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-cyan-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm">
+                    <div className="animate-pulse flex items-start gap-4">
+                        <div className="flex-shrink-0 w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-xl"></div>
+                        <div className="flex-1">
+                            <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-48 mb-2"></div>
+                            <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <TraderCardSkeleton key={i} />
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     return (
