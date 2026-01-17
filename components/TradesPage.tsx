@@ -12,12 +12,14 @@ import {
     submitPayment,
     submitTracking,
     verifySatisfaction,
-    openDispute
+    openDispute,
+    fetchTrackingStatus
 } from '../api/api.ts';
 import { Trade, User, Item, TradeStatus, DisputeType } from '../types.ts';
-import TradeCard from './TradeCard.tsx';
+import TradeCard, { TradeTrackingData } from './TradeCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
 import DisputeModal from './DisputeModal.tsx';
+import CounterOfferModal from './CounterOfferModal.tsx';
 
 const TradesPage: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -27,12 +29,14 @@ const TradesPage: React.FC = () => {
     const [trades, setTrades] = useState<Trade[]>([]);
     const [users, setUsers] = useState<Record<string, User>>({});
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
+    const [trackingData, setTrackingData] = useState<Record<string, TradeTrackingData>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const [actionTrade, setActionTrade] = useState<Trade | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
+    const [isCounterModalOpen, setIsCounterModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<'accept' | 'reject' | 'cancel' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -67,11 +71,39 @@ const TradesPage: React.FC = () => {
                 TradeStatus.DISPUTE_OPENED,
             ];
 
-            setTrades(
-                userTrades
-                    .filter(t => activeStatuses.includes(t.status))
-                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-            );
+            const activeTrades = userTrades
+                .filter(t => activeStatuses.includes(t.status))
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+            setTrades(activeTrades);
+
+            // Fetch tracking data for trades in shipping phase
+            const shippingStatuses = [TradeStatus.SHIPPING_PENDING, TradeStatus.IN_TRANSIT, TradeStatus.DELIVERED_AWAITING_VERIFICATION];
+            const shippingTrades = activeTrades.filter(t => shippingStatuses.includes(t.status));
+
+            if (shippingTrades.length > 0) {
+                const trackingResults = await Promise.all(
+                    shippingTrades.map(async (trade) => {
+                        try {
+                            const data = await fetchTrackingStatus(trade.id);
+                            return { tradeId: trade.id, data };
+                        } catch {
+                            return null;
+                        }
+                    })
+                );
+
+                const trackingMap: Record<string, TradeTrackingData> = {};
+                trackingResults.forEach(result => {
+                    if (result && result.data) {
+                        trackingMap[result.tradeId] = {
+                            proposer: result.data.proposer,
+                            receiver: result.data.receiver
+                        };
+                    }
+                });
+                setTrackingData(trackingMap);
+            }
         } catch (err) {
             // Log the real error for diagnostics (Playwright captures console)
             console.error('loadTrades error:', err);
@@ -165,7 +197,11 @@ const TradesPage: React.FC = () => {
         switch (trade.status) {
             case TradeStatus.PENDING_ACCEPTANCE:
                 if (isReceiver) return (
-                    <div className="flex gap-2"><button onClick={() => handleAction(trade, 'accept')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Accept</button><button onClick={() => handleAction(trade, 'reject')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded">Reject</button></div>
+                    <div className="flex gap-2">
+                        <button onClick={() => handleAction(trade, 'accept')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Accept</button>
+                        <button onClick={() => { setActionTrade(trade); setIsCounterModalOpen(true); }} className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded">Counter</button>
+                        <button onClick={() => handleAction(trade, 'reject')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded">Reject</button>
+                    </div>
                 );
                 if (isProposer) return <button onClick={() => handleAction(trade, 'cancel')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>;
                 return null;
@@ -197,7 +233,7 @@ const TradesPage: React.FC = () => {
                         const otherUser = users[otherUserId];
                         if (!otherUser || !currentUser) return null;
                         return (
-                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems}>
+                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]}>
                                 {renderActionButtons(trade)}
                             </TradeCard>
                         )
@@ -251,6 +287,18 @@ const TradesPage: React.FC = () => {
                     onSubmit={handleDisputeSubmit}
                     tradeId={actionTrade.id}
                     isSubmitting={isSubmitting}
+                />
+            )}
+
+            {actionTrade && currentUser && (
+                <CounterOfferModal
+                    isOpen={isCounterModalOpen}
+                    onClose={() => { setIsCounterModalOpen(false); setActionTrade(null); }}
+                    trade={actionTrade}
+                    currentUser={currentUser}
+                    otherUser={users[actionTrade.proposerId === currentUser.id ? actionTrade.receiverId : actionTrade.proposerId]}
+                    allItems={allItems}
+                    onCounterSubmitted={() => { loadTrades(); }}
                 />
             )}
         </div>
