@@ -118,11 +118,26 @@ const InventoryPage: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">Your Inventory</h1>
-                <button onClick={() => setShowAddItemModal(true)} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                    Add Item
-                </button>
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-emerald-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                            📦
+                        </div>
+                        <div>
+                            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                                Your Inventory
+                            </h1>
+                            <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                                Manage your collection here. Add items you're willing to trade, set valuations,
+                                and keep your inventory updated for potential swaps.
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowAddItemModal(true)} className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow-md transition-all duration-200 transform hover:scale-105">
+                        + Add Item
+                    </button>
+                </div>
             </div>
             <AddItemModal
                 show={showAddItemModal}

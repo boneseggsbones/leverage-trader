@@ -141,14 +141,29 @@ const TradeHistory: React.FC = () => {
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
             <div className="max-w-4xl mx-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800">Trade History</h1>
-                    <button
-                        onClick={() => navigate('/')}
-                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
-                    >
-                        Back to Dashboard
-                    </button>
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-purple-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                                📜
+                            </div>
+                            <div>
+                                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                                    Trade History
+                                </h1>
+                                <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                                    View your completed and past trades. Rate your trading partners,
+                                    review transaction details, and track your trading reputation.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-100 rounded-xl border border-gray-300 shadow-sm transition-colors"
+                        >
+                            ← Back
+                        </button>
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-md border border-gray-200">

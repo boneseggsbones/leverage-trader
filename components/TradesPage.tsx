@@ -90,7 +90,7 @@ const TradesPage: React.FC = () => {
         setConfirmAction(action);
         setIsConfirmModalOpen(true);
     };
-    
+
     const handleConfirm = async () => {
         if (!actionTrade || !confirmAction || !currentUser) return;
         setIsSubmitting(true);
@@ -111,7 +111,7 @@ const TradesPage: React.FC = () => {
             setIsSubmitting(false);
         }
     };
-    
+
     const handleDisputeSubmit = async (disputeType: DisputeType, statement: string) => {
         if (!actionTrade || !currentUser) return;
         setIsSubmitting(true);
@@ -176,17 +176,17 @@ const TradesPage: React.FC = () => {
                 if (!((isProposer && trade.proposerSubmittedTracking) || (isReceiver && trade.receiverSubmittedTracking))) return <button onClick={async () => { await submitTracking(trade.id, currentUser.id, `TRACK-${Date.now()}`); addNotification('Tracking submitted.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded">Add Tracking</button>;
                 return null;
             case TradeStatus.DELIVERED_AWAITING_VERIFICATION:
-                 if (!((isProposer && trade.proposerVerifiedSatisfaction) || (isReceiver && trade.receiverVerifiedSatisfaction))) return (
+                if (!((isProposer && trade.proposerVerifiedSatisfaction) || (isReceiver && trade.receiverVerifiedSatisfaction))) return (
                     <div className="flex gap-2"><button onClick={() => handleVerifySatisfaction(trade)} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Verify Items</button><button onClick={() => { setActionTrade(trade); setIsDisputeModalOpen(true); }} className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded">Open Dispute</button></div>
                 );
                 return null;
             default: return null;
         }
     };
-    
+
     const actionRequiredTrades = trades.filter(isActionRequired);
     const waitingTrades = trades.filter(t => !isActionRequired(t));
-    
+
     const TradeList: React.FC<{ title: string, tradeList: Trade[] }> = ({ title, tradeList }) => (
         <div>
             <h2 className="text-xl font-bold text-gray-700 mb-4">{title}</h2>
@@ -197,7 +197,7 @@ const TradesPage: React.FC = () => {
                         const otherUser = users[otherUserId];
                         if (!otherUser || !currentUser) return null;
                         return (
-                             <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems}>
+                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems}>
                                 {renderActionButtons(trade)}
                             </TradeCard>
                         )
@@ -212,12 +212,27 @@ const TradesPage: React.FC = () => {
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-8">Your Active Trades</h1>
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-amber-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                        🤝
+                    </div>
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                            Active Trades
+                        </h1>
+                        <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                            Review and manage your ongoing trades. Accept or counter incoming offers,
+                            submit payments, add tracking numbers, and verify received items.
+                        </p>
+                    </div>
+                </div>
+            </div>
             <div className="space-y-10">
                 <TradeList title="Action Required" tradeList={actionRequiredTrades} />
                 <TradeList title="Waiting for Other Party" tradeList={waitingTrades} />
             </div>
-            
+
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
                 onClose={() => setIsConfirmModalOpen(false)}
@@ -230,7 +245,7 @@ const TradesPage: React.FC = () => {
             </ConfirmationModal>
 
             {actionTrade && (
-                 <DisputeModal
+                <DisputeModal
                     isOpen={isDisputeModalOpen}
                     onClose={() => setIsDisputeModalOpen(false)}
                     onSubmit={handleDisputeSubmit}

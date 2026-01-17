@@ -40,6 +40,30 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
     const [linking, setLinking] = useState(false);
     const [linkMessage, setLinkMessage] = useState<string | null>(null);
 
+    // Debounced search effect - triggers 300ms after user stops typing
+    useEffect(() => {
+        if (searchQuery.length < 2) {
+            setSearchResults([]);
+            setSearching(false);
+            return;
+        }
+
+        setSearching(true);
+        const timeoutId = setTimeout(async () => {
+            try {
+                const result = await searchExternalProducts(searchQuery);
+                setSearchResults(result.products);
+            } catch (err) {
+                setLinkMessage('Search failed');
+                setSearchResults([]);
+            } finally {
+                setSearching(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery]);
+
     useEffect(() => {
         if (show && item) {
             loadData();
@@ -200,6 +224,18 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                             <div className="p-6 max-h-80 overflow-y-auto">
                                 {activeTab === 'overview' && (
                                     <div className="space-y-6">
+                                        {/* Tab Description */}
+                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                                            <span className="text-2xl">📊</span>
+                                            <div>
+                                                <h4 className="font-semibold text-gray-800">What's This Worth?</h4>
+                                                <p className="text-sm text-gray-600 mt-1">
+                                                    This shows how much your item is worth. We check online price guides and what
+                                                    other traders think. Click "Refresh from API" to get the latest prices.
+                                                </p>
+                                            </div>
+                                        </div>
+
                                         {/* API Valuations */}
                                         <div>
                                             <div className="flex justify-between items-center mb-2">
@@ -303,6 +339,17 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
 
                                 {activeTab === 'history' && similarPrices && (
                                     <div className="space-y-4">
+                                        {/* Tab Description */}
+                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
+                                            <span className="text-2xl">📈</span>
+                                            <div>
+                                                <h4 className="font-semibold text-gray-800">What Did Others Pay?</h4>
+                                                <p className="text-sm text-gray-600 mt-1">
+                                                    See what people actually paid for items like this one. This helps you know
+                                                    if a price is fair. More trades = more reliable pricing.
+                                                </p>
+                                            </div>
+                                        </div>
                                         {similarPrices.stats ? (
                                             <div className="bg-green-50 rounded-lg p-4">
                                                 <h4 className="text-sm font-semibold text-green-800 mb-2">Similar Items Traded</h4>
@@ -357,73 +404,59 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
 
                                 {activeTab === 'link' && (
                                     <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Search PriceCharting Catalog
-                                            </label>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={searchQuery}
-                                                    onChange={e => setSearchQuery(e.target.value)}
-                                                    placeholder="e.g. EarthBound SNES, Pokemon Red..."
-                                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    onKeyDown={async (e) => {
-                                                        if (e.key === 'Enter' && searchQuery.length >= 2) {
-                                                            e.preventDefault();
-                                                            setSearching(true);
-                                                            setLinkMessage(null);
-                                                            try {
-                                                                const result = await searchExternalProducts(searchQuery);
-                                                                setSearchResults(result.products);
-                                                            } catch (err) {
-                                                                setLinkMessage('Search failed');
-                                                            } finally {
-                                                                setSearching(false);
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    disabled={searching || searchQuery.length < 2}
-                                                    onClick={async () => {
-                                                        setSearching(true);
-                                                        setLinkMessage(null);
-                                                        try {
-                                                            const result = await searchExternalProducts(searchQuery);
-                                                            setSearchResults(result.products);
-                                                        } catch (err) {
-                                                            setLinkMessage('Search failed');
-                                                        } finally {
-                                                            setSearching(false);
-                                                        }
-                                                    }}
-                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
-                                                >
-                                                    {searching ? '...' : '🔍'}
-                                                </button>
+                                        {/* Tab Description */}
+                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-purple-50 to-violet-50 rounded-xl border border-purple-100">
+                                            <span className="text-2xl">🔗</span>
+                                            <div>
+                                                <h4 className="font-semibold text-gray-800">Get Auto-Updated Prices</h4>
+                                                <p className="text-sm text-gray-600 mt-1">
+                                                    <strong>How it works:</strong> Type the name of your item below. When you see a match,
+                                                    click "Link" and we'll automatically keep the price up-to-date for you!
+                                                </p>
                                             </div>
                                         </div>
 
-                                        {linkMessage && (
-                                            <p className={`text-sm ${linkMessage.includes('✓') ? 'text-green-600' : 'text-gray-600'}`}>
-                                                {linkMessage}
-                                            </p>
-                                        )}
+                                        <div className="relative">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Search PriceCharting Catalog
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={async (e) => {
+                                                        const query = e.target.value;
+                                                        setSearchQuery(query);
+                                                        setLinkMessage(null);
+                                                    }}
+                                                    placeholder="Start typing to search (e.g. EarthBound, Pokemon Red...)"
+                                                    className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                                                />
+                                                {/* Search status indicator */}
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                    {searching ? (
+                                                        // Animated spinner
+                                                        <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                    ) : searchQuery.length >= 2 ? (
+                                                        <span className="text-green-500 text-xl">✓</span>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xl">🔍</span>
+                                                    )}
+                                                </div>
+                                            </div>
 
-                                        {searchResults.length > 0 ? (
-                                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                                                <h4 className="text-sm font-semibold text-gray-700">
-                                                    Found {searchResults.length} products
-                                                </h4>
-                                                {searchResults.slice(0, 10).map(product => (
-                                                    <div key={product.id} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
-                                                        <div className="flex-1">
-                                                            <span className="font-medium text-gray-800">{product.name}</span>
-                                                            <span className="text-xs text-gray-500 block">{product.platform}</span>
-                                                        </div>
+                                            {/* Autocomplete dropdown */}
+                                            {searchResults.length > 0 && (
+                                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                                    <div className="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium">
+                                                        Found {searchResults.length} products
+                                                    </div>
+                                                    {searchResults.slice(0, 8).map(product => (
                                                         <button
+                                                            key={product.id}
                                                             type="button"
                                                             disabled={linking}
                                                             onClick={async () => {
@@ -438,8 +471,9 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                                         product.platform
                                                                     );
                                                                     if (result.success) {
-                                                                        setLinkMessage(`✓ Linked to ${product.name}! Refreshing...`);
+                                                                        setLinkMessage(`✓ Linked to ${product.name}!`);
                                                                         setSearchResults([]);
+                                                                        setSearchQuery('');
                                                                         loadData();
                                                                         if (onValuationUpdated) onValuationUpdated();
                                                                     } else {
@@ -451,23 +485,40 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                                     setLinking(false);
                                                                 }
                                                             }}
-                                                            className="ml-2 text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-full hover:bg-green-200 disabled:opacity-50"
+                                                            className="w-full flex justify-between items-center px-4 py-3 hover:bg-blue-50 transition-colors text-left border-b border-gray-100 last:border-0 disabled:opacity-50"
                                                         >
-                                                            {linking ? '...' : 'Link'}
+                                                            <div className="flex-1">
+                                                                <span className="font-medium text-gray-800">{product.name}</span>
+                                                                <span className="text-xs text-gray-500 block">{product.platform}</span>
+                                                            </div>
+                                                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-full font-medium">
+                                                                {linking ? '...' : 'Link'}
+                                                            </span>
                                                         </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : searchQuery.length >= 2 ? (
-                                            <div className="text-center py-8 text-gray-500">
-                                                <p className="text-4xl mb-2">🔍</p>
-                                                <p>Press Enter or click Search to find products</p>
-                                            </div>
-                                        ) : (
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {linkMessage && (
+                                            <p className={`text-sm ${linkMessage.includes('✓') ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
+                                                {linkMessage}
+                                            </p>
+                                        )}
+
+                                        {!searching && searchQuery.length < 2 && searchResults.length === 0 && (
                                             <div className="text-center py-8 text-gray-500">
                                                 <p className="text-4xl mb-2">🔗</p>
-                                                <p>Link this item to a PriceCharting product</p>
+                                                <p className="font-medium">Link this item to a PriceCharting product</p>
                                                 <p className="text-sm mt-1">for automated price updates</p>
+                                            </div>
+                                        )}
+
+                                        {!searching && searchQuery.length >= 2 && searchResults.length === 0 && !linkMessage && (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <p className="text-4xl mb-2">🤔</p>
+                                                <p className="font-medium">No products found for "{searchQuery}"</p>
+                                                <p className="text-sm mt-1">Try a different search term</p>
                                             </div>
                                         )}
                                     </div>
@@ -475,6 +526,18 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
 
                                 {activeTab === 'override' && (
                                     <form onSubmit={handleSubmitOverride} className="space-y-4">
+                                        {/* Tab Description */}
+                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-100">
+                                            <span className="text-2xl">✏️</span>
+                                            <div>
+                                                <h4 className="font-semibold text-gray-800">Think It's Worth More (or Less)?</h4>
+                                                <p className="text-sm text-gray-600 mt-1">
+                                                    <strong>How it works:</strong> Enter what you think this item is worth, pick a reason,
+                                                    and click Submit. Great for rare items or when the automatic price seems off.
+                                                </p>
+                                            </div>
+                                        </div>
+
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Your Valuation (USD)

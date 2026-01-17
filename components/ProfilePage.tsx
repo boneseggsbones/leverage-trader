@@ -56,26 +56,44 @@ const ProfilePage: React.FC = () => {
     if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Profile...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
     if (!profileUser) return <div className="p-8 text-center text-gray-500">User not found.</div>;
-    
+
     const isCurrentUserProfile = currentUser?.id === profileUser.id;
-    
+
     const accountAge = Math.floor((new Date().getTime() - new Date(profileUser.accountCreatedAt).getTime()) / (1000 * 60 * 60 * 24));
     const accountAgeString = accountAge > 30 ? `${Math.floor(accountAge / 30)} months` : `${accountAge} days`;
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-sky-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                        👤
+                    </div>
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                            {isCurrentUserProfile ? 'Your Profile' : `${profileUser.name}'s Profile`}
+                        </h1>
+                        <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                            {isCurrentUserProfile
+                                ? "View your trading stats, reputation, and trade-up journey. See how your collection has evolved over time."
+                                : `Check out ${profileUser.name}'s inventory and trading history. Start a trade to make an offer on their items.`
+                            }
+                        </p>
+                    </div>
+                </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Left Column: Profile Info */}
                 <div className="md:col-span-1">
                     <div className="p-6 bg-white rounded-lg border border-gray-200 text-center">
-                        <img 
-                            src={profileUser.profilePictureUrl} 
+                        <img
+                            src={profileUser.profilePictureUrl}
                             alt={profileUser.name}
                             className="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-gray-100"
                         />
                         <h1 className="text-2xl font-bold text-gray-800">{profileUser.name}</h1>
                         <p className="text-sm text-gray-500">{profileUser.city}, {profileUser.state}</p>
-                        
+
                         <div className="mt-6 text-left space-y-3">
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-gray-600">Reputation:</span>
@@ -85,19 +103,19 @@ const ProfilePage: React.FC = () => {
                                 <span className="text-gray-600">Completed Trades:</span>
                                 <span className="font-bold text-gray-800">{completedTrades.length}</span>
                             </div>
-                             <div className="flex justify-between items-center text-sm">
+                            <div className="flex justify-between items-center text-sm">
                                 <span className="text-gray-600">Member For:</span>
                                 <span className="font-bold text-gray-800">{accountAgeString}</span>
                             </div>
                         </div>
-                        
+
                         <div className="mt-6 pt-6 border-t border-gray-200 text-left">
                             <h3 className="text-sm font-semibold text-gray-500 mb-2">About Me</h3>
                             <p className="text-sm text-gray-700">{profileUser.aboutMe}</p>
                         </div>
 
                         {!isCurrentUserProfile && (
-                             <button 
+                            <button
                                 onClick={() => navigate(`/trade-desk/${profileUser.id}`)}
                                 className="mt-8 w-full px-4 py-2 text-md font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
                             >
@@ -114,8 +132,8 @@ const ProfilePage: React.FC = () => {
                         {profileUser.inventory.length > 0 ? (
                             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                                 {profileUser.inventory.map(item => (
-                                    <ItemCard 
-                                        key={item.id} 
+                                    <ItemCard
+                                        key={item.id}
                                         item={item}
                                     />
                                 ))}

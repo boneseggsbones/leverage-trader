@@ -26,7 +26,7 @@ const TradeDesk: React.FC = () => {
     const [currentUserItems, setCurrentUserItems] = useState<Item[]>([]);
     const [otherUserItems, setOtherUserItems] = useState<Item[]>([]);
     const [currentUserCash, setCurrentUserCash] = useState<number>(0); // This is in DOLLARS
-    
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -36,7 +36,7 @@ const TradeDesk: React.FC = () => {
             setIsLoading(false);
             return;
         }
-        
+
         const loadOtherUser = async () => {
             try {
                 const userId = parseInt(otherUserId, 10);
@@ -59,23 +59,23 @@ const TradeDesk: React.FC = () => {
 
         loadOtherUser();
     }, [otherUserId]);
-    
+
     if (!currentUser) {
         navigate('/');
         return null;
     }
-    
+
     const toggleItemSelection = (item: Item, party: 'current' | 'other') => {
         if (party === 'current') {
-            setCurrentUserItems(prev => 
-                prev.find(i => i.id === item.id) 
-                    ? prev.filter(i => i.id !== item.id) 
+            setCurrentUserItems(prev =>
+                prev.find(i => i.id === item.id)
+                    ? prev.filter(i => i.id !== item.id)
                     : [...prev, item]
             );
         } else {
-            setOtherUserItems(prev => 
-                prev.find(i => i.id === item.id) 
-                    ? prev.filter(i => i.id !== item.id) 
+            setOtherUserItems(prev =>
+                prev.find(i => i.id === item.id)
+                    ? prev.filter(i => i.id !== item.id)
                     : [...prev, item]
             );
         }
@@ -99,7 +99,7 @@ const TradeDesk: React.FC = () => {
                 otherUserItems.map(item => item.id),
                 dollarsToCents(currentUserCash) // Convert dollars to cents for API
             );
-            
+
             // Fix: Use authoritative user object from API response to update context
             updateUser(updatedProposer);
 
@@ -113,15 +113,15 @@ const TradeDesk: React.FC = () => {
             setIsModalOpen(false);
         }
     };
-    
+
     const renderInventory = (title: string, user: User, selectedItems: Item[], onSelect: (item: Item) => void) => (
         <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
             <h3 className="text-xl font-bold text-gray-700 mb-4">{title}</h3>
             {user.inventory.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                     {user.inventory.map(item => (
-                        <ItemCard 
-                            key={item.id} 
+                        <ItemCard
+                            key={item.id}
                             item={item}
                             onSelect={() => onSelect(item)}
                             isSelected={!!selectedItems.find(i => i.id === item.id)}
@@ -133,31 +133,43 @@ const TradeDesk: React.FC = () => {
             )}
         </div>
     );
-    
+
     if (isLoading) return <div className="p-8 text-center">Loading Trade Desk...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
     if (!otherUser) return <div className="p-8 text-center text-red-500">Could not load trade partner.</div>;
-    
+
     const currentUserCashInDollars = currentUser.balance / 100;
 
     return (
         <div className="p-4 sm:p-6 lg:p-8">
             <div className="max-w-7xl mx-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-800">Trade with {otherUser.name}</h1>
-                        <p className="text-slate-500 mt-1">Select items from both inventories and add cash to propose a trade.</p>
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-violet-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                                ⚖️
+                            </div>
+                            <div>
+                                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                                    Trade with {otherUser.name}
+                                </h1>
+                                <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                                    Select items from both inventories to propose a swap. You can also
+                                    add cash to balance the deal. Review values in real-time.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-100 rounded-xl border border-gray-300 shadow-sm transition-colors"
+                        >
+                            ← Cancel
+                        </button>
                     </div>
-                    <button
-                        onClick={() => navigate('/')}
-                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors self-start"
-                    >
-                        Cancel Trade
-                    </button>
                 </div>
 
                 <div className="space-y-8">
-                    <TradeBalancer 
+                    <TradeBalancer
                         currentUser={currentUser}
                         otherUser={otherUser}
                         currentUserItems={currentUserItems}
@@ -165,12 +177,12 @@ const TradeDesk: React.FC = () => {
                         currentUserCash={currentUserCash}
                         otherUserCash={0} // Assuming only current user adds cash in this UI
                     />
-                    
+
                     <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 space-y-4">
                         <h3 className="text-xl font-bold text-gray-700">Add Cash to Your Offer</h3>
                         <div className="flex items-center gap-4">
                             <span className="text-lg font-semibold text-gray-600">$</span>
-                            <input 
+                            <input
                                 type="number"
                                 value={currentUserCash}
                                 onChange={(e) => setCurrentUserCash(Math.max(0, parseInt(e.target.value) || 0))}
@@ -204,7 +216,7 @@ const TradeDesk: React.FC = () => {
                             disabled={isSubmitting || (currentUserItems.length === 0 && currentUserCash === 0)}
                             className="px-8 py-3 text-lg font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
                         >
-                           {isSubmitting ? "Submitting..." : "Propose Trade"}
+                            {isSubmitting ? "Submitting..." : "Propose Trade"}
                         </button>
                     </div>
                 </div>

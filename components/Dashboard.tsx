@@ -91,6 +91,22 @@ const Dashboard: React.FC = () => {
     return (
         <div className="bg-white">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                    <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                            🔍
+                        </div>
+                        <div>
+                            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                                Discover
+                            </h1>
+                            <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                                Browse items from traders in your area and find pieces that match your interests.
+                                Click any item to visit their trade desk and propose a swap.
+                            </p>
+                        </div>
+                    </div>
+                </div>
                 <div className="space-y-12">
                     <ItemCarousel title="Nearby Finds">
                         {renderCarouselItems(dashboardData.nearbyItems)}
