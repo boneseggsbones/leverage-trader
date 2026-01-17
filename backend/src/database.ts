@@ -141,6 +141,19 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_trade_ratings_trade ON trade_ratings(trade_id);
       CREATE INDEX IF NOT EXISTS idx_disputes_trade ON disputes(trade_id);
 
+      -- Escrow ledger for payment tracking
+      CREATE TABLE IF NOT EXISTS escrow_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('HOLD', 'RELEASE', 'REFUND')),
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES User(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_escrow_trade ON escrow_ledger(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_escrow_user ON escrow_ledger(user_id);
+
       CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT

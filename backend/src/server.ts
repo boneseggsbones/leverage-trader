@@ -495,7 +495,7 @@ app.post('/api/trades/:id/respond', (req, res) => {
   });
 });
 
-// Submit payment for a trade (moves trade to shipping pending)
+// Submit payment for a trade (holds funds in escrow)
 app.post('/api/trades/:id/submit-payment', (req, res) => {
   const tradeId = req.params.id;
   const { userId } = req.body;
@@ -506,13 +506,89 @@ app.post('/api/trades/:id/submit-payment', (req, res) => {
     if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
 
     // Only allow proposer/receiver involved
-    if (String(tradeRow.proposerId) !== String(userId) && String(tradeRow.receiverId) !== String(userId)) return res.status(403).json({ error: 'Not part of trade' });
+    const isProposer = String(tradeRow.proposerId) === String(userId);
+    const isReceiver = String(tradeRow.receiverId) === String(userId);
+    if (!isProposer && !isReceiver) return res.status(403).json({ error: 'Not part of trade' });
 
-    const updatedAt = new Date().toISOString();
-    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['SHIPPING_PENDING', updatedAt, tradeId], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: tradeId, status: 'SHIPPING_PENDING' });
-    });
+    // Determine how much this user needs to pay
+    const amountToPay = isProposer ? tradeRow.proposerCash : tradeRow.receiverCash;
+
+    // Check if user already paid (check escrow ledger)
+    db.get('SELECT id FROM escrow_ledger WHERE trade_id = ? AND user_id = ? AND type = ?',
+      [tradeId, userId, 'HOLD'], (err2: Error | null, existingHold: any) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        if (existingHold) return res.status(400).json({ error: 'Payment already submitted' });
+
+        // Get user's current balance
+        db.get('SELECT id, balance FROM User WHERE id = ?', [userId], (err3: Error | null, user: any) => {
+          if (err3) return res.status(500).json({ error: err3.message });
+          if (!user) return res.status(404).json({ error: 'User not found' });
+
+          // If user needs to pay, verify they have enough balance
+          if (amountToPay > 0 && user.balance < amountToPay) {
+            return res.status(400).json({
+              error: 'Insufficient balance',
+              required: amountToPay,
+              available: user.balance
+            });
+          }
+
+          const now = new Date().toISOString();
+
+          // If there's cash to hold, deduct from user and create ledger entry
+          const holdFunds = (callback: () => void) => {
+            if (amountToPay > 0) {
+              db.run('UPDATE User SET balance = balance - ? WHERE id = ?', [amountToPay, userId], (err4: Error | null) => {
+                if (err4) return res.status(500).json({ error: err4.message });
+
+                db.run('INSERT INTO escrow_ledger (trade_id, user_id, amount_cents, type) VALUES (?, ?, ?, ?)',
+                  [tradeId, userId, amountToPay, 'HOLD'], (err5: Error | null) => {
+                    if (err5) return res.status(500).json({ error: err5.message });
+                    callback();
+                  });
+              });
+            } else {
+              // No cash to hold, just record a zero hold
+              db.run('INSERT INTO escrow_ledger (trade_id, user_id, amount_cents, type) VALUES (?, ?, ?, ?)',
+                [tradeId, userId, 0, 'HOLD'], (err5: Error | null) => {
+                  if (err5) return res.status(500).json({ error: err5.message });
+                  callback();
+                });
+            }
+          };
+
+          holdFunds(() => {
+            // Check if both parties have now paid
+            db.all('SELECT user_id FROM escrow_ledger WHERE trade_id = ? AND type = ?',
+              [tradeId, 'HOLD'], (err6: Error | null, holds: any[]) => {
+                if (err6) return res.status(500).json({ error: err6.message });
+
+                const paidUserIds = holds.map(h => String(h.user_id));
+                const proposerPaid = paidUserIds.includes(String(tradeRow.proposerId));
+                const receiverPaid = paidUserIds.includes(String(tradeRow.receiverId));
+                const bothPaid = proposerPaid && receiverPaid;
+
+                // Set status based on payment state
+                let newStatus = 'PAYMENT_PENDING';
+                if (bothPaid) {
+                  newStatus = 'SHIPPING_PENDING'; // Skip ESCROW_FUNDED, go straight to shipping
+                }
+
+                db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?',
+                  [newStatus, now, tradeId], (err7: Error | null) => {
+                    if (err7) return res.status(500).json({ error: err7.message });
+
+                    res.json({
+                      id: tradeId,
+                      status: newStatus,
+                      amountHeld: amountToPay,
+                      bothPaid
+                    });
+                  });
+              });
+          });
+        });
+      });
   });
 });
 
@@ -704,6 +780,28 @@ app.post('/api/trades/:id/rate', (req, res) => {
               // Mark trade as fully completed
               db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COMPLETED', now, tradeId]);
 
+              // Release escrow funds - transfer to recipients
+              // Proposer's cash goes to receiver, receiver's cash goes to proposer
+              db.all('SELECT * FROM escrow_ledger WHERE trade_id = ? AND type = ?', [tradeId, 'HOLD'], (escErr: Error | null, holds: any[]) => {
+                if (!escErr && holds) {
+                  holds.forEach(hold => {
+                    if (hold.amount_cents > 0) {
+                      // Determine recipient (the other party)
+                      const recipientId = String(hold.user_id) === String(tradeRow.proposerId)
+                        ? tradeRow.receiverId
+                        : tradeRow.proposerId;
+
+                      // Add to recipient's balance
+                      db.run('UPDATE User SET balance = balance + ? WHERE id = ?', [hold.amount_cents, recipientId]);
+
+                      // Create RELEASE ledger entry
+                      db.run('INSERT INTO escrow_ledger (trade_id, user_id, amount_cents, type) VALUES (?, ?, ?, ?)',
+                        [tradeId, recipientId, hold.amount_cents, 'RELEASE']);
+                    }
+                  });
+                }
+              });
+
               // Reveal ratings
               db.run('UPDATE trade_ratings SET is_revealed = 1 WHERE trade_id = ?', [tradeId]);
 
@@ -852,6 +950,48 @@ app.post('/api/disputes/:id/resolve', (req, res) => {
     db.run(`UPDATE disputes SET resolution = ?, resolution_notes = ?, status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?`,
       [resolution, resolverNotes || null, now, now, disputeId], (err2: Error | null) => {
         if (err2) return res.status(500).json({ error: err2.message });
+
+        // Handle escrow based on resolution
+        const tradeId = dispute.trade_id;
+
+        if (resolution === 'FULL_REFUND' || resolution === 'TRADE_REVERSAL') {
+          // Refund held funds to original payers
+          db.all('SELECT * FROM escrow_ledger WHERE trade_id = ? AND type = ?', [tradeId, 'HOLD'], (escErr: Error | null, holds: any[]) => {
+            if (!escErr && holds) {
+              holds.forEach(hold => {
+                if (hold.amount_cents > 0) {
+                  // Return to original payer
+                  db.run('UPDATE User SET balance = balance + ? WHERE id = ?', [hold.amount_cents, hold.user_id]);
+
+                  // Create REFUND ledger entry
+                  db.run('INSERT INTO escrow_ledger (trade_id, user_id, amount_cents, type) VALUES (?, ?, ?, ?)',
+                    [tradeId, hold.user_id, hold.amount_cents, 'REFUND']);
+                }
+              });
+            }
+          });
+        } else if (resolution === 'TRADE_UPHELD' || resolution === 'MUTUALLY_RESOLVED') {
+          // Release to recipients as normal trade completion
+          db.all('SELECT * FROM escrow_ledger WHERE trade_id = ? AND type = ?', [tradeId, 'HOLD'], (escErr: Error | null, holds: any[]) => {
+            if (!escErr && holds) {
+              db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (trErr: Error | null, trade: any) => {
+                if (!trErr && trade) {
+                  holds.forEach(hold => {
+                    if (hold.amount_cents > 0) {
+                      const recipientId = String(hold.user_id) === String(trade.proposerId)
+                        ? trade.receiverId
+                        : trade.proposerId;
+
+                      db.run('UPDATE User SET balance = balance + ? WHERE id = ?', [hold.amount_cents, recipientId]);
+                      db.run('INSERT INTO escrow_ledger (trade_id, user_id, amount_cents, type) VALUES (?, ?, ?, ?)',
+                        [tradeId, recipientId, hold.amount_cents, 'RELEASE']);
+                    }
+                  });
+                }
+              });
+            }
+          });
+        }
 
         // Update the associated trade status
         db.run(`UPDATE trades SET status = 'DISPUTE_RESOLVED', updatedAt = ? WHERE disputeTicketId = ?`,
