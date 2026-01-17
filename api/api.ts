@@ -544,3 +544,35 @@ export const resolveDispute = async (
     }
     return response.json();
 };
+
+// =====================================================
+// SHIPPING TRACKING
+// =====================================================
+
+export interface TrackingInfo {
+    trackingNumber: string;
+    carrier: string;
+    status: string;
+    statusDetail: string | null;
+    location: string | null;
+    estimatedDelivery: string | null;
+    deliveredAt: string | null;
+    lastUpdated: string;
+}
+
+export interface TrackingData {
+    tradeId: string;
+    tradeStatus: string;
+    proposer: TrackingInfo | null;
+    receiver: TrackingInfo | null;
+    bothSubmitted: boolean;
+    bothDelivered: boolean;
+}
+
+export const fetchTrackingStatus = async (tradeId: string): Promise<TrackingData> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/tracking`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch tracking status');
+    }
+    return response.json();
+};

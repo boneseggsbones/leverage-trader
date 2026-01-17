@@ -8,6 +8,7 @@ import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured } from './pricingService';
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
+import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
 
 const app = express();
 const port = 4000;
@@ -593,25 +594,73 @@ app.post('/api/trades/:id/submit-payment', (req, res) => {
 });
 
 // Submit tracking number for a trade
-app.post('/api/trades/:id/submit-tracking', (req, res) => {
+app.post('/api/trades/:id/submit-tracking', async (req, res) => {
   const tradeId = req.params.id;
   const { userId, trackingNumber } = req.body;
   if (!tradeId || !userId || !trackingNumber) return res.status(400).json({ error: 'tradeId, userId and trackingNumber are required' });
 
-  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], async (err, tradeRow: any) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
 
     const updatedAt = new Date().toISOString();
     const isProposer = String(tradeRow.proposerId) === String(userId);
+    const isReceiver = String(tradeRow.receiverId) === String(userId);
+
+    if (!isProposer && !isReceiver) {
+      return res.status(403).json({ error: 'Not part of trade' });
+    }
+
     const field = isProposer ? 'proposerSubmittedTracking' : 'receiverSubmittedTracking';
     const trackingField = isProposer ? 'proposerTrackingNumber' : 'receiverTrackingNumber';
 
-    db.run(`UPDATE trades SET ${field} = 1, ${trackingField} = ?, status = ?, updatedAt = ? WHERE id = ?`, [trackingNumber, 'IN_TRANSIT', updatedAt, tradeId], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: tradeId, status: 'IN_TRANSIT' });
-    });
+    try {
+      // Create tracking record with carrier detection
+      const trackingInfo = await createTrackingRecord(tradeId, parseInt(userId), trackingNumber);
+
+      // Update trade with tracking number
+      db.run(`UPDATE trades SET ${field} = 1, ${trackingField} = ?, status = ?, updatedAt = ? WHERE id = ?`,
+        [trackingNumber, 'IN_TRANSIT', updatedAt, tradeId], function (err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+
+          res.json({
+            id: tradeId,
+            status: 'IN_TRANSIT',
+            tracking: trackingInfo
+          });
+        });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
   });
+});
+
+// Get tracking status for a trade
+app.get('/api/trades/:id/tracking', async (req, res) => {
+  const tradeId = req.params.id;
+
+  try {
+    const tracking = await getTrackingForTrade(tradeId);
+
+    // Get trade info for context
+    db.get('SELECT proposerTrackingNumber, receiverTrackingNumber, status FROM trades WHERE id = ?',
+      [tradeId], (err: Error | null, trade: any) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!trade) return res.status(404).json({ error: 'Trade not found' });
+
+        res.json({
+          tradeId,
+          tradeStatus: trade.status,
+          proposer: tracking.proposerTracking,
+          receiver: tracking.receiverTracking,
+          bothSubmitted: !!(trade.proposerTrackingNumber && trade.receiverTrackingNumber),
+          bothDelivered: tracking.proposerTracking?.status === 'DELIVERED' &&
+            tracking.receiverTracking?.status === 'DELIVERED'
+        });
+      });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // Verify satisfaction for a trade (marks verifier; when both verified, set status and rating deadline)

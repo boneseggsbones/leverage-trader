@@ -154,6 +154,25 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_escrow_trade ON escrow_ledger(trade_id);
       CREATE INDEX IF NOT EXISTS idx_escrow_user ON escrow_ledger(user_id);
 
+      -- Shipment tracking for delivery status
+      CREATE TABLE IF NOT EXISTS shipment_tracking (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        tracking_number TEXT NOT NULL,
+        carrier TEXT,
+        status TEXT DEFAULT 'LABEL_CREATED',
+        status_detail TEXT,
+        location TEXT,
+        estimated_delivery TEXT,
+        delivered_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        last_updated TEXT DEFAULT (datetime('now')),
+        UNIQUE(trade_id, user_id),
+        FOREIGN KEY (user_id) REFERENCES User(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shipment_trade ON shipment_tracking(trade_id);
+
       CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT
