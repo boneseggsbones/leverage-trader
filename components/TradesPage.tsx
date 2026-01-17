@@ -225,7 +225,7 @@ const TradesPage: React.FC = () => {
 
     const TradeList: React.FC<{ title: string, tradeList: Trade[] }> = ({ title, tradeList }) => (
         <div>
-            <h2 className="text-xl font-bold text-gray-700 mb-4">{title}</h2>
+            <h2 className="text-xl font-bold text-gray-700 dark:text-white mb-4">{title}</h2>
             {tradeList.length > 0 ? (
                 <div className="space-y-4">
                     {tradeList.map(trade => {
@@ -239,7 +239,7 @@ const TradesPage: React.FC = () => {
                         )
                     })}
                 </div>
-            ) : <p className="text-gray-500 text-sm">No trades in this category.</p>}
+            ) : <p className="text-gray-500 dark:text-gray-400 text-sm">No trades in this category.</p>}
         </div>
     );
 
@@ -248,16 +248,16 @@ const TradesPage: React.FC = () => {
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="mb-8 bg-gradient-to-r from-slate-50 to-amber-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-amber-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm transition-colors">
                 <div className="flex items-start gap-4">
                     <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
                         🤝
                     </div>
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
                             Active Trades
                         </h1>
-                        <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                        <p className="mt-2 text-slate-600 dark:text-gray-300 leading-relaxed max-w-2xl">
                             Review and manage your ongoing trades. Accept or counter incoming offers,
                             submit payments, add tracking numbers, and verify received items.
                         </p>

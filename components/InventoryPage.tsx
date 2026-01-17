@@ -118,17 +118,17 @@ const InventoryPage: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="mb-8 bg-gradient-to-r from-slate-50 to-emerald-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-emerald-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm transition-colors">
                 <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                         <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
                             📦
                         </div>
                         <div>
-                            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
                                 Your Inventory
                             </h1>
-                            <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                            <p className="mt-2 text-slate-600 dark:text-gray-300 leading-relaxed max-w-2xl">
                                 Manage your collection here. Add items you're willing to trade, set valuations,
                                 and keep your inventory updated for potential swaps.
                             </p>

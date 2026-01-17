@@ -68,7 +68,7 @@ const Dashboard: React.FC = () => {
         navigate(`/trade-desk/${itemOwnerId}`);
     };
 
-    if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Discovery...</div>;
+    if (isLoading) return <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading Discovery...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
     if (!currentUser) return null;
 
@@ -89,18 +89,18 @@ const Dashboard: React.FC = () => {
     };
 
     return (
-        <div className="bg-white">
+        <div className="bg-white dark:bg-gray-900 transition-colors">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <div className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm transition-colors">
                     <div className="flex items-start gap-4">
                         <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
                             🔍
                         </div>
                         <div>
-                            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
                                 Discover
                             </h1>
-                            <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                            <p className="mt-2 text-slate-600 dark:text-gray-300 leading-relaxed max-w-2xl">
                                 Browse items from traders in your area and find pieces that match your interests.
                                 Click any item to visit their trade desk and propose a swap.
                             </p>

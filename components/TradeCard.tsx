@@ -44,10 +44,10 @@ const CompactItem: React.FC<{ item: Item }> = ({ item }) => {
 
     return (
         <div className="flex items-center gap-2">
-            <img src={imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover border" />
+            <img src={imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover border dark:border-gray-600" />
             <div>
-                <p className="text-xs font-semibold text-gray-700 leading-tight">{item.name}</p>
-                <p className="text-xs text-gray-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 leading-tight">{item.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
             </div>
         </div>
     );
@@ -114,7 +114,7 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
 
     const OfferColumn: React.FC<{ title: string, items: Item[], cash: number }> = ({ title, items, cash }) => (
         <div className="flex-1">
-            <h4 className="text-sm font-bold text-gray-600 mb-2">{title}</h4>
+            <h4 className="text-sm font-bold text-gray-600 dark:text-gray-300 mb-2">{title}</h4>
             <div className="space-y-2">
                 {items.length === 0 && cash === 0 ? (
                     <p className="text-xs text-gray-400 italic">Nothing offered</p>
@@ -129,11 +129,11 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     );
 
     return (
-        <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+        <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 transition-colors">
             <div className="flex justify-between items-start mb-3">
                 <div>
-                    <p className="font-semibold text-gray-800">Trade with {otherUser.name}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-semibold text-gray-800 dark:text-white">Trade with {otherUser.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                         {wasProposer ? "You proposed" : `${otherUser.name} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
                     </p>
                 </div>

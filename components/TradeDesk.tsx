@@ -115,8 +115,8 @@ const TradeDesk: React.FC = () => {
     };
 
     const renderInventory = (title: string, user: User, selectedItems: Item[], onSelect: (item: Item) => void) => (
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-            <h3 className="text-xl font-bold text-gray-700 mb-4">{title}</h3>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 transition-colors">
+            <h3 className="text-xl font-bold text-gray-700 dark:text-white mb-4">{title}</h3>
             {user.inventory.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                     {user.inventory.map(item => (
@@ -178,10 +178,10 @@ const TradeDesk: React.FC = () => {
                         otherUserCash={0} // Assuming only current user adds cash in this UI
                     />
 
-                    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 space-y-4">
-                        <h3 className="text-xl font-bold text-gray-700">Add Cash to Your Offer</h3>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 space-y-4 transition-colors">
+                        <h3 className="text-xl font-bold text-gray-700 dark:text-white">Add Cash to Your Offer</h3>
                         <div className="flex items-center gap-4">
-                            <span className="text-lg font-semibold text-gray-600">$</span>
+                            <span className="text-lg font-semibold text-gray-600 dark:text-gray-300">$</span>
                             <input
                                 type="number"
                                 value={currentUserCash}

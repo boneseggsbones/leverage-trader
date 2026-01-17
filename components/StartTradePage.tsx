@@ -28,16 +28,16 @@ const StartTradePage: React.FC = () => {
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="mb-8 bg-gradient-to-r from-slate-50 to-cyan-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-cyan-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm transition-colors">
                 <div className="flex items-start gap-4">
                     <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
                         🚀
                     </div>
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
                             Start a New Trade
                         </h1>
-                        <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
+                        <p className="mt-2 text-slate-600 dark:text-gray-300 leading-relaxed max-w-2xl">
                             Select a trader from the list below to open their Trade Desk.
                             From there you can browse their inventory and craft your offer.
                         </p>
@@ -48,11 +48,11 @@ const StartTradePage: React.FC = () => {
                 {users.map(user => (
                     <div
                         key={user.id}
-                        className="p-6 bg-white rounded-xl border border-gray-200 flex flex-col"
+                        className="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col transition-colors"
                     >
                         <div className="flex-grow">
-                            <button onClick={(e) => { e.stopPropagation(); navigate(`/profile/${user.id}`) }} className="text-xl font-bold text-gray-800 hover:underline">{user.name}</button>
-                            <div className="mt-4 space-y-2 text-sm text-gray-600">
+                            <button onClick={(e) => { e.stopPropagation(); navigate(`/profile/${user.id}`) }} className="text-xl font-bold text-gray-800 dark:text-white hover:underline">{user.name}</button>
+                            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
                                 <div className="flex justify-between">
                                     <span>Items:</span>
                                     <span className="font-semibold">{user.inventory.length}</span>

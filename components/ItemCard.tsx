@@ -22,17 +22,17 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
 
     const cardClasses = `
         border-2 rounded-lg p-2 flex flex-col items-center text-center cursor-pointer transition-all duration-200
-        ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-lg'}
+        ${isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900 shadow-md' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-lg'}
         ${isCompact ? 'p-1' : 'p-2'}
     `;
 
     if (isCompact) {
         return (
-            <div className="flex items-center gap-3 bg-white p-2 rounded-md shadow-sm border border-gray-200">
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-2 rounded-md shadow-sm border border-gray-200 dark:border-gray-700">
                 <img src={imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
                 <div>
-                    <p className="font-semibold text-sm text-gray-800">{item.name}</p>
-                    <p className="text-xs text-slate-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
+                    <p className="font-semibold text-sm text-gray-800 dark:text-white">{item.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
                 </div>
             </div>
         )
@@ -40,11 +40,11 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
 
     return (
         <div className={cardClasses} onClick={onSelect}>
-            <div className="w-full h-24 bg-gray-100 rounded-md mb-2 overflow-hidden">
+            <div className="w-full h-24 bg-gray-100 dark:bg-gray-700 rounded-md mb-2 overflow-hidden">
                 <img src={imageUrl} alt={item.name} className="w-full h-full object-cover" />
             </div>
-            <h4 className="font-bold text-sm text-gray-800 truncate w-full">{item.name}</h4>
-            <p className="text-xs text-slate-500">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
+            <h4 className="font-bold text-sm text-gray-800 dark:text-white truncate w-full">{item.name}</h4>
+            <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
 
             {/* Valuation Badge */}
             <div className="mt-1">
@@ -55,13 +55,13 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
                 {onViewValuation && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onViewValuation(); }}
-                        className="text-xs text-indigo-600 hover:underline font-medium"
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
                     >
                         💰 Value
                     </button>
                 )}
-                <button onClick={(e) => { e.stopPropagation(); onEdit?.(); }} className="text-xs text-blue-500 hover:underline">Edit</button>
-                <button onClick={(e) => { e.stopPropagation(); onDelete?.(); }} className="text-xs text-red-500 hover:underline">Delete</button>
+                <button onClick={(e) => { e.stopPropagation(); onEdit?.(); }} className="text-xs text-blue-500 dark:text-blue-400 hover:underline">Edit</button>
+                <button onClick={(e) => { e.stopPropagation(); onDelete?.(); }} className="text-xs text-red-500 dark:text-red-400 hover:underline">Delete</button>
             </div>
         </div>
     );
