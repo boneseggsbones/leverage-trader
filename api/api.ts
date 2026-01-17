@@ -576,3 +576,45 @@ export const fetchTrackingStatus = async (tradeId: string): Promise<TrackingData
     }
     return response.json();
 };
+
+// =====================================================
+// COUNTER-OFFERS
+// =====================================================
+
+export interface CounterOfferData {
+    proposerItemIds?: string[];
+    receiverItemIds?: string[];
+    proposerCash?: number;
+    receiverCash?: number;
+    message?: string;
+}
+
+export interface CounterOfferResult {
+    originalTradeId: string;
+    originalStatus: string;
+    counterTrade: {
+        id: string;
+        status: string;
+        proposerId: string;
+        receiverId: string;
+        parentTradeId: string;
+        message: string | null;
+    };
+}
+
+export const submitCounterOffer = async (
+    tradeId: string,
+    userId: string | number,
+    counterData: CounterOfferData
+): Promise<CounterOfferResult> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/counter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, ...counterData }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to submit counter-offer: ${text}`);
+    }
+    return response.json();
+};

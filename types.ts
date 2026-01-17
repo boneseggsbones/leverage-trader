@@ -165,6 +165,8 @@ export interface Trade {
     proposerRated: boolean;
     receiverRated: boolean;
     ratingDeadline: string | null;
+    parentTradeId: string | null;
+    counterMessage: string | null;
 }
 
 export enum TradeStatus {
@@ -172,6 +174,7 @@ export enum TradeStatus {
     ACCEPTED = 'ACCEPTED',
     REJECTED = 'REJECTED',
     CANCELLED = 'CANCELLED',
+    COUNTERED = 'COUNTERED',
     PAYMENT_PENDING = 'PAYMENT_PENDING',
     ESCROW_FUNDED = 'ESCROW_FUNDED',
     SHIPPING_PENDING = 'SHIPPING_PENDING',

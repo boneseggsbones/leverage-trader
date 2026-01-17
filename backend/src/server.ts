@@ -496,6 +496,98 @@ app.post('/api/trades/:id/respond', (req, res) => {
   });
 });
 
+// Counter a trade with modified terms
+app.post('/api/trades/:id/counter', (req, res) => {
+  const originalTradeId = req.params.id;
+  const { userId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, message } = req.body;
+
+  if (!originalTradeId || !userId) {
+    return res.status(400).json({ error: 'originalTradeId and userId are required' });
+  }
+
+  db.get('SELECT * FROM trades WHERE id = ?', [originalTradeId], (err: Error | null, originalTrade: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!originalTrade) return res.status(404).json({ error: 'Trade not found' });
+
+    // Only the receiver can counter
+    if (String(originalTrade.receiverId) !== String(userId)) {
+      return res.status(403).json({ error: 'Only the receiver can counter a trade' });
+    }
+
+    // Trade must be pending
+    if (originalTrade.status !== 'PENDING_ACCEPTANCE') {
+      return res.status(400).json({ error: 'Can only counter pending trades' });
+    }
+
+    const now = new Date().toISOString();
+    const counterTradeId = `trade-${Date.now()}`;
+
+    // Mark original trade as countered
+    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COUNTERED', now, originalTradeId], (err2: Error | null) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      // Create new counter trade (swap proposer/receiver)
+      const counterTrade = {
+        id: counterTradeId,
+        proposerId: originalTrade.receiverId,  // Receiver becomes proposer
+        receiverId: originalTrade.proposerId,  // Proposer becomes receiver
+        proposerItemIds: JSON.stringify(proposerItemIds || []),
+        receiverItemIds: JSON.stringify(receiverItemIds || []),
+        proposerCash: proposerCash || 0,
+        receiverCash: receiverCash || 0,
+        status: 'PENDING_ACCEPTANCE',
+        createdAt: now,
+        updatedAt: now,
+        disputeTicketId: null,
+        proposerSubmittedTracking: 0,
+        receiverSubmittedTracking: 0,
+        proposerTrackingNumber: null,
+        receiverTrackingNumber: null,
+        proposerVerifiedSatisfaction: 0,
+        receiverVerifiedSatisfaction: 0,
+        proposerRated: 0,
+        receiverRated: 0,
+        ratingDeadline: null,
+        parentTradeId: originalTradeId,
+        counterMessage: message || null
+      };
+
+      db.run(
+        `INSERT INTO trades (id, proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, status, createdAt, updatedAt, disputeTicketId, proposerSubmittedTracking, receiverSubmittedTracking, proposerTrackingNumber, receiverTrackingNumber, proposerVerifiedSatisfaction, receiverVerifiedSatisfaction, proposerRated, receiverRated, ratingDeadline, parentTradeId, counterMessage) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          counterTrade.id, counterTrade.proposerId, counterTrade.receiverId,
+          counterTrade.proposerItemIds, counterTrade.receiverItemIds,
+          counterTrade.proposerCash, counterTrade.receiverCash,
+          counterTrade.status, counterTrade.createdAt, counterTrade.updatedAt,
+          counterTrade.disputeTicketId, counterTrade.proposerSubmittedTracking,
+          counterTrade.receiverSubmittedTracking, counterTrade.proposerTrackingNumber,
+          counterTrade.receiverTrackingNumber, counterTrade.proposerVerifiedSatisfaction,
+          counterTrade.receiverVerifiedSatisfaction, counterTrade.proposerRated,
+          counterTrade.receiverRated, counterTrade.ratingDeadline,
+          counterTrade.parentTradeId, counterTrade.counterMessage
+        ],
+        function (err3: Error | null) {
+          if (err3) return res.status(500).json({ error: err3.message });
+
+          res.json({
+            originalTradeId,
+            originalStatus: 'COUNTERED',
+            counterTrade: {
+              id: counterTradeId,
+              status: 'PENDING_ACCEPTANCE',
+              proposerId: counterTrade.proposerId,
+              receiverId: counterTrade.receiverId,
+              parentTradeId: originalTradeId,
+              message: counterTrade.counterMessage
+            }
+          });
+        }
+      );
+    });
+  });
+});
+
 // Submit payment for a trade (holds funds in escrow)
 app.post('/api/trades/:id/submit-payment', (req, res) => {
   const tradeId = req.params.id;

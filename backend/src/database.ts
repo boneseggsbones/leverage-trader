@@ -67,7 +67,9 @@ const init = () => {
         receiverVerifiedSatisfaction INTEGER NOT NULL,
         proposerRated INTEGER NOT NULL,
         receiverRated INTEGER NOT NULL,
-        ratingDeadline TEXT
+        ratingDeadline TEXT,
+        parentTradeId TEXT,
+        counterMessage TEXT
       );
 
       CREATE TABLE IF NOT EXISTS DisputeStatus (
