@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { fetchTradesForUser, fetchAllUsers, fetchAllItems, submitRating } from '../api/mockApi.ts';
+import { fetchTradesForUser, fetchAllUsers, fetchAllItems, submitRating } from '../api/api.ts';
 import { Trade, User, TradeStatus, Item, TradeRating } from '../types.ts';
 import { useNotification } from '../context/NotificationContext.tsx';
 import RatingModal from './RatingModal.tsx';
@@ -13,7 +13,7 @@ const TradeHistory: React.FC = () => {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
     const { addNotification } = useNotification();
-    
+
     const [trades, setTrades] = useState<Trade[]>([]);
     const [users, setUsers] = useState<Record<string, User>>({});
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
@@ -37,9 +37,9 @@ const TradeHistory: React.FC = () => {
                 fetchAllUsers(),
                 fetchAllItems(),
             ]);
-            
+
             const userMap = [...allUsers, currentUser].reduce((acc, user) => {
-                if(user) acc[user.id] = user;
+                if (user) acc[user.id] = user;
                 return acc;
             }, {} as Record<string, User>);
 
@@ -61,9 +61,9 @@ const TradeHistory: React.FC = () => {
     useEffect(() => {
         loadHistory();
     }, [loadHistory]);
-    
+
     if (!currentUser) return null;
-    
+
     const handleOpenRatingModal = (trade: Trade) => {
         setRatingTrade(trade);
         setIsRatingModalOpen(true);
@@ -97,14 +97,14 @@ const TradeHistory: React.FC = () => {
             case TradeStatus.SHIPPING_PENDING:
             case TradeStatus.IN_TRANSIT:
             case TradeStatus.DELIVERED_AWAITING_VERIFICATION:
-                 return 'bg-blue-100 text-blue-800';
+                return 'bg-blue-100 text-blue-800';
             case TradeStatus.DISPUTE_OPENED:
             case TradeStatus.DISPUTE_RESOLVED:
                 return 'bg-purple-100 text-purple-800';
             default: return 'bg-yellow-100 text-yellow-800';
         }
     };
-    
+
     const renderStatusBadge = (trade: Trade) => {
         if (trade.status === TradeStatus.COMPLETED_AWAITING_RATING) {
             const hasCurrentUserRated = (trade.proposerId === currentUser.id && trade.proposerRated) || (trade.receiverId === currentUser.id && trade.receiverRated);
@@ -123,7 +123,7 @@ const TradeHistory: React.FC = () => {
                     </div>
                 );
             } else {
-                 return (
+                return (
                     <div className="px-3 py-1 text-sm font-semibold rounded-full bg-gray-100 text-gray-800">
                         Rating Window Closed
                     </div>
@@ -158,7 +158,7 @@ const TradeHistory: React.FC = () => {
                         ) : error ? (
                             <p className="p-6 text-center text-red-500">{error}</p>
                         ) : trades.length === 0 ? (
-                             <p className="p-6 text-center text-gray-500">No past trades found.</p>
+                            <p className="p-6 text-center text-gray-500">No past trades found.</p>
                         ) : (
                             trades.map(trade => {
                                 const otherPartyId = trade.proposerId === currentUser.id ? trade.receiverId : trade.proposerId;
@@ -172,10 +172,10 @@ const TradeHistory: React.FC = () => {
 
                                 const youGaveItems = youGaveItemIds.map(id => allItems.get(id)).filter(Boolean) as Item[];
                                 const youGotItems = youGotItemIds.map(id => allItems.get(id)).filter(Boolean) as Item[];
-                                
+
                                 const valueGiven = youGaveItems.reduce((sum, item) => sum + item.estimatedMarketValue, 0) + youGaveCash;
                                 const valueGotten = youGotItems.reduce((sum, item) => sum + item.estimatedMarketValue, 0) + youGotCash;
-                                
+
                                 const netValue = valueGotten - valueGiven;
                                 const formattedNetValue = formatCurrency(netValue);
 
@@ -197,12 +197,11 @@ const TradeHistory: React.FC = () => {
                                             </div>
                                             <div className="text-right flex-shrink-0 ml-4">
                                                 {renderStatusBadge(trade)}
-                                                 { (trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED || trade.status === TradeStatus.COMPLETED_AWAITING_RATING) &&
+                                                {(trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED || trade.status === TradeStatus.COMPLETED_AWAITING_RATING) &&
                                                     <div className="mt-2">
                                                         <p className="text-xs text-gray-500">Net Value</p>
-                                                        <p className={`font-bold text-lg ${
-                                                            netValue > 0 ? 'text-green-600' : netValue < 0 ? 'text-red-600' : 'text-gray-700'
-                                                        }`}>
+                                                        <p className={`font-bold text-lg ${netValue > 0 ? 'text-green-600' : netValue < 0 ? 'text-red-600' : 'text-gray-700'
+                                                            }`}>
                                                             {netValue > 0 ? `+${formattedNetValue}` : formattedNetValue}
                                                         </p>
                                                     </div>
@@ -217,7 +216,7 @@ const TradeHistory: React.FC = () => {
                 </div>
             </div>
             {isRatingModalOpen && ratingTrade && (
-                <RatingModal 
+                <RatingModal
                     isOpen={isRatingModalOpen}
                     onClose={() => setIsRatingModalOpen(false)}
                     trade={ratingTrade}
