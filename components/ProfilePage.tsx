@@ -10,7 +10,7 @@ import GraphInspectorPanel from './visualization/GraphInspectorPanel.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 const ProfilePage: React.FC = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, oauthProfile } = useAuth();
     const navigate = useNavigate();
     const { userId } = useParams<{ userId: string }>();
     const [profileUser, setProfileUser] = useState<User | null>(null);
@@ -125,9 +125,9 @@ const ProfilePage: React.FC = () => {
                     <div className="lg:col-span-1 space-y-6">
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center">
                             <img
-                                src={profileUser.profilePictureUrl || `https://ui-avatars.com/api/?name=${profileUser.name}&background=3B82F6&color=fff`}
+                                src={oauthProfile?.image || (currentUser as any)?.avatar || profileUser.profilePictureUrl || `https://ui-avatars.com/api/?name=${profileUser.name}&background=3B82F6&color=fff`}
                                 alt={profileUser.name}
-                                className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-blue-100 dark:border-gray-600"
+                                className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-blue-100 dark:border-gray-600 object-cover"
                             />
                             <h2 className="text-xl font-bold text-gray-800 dark:text-white">{profileUser.name}</h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -314,8 +314,8 @@ const ProfilePage: React.FC = () => {
                                             {new Date(trade.createdAt).toLocaleDateString()}
                                         </span>
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${trade.status === TradeStatus.COMPLETED
-                                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                                             }`}>
                                             {trade.status.replace(/_/g, ' ')}
                                         </span>

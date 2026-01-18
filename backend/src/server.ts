@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { db, init, migrate, seedValuationData } from './database';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
@@ -9,6 +10,7 @@ import sqlite3 from 'sqlite3';
 import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured } from './pricingService';
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
 import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
+import { authHandler, authDb } from './auth';
 
 const app = express();
 const port = 4000;
@@ -30,9 +32,94 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  credentials: true
+}));
+app.use(cookieParser());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
+
+// Mount Auth.js routes
+app.use('/api/auth/*', authHandler);
+
+// Get current user from OAuth session (creates Leverage user if needed)
+app.get('/api/session', async (req, res) => {
+  try {
+    // Get session token from cookie
+    const sessionToken = req.cookies?.['authjs.session-token'] || req.cookies?.['__Secure-authjs.session-token'];
+
+    if (!sessionToken) {
+      return res.json({ user: null });
+    }
+
+    // Look up session in auth database
+    const session = authDb.prepare('SELECT * FROM sessions WHERE sessionToken = ?').get(sessionToken) as any;
+    if (!session || new Date(session.expires) < new Date()) {
+      return res.json({ user: null });
+    }
+
+    // Get OAuth user
+    const oauthUser = authDb.prepare('SELECT * FROM oauth_users WHERE id = ?').get(session.userId) as any;
+    if (!oauthUser) {
+      return res.json({ user: null });
+    }
+
+    // Check if linked to Leverage user
+    if (oauthUser.leverage_user_id) {
+      // Return existing Leverage user
+      db.get('SELECT * FROM User WHERE id = ?', [oauthUser.leverage_user_id], (err: Error | null, row: any) => {
+        if (err || !row) {
+          return res.json({ user: null });
+        }
+        // Fetch inventory
+        db.all('SELECT * FROM Item WHERE owner_id = ?', [row.id], (err: Error | null, items: any[]) => {
+          res.json({
+            user: { ...row, inventory: items || [] },
+            oauthUser: { email: oauthUser.email, name: oauthUser.name, image: oauthUser.image }
+          });
+        });
+      });
+    } else {
+      // Check if there's an existing Leverage user with this email
+      db.get('SELECT * FROM User WHERE email = ?', [oauthUser.email], (err: Error | null, existingUser: any) => {
+        if (existingUser) {
+          // Link the accounts
+          authDb.prepare('UPDATE oauth_users SET leverage_user_id = ? WHERE id = ?').run(existingUser.id, oauthUser.id);
+          db.all('SELECT * FROM Item WHERE owner_id = ?', [existingUser.id], (err: Error | null, items: any[]) => {
+            res.json({
+              user: { ...existingUser, inventory: items || [] },
+              oauthUser: { email: oauthUser.email, name: oauthUser.name, image: oauthUser.image }
+            });
+          });
+        } else {
+          // Create a new Leverage user
+          const newUserName = oauthUser.name || oauthUser.email.split('@')[0];
+          db.run(
+            'INSERT INTO User (name, email, rating, balance) VALUES (?, ?, ?, ?)',
+            [newUserName, oauthUser.email, 5, 0],
+            function (err: Error | null) {
+              if (err) {
+                return res.json({ user: null, error: 'Failed to create user' });
+              }
+              const newUserId = this.lastID;
+              // Link the accounts
+              authDb.prepare('UPDATE oauth_users SET leverage_user_id = ? WHERE id = ?').run(newUserId, oauthUser.id);
+              res.json({
+                user: { id: newUserId, name: newUserName, email: oauthUser.email, rating: 5, balance: 0, inventory: [] },
+                oauthUser: { email: oauthUser.email, name: oauthUser.name, image: oauthUser.image },
+                isNewUser: true
+              });
+            }
+          );
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error in /api/auth/me:', err);
+    res.json({ user: null });
+  }
+});
 
 // Example route
 app.get('/api/hello', (req, res) => {

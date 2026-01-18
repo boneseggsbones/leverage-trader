@@ -6,9 +6,12 @@ import UserMenuDropdown from './UserMenuDropdown.tsx';
 import ThemeToggle from './ThemeToggle.tsx';
 
 const Header: React.FC = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, oauthProfile } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    // Get profile picture: prefer OAuth image, then user avatar, then profilePictureUrl, then placeholder
+    const profilePicture = oauthProfile?.image || (currentUser as any)?.avatar || currentUser?.profilePictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'U')}&background=random`;
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -73,9 +76,9 @@ const Header: React.FC = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
                                 </svg>
                                 <img
-                                    src={currentUser.profilePictureUrl}
+                                    src={profilePicture}
                                     alt={currentUser.name}
-                                    className="h-8 w-8 rounded-full"
+                                    className="h-8 w-8 rounded-full object-cover"
                                 />
                             </button>
                             {isMenuOpen && <UserMenuDropdown onClose={() => setIsMenuOpen(false)} />}
