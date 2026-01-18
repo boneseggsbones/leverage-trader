@@ -11,6 +11,7 @@ import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, i
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
 import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
 import { authHandler, authDb } from './auth';
+import { fundEscrow, releaseEscrow, refundEscrow, getEscrowStatus, calculateCashDifferential, EscrowStatus } from './payments';
 
 const app = express();
 const port = 4000;
@@ -770,6 +771,94 @@ app.post('/api/trades/:id/submit-payment', (req, res) => {
         });
       });
   });
+});
+
+// ========================================
+// PROVIDER-AGNOSTIC ESCROW ENDPOINTS
+// ========================================
+
+// Get escrow status for a trade (includes cash differential calculation)
+app.get('/api/trades/:id/escrow', async (req, res) => {
+  const tradeId = req.params.id;
+
+  try {
+    const status = await getEscrowStatus(tradeId);
+    res.json(status);
+  } catch (err: any) {
+    console.error('Error getting escrow status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fund escrow for a trade (payer calls this)
+app.post('/api/trades/:id/fund-escrow', async (req, res) => {
+  const tradeId = req.params.id;
+  const { userId } = req.body;
+
+  if (!tradeId || !userId) {
+    return res.status(400).json({ error: 'tradeId and userId are required' });
+  }
+
+  try {
+    const result = await fundEscrow(tradeId, Number(userId));
+    res.json({
+      success: true,
+      escrowHold: result.escrowHold,
+      requiresConfirmation: result.requiresConfirmation,
+    });
+  } catch (err: any) {
+    console.error('Error funding escrow:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Release escrow after both parties confirm receipt
+app.post('/api/trades/:id/release-escrow', async (req, res) => {
+  const tradeId = req.params.id;
+  const { userId } = req.body;  // For authorization check
+
+  if (!tradeId) {
+    return res.status(400).json({ error: 'tradeId is required' });
+  }
+
+  try {
+    await releaseEscrow(tradeId);
+    res.json({ success: true, message: 'Escrow released to recipient' });
+  } catch (err: any) {
+    console.error('Error releasing escrow:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Refund escrow (for cancellations or dispute resolution)
+app.post('/api/trades/:id/refund-escrow', async (req, res) => {
+  const tradeId = req.params.id;
+  const { userId, amount } = req.body;  // Optional partial amount
+
+  if (!tradeId) {
+    return res.status(400).json({ error: 'tradeId is required' });
+  }
+
+  try {
+    await refundEscrow(tradeId, amount);
+    res.json({ success: true, message: 'Escrow refunded to payer' });
+  } catch (err: any) {
+    console.error('Error refunding escrow:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Calculate cash differential for a trade
+app.get('/api/trades/:id/cash-differential', async (req, res) => {
+  const tradeId = req.params.id;
+
+  try {
+    const differential = await calculateCashDifferential(tradeId);
+    res.json(differential);
+  } catch (err: any) {
+    console.error('Error calculating cash differential:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Submit tracking number for a trade

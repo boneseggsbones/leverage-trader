@@ -156,6 +156,24 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_escrow_trade ON escrow_ledger(trade_id);
       CREATE INDEX IF NOT EXISTS idx_escrow_user ON escrow_ledger(user_id);
 
+      -- Escrow holds for provider-agnostic payment system
+      CREATE TABLE IF NOT EXISTS escrow_holds (
+        id TEXT PRIMARY KEY,
+        trade_id TEXT NOT NULL,
+        payer_id INTEGER NOT NULL,
+        recipient_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        provider TEXT NOT NULL DEFAULT 'mock',
+        provider_reference TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (payer_id) REFERENCES User(id),
+        FOREIGN KEY (recipient_id) REFERENCES User(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_escrow_holds_trade ON escrow_holds(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_escrow_holds_status ON escrow_holds(status);
+
       -- Shipment tracking for delivery status
       CREATE TABLE IF NOT EXISTS shipment_tracking (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

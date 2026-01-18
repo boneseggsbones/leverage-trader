@@ -662,3 +662,98 @@ export const fetchItemValuationHistory = async (itemId: string | number): Promis
     }
     return response.json();
 };
+
+// =====================================================
+// ESCROW API
+// =====================================================
+
+export interface CashDifferential {
+    payerId: number | null;
+    recipientId: number | null;
+    amount: number;
+    description: string;
+}
+
+export interface EscrowHold {
+    id: string;
+    tradeId: string;
+    payerId: number;
+    recipientId: number;
+    amount: number;
+    status: 'PENDING' | 'FUNDED' | 'RELEASED' | 'REFUNDED' | 'PARTIALLY_REFUNDED' | 'DISPUTED';
+    provider: string;
+    providerReference: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface EscrowStatus {
+    hasEscrow: boolean;
+    escrowHold: EscrowHold | null;
+    cashDifferential: CashDifferential;
+}
+
+export const fetchEscrowStatus = async (tradeId: string): Promise<EscrowStatus> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/escrow`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch escrow status');
+    }
+    return response.json();
+};
+
+export const fetchCashDifferential = async (tradeId: string): Promise<CashDifferential> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/cash-differential`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch cash differential');
+    }
+    return response.json();
+};
+
+export const fundEscrow = async (tradeId: string, userId: string | number): Promise<{
+    success: boolean;
+    escrowHold: EscrowHold;
+    requiresConfirmation: boolean;
+}> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/fund-escrow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to fund escrow: ${text}`);
+    }
+    return response.json();
+};
+
+export const releaseEscrow = async (tradeId: string, userId: string | number): Promise<{
+    success: boolean;
+    message: string;
+}> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/release-escrow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to release escrow: ${text}`);
+    }
+    return response.json();
+};
+
+export const refundEscrow = async (tradeId: string, userId: string | number, amount?: number): Promise<{
+    success: boolean;
+    message: string;
+}> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/refund-escrow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, amount }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to refund escrow: ${text}`);
+    }
+    return response.json();
+};
