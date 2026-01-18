@@ -51,8 +51,8 @@ export async function calculateCashDifferential(tradeId: string): Promise<CashDi
                 // Get items offered by each party
                 const proposerItemIds = JSON.parse(trade.proposerItemIds || '[]');
                 const receiverItemIds = JSON.parse(trade.receiverItemIds || '[]');
-                const proposerCashOffer = trade.proposerCashOffer || 0;
-                const receiverCashOffer = trade.receiverCashOffer || 0;
+                const proposerCashOffer = trade.proposerCash || 0;
+                const receiverCashOffer = trade.receiverCash || 0;
 
                 // Calculate item values
                 const getItemsValue = (itemIds: string[]): Promise<number> => {
@@ -96,7 +96,7 @@ export async function calculateCashDifferential(tradeId: string): Promise<CashDi
                             payerId: trade.receiverId,
                             recipientId: trade.proposerId,
                             amount: Math.abs(difference),
-                            description: `Receiver pays $${Math.abs(difference).toFixed(2)} to proposer`,
+                            description: `Receiver pays $${(Math.abs(difference) / 100).toFixed(2)} to proposer`,
                         });
                     } else {
                         // Receiver is offering more value, proposer owes cash
@@ -104,7 +104,7 @@ export async function calculateCashDifferential(tradeId: string): Promise<CashDi
                             payerId: trade.proposerId,
                             recipientId: trade.receiverId,
                             amount: Math.abs(difference),
-                            description: `Proposer pays $${Math.abs(difference).toFixed(2)} to receiver`,
+                            description: `Proposer pays $${(Math.abs(difference) / 100).toFixed(2)} to receiver`,
                         });
                     }
                 }).catch(reject);
@@ -121,29 +121,36 @@ export async function fundEscrow(
     tradeId: string,
     payerId: number
 ): Promise<{ escrowHold: EscrowHold; requiresConfirmation: boolean }> {
-    // Calculate what's owed
-    const differential = await calculateCashDifferential(tradeId);
+    // Get trade directly and use cash fields
+    const trade = await new Promise<any>((resolve, reject) => {
+        db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row) => {
+            if (err) reject(err);
+            else if (!row) reject(new Error(`Trade not found: ${tradeId}`));
+            else resolve(row);
+        });
+    });
 
-    if (differential.amount === 0) {
-        throw new Error('No cash differential - escrow not needed');
-    }
+    // Determine who pays whom based on cash fields
+    const isProposer = String(trade.proposerId) === String(payerId);
+    const payerCash = isProposer ? trade.proposerCash : trade.receiverCash;
+    const recipientId = isProposer ? trade.receiverId : trade.proposerId;
 
-    if (differential.payerId !== payerId) {
-        throw new Error(`User ${payerId} is not the payer for this trade`);
+    if (payerCash <= 0) {
+        throw new Error('No cash payment required from this user');
     }
 
     // Hold funds via payment provider
     const escrowHold = await paymentProvider.holdFunds(
-        differential.amount,
+        payerCash,
         tradeId,
-        differential.payerId,
-        differential.recipientId!
+        payerId,
+        Number(recipientId)
     );
 
     // Update trade status
     await updateTradeStatus(tradeId, 'ESCROW_FUNDED');
 
-    console.log(`[Escrow] Funded escrow for trade ${tradeId}: $${differential.amount}`);
+    console.log(`[Escrow] Funded escrow for trade ${tradeId}: $${payerCash / 100}`);
 
     return {
         escrowHold,

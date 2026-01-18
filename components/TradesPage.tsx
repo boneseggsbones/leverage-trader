@@ -13,13 +13,16 @@ import {
     submitTracking,
     verifySatisfaction,
     openDispute,
-    fetchTrackingStatus
+    fetchTrackingStatus,
+    fundEscrow as fundEscrowApi,
+    fetchEscrowStatus
 } from '../api/api.ts';
 import { Trade, User, Item, TradeStatus, DisputeType } from '../types.ts';
-import TradeCard, { TradeTrackingData } from './TradeCard.tsx';
+import TradeCard, { TradeTrackingData, EscrowDisplayInfo } from './TradeCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
 import DisputeModal from './DisputeModal.tsx';
 import CounterOfferModal from './CounterOfferModal.tsx';
+import EscrowPaymentModal from './EscrowPaymentModal.tsx';
 import { TradeCardSkeleton } from './Skeleton.tsx';
 
 const TradesPage: React.FC = () => {
@@ -31,6 +34,7 @@ const TradesPage: React.FC = () => {
     const [users, setUsers] = useState<Record<string, User>>({});
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
     const [trackingData, setTrackingData] = useState<Record<string, TradeTrackingData>>({});
+    const [escrowData, setEscrowData] = useState<Record<string, EscrowDisplayInfo | null>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +42,7 @@ const TradesPage: React.FC = () => {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
     const [isCounterModalOpen, setIsCounterModalOpen] = useState(false);
+    const [isEscrowModalOpen, setIsEscrowModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<'accept' | 'reject' | 'cancel' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -104,6 +109,47 @@ const TradesPage: React.FC = () => {
                     }
                 });
                 setTrackingData(trackingMap);
+            }
+
+            // Fetch escrow info for trades with escrow
+            const escrowTrades = activeTrades.filter(t =>
+                t.status === TradeStatus.ESCROW_FUNDED ||
+                t.status === TradeStatus.SHIPPING_PENDING ||
+                t.status === TradeStatus.IN_TRANSIT ||
+                t.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION
+            );
+
+            if (escrowTrades.length > 0) {
+                const escrowResults = await Promise.all(
+                    escrowTrades.map(async (trade) => {
+                        try {
+                            const status = await fetchEscrowStatus(trade.id);
+                            if (status.escrowHold) {
+                                return {
+                                    tradeId: trade.id,
+                                    info: {
+                                        id: status.escrowHold.id,
+                                        amount: status.escrowHold.amount,
+                                        status: status.escrowHold.status,
+                                        provider: status.escrowHold.provider,
+                                        fundedAt: status.escrowHold.createdAt,
+                                    } as EscrowDisplayInfo
+                                };
+                            }
+                            return null;
+                        } catch {
+                            return null;
+                        }
+                    })
+                );
+
+                const escrowMap: Record<string, EscrowDisplayInfo | null> = {};
+                escrowResults.forEach(result => {
+                    if (result) {
+                        escrowMap[result.tradeId] = result.info;
+                    }
+                });
+                setEscrowData(escrowMap);
             }
         } catch (err) {
             // Log the real error for diagnostics (Playwright captures console)
@@ -207,7 +253,17 @@ const TradesPage: React.FC = () => {
                 if (isProposer) return <button onClick={() => handleAction(trade, 'cancel')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>;
                 return null;
             case TradeStatus.PAYMENT_PENDING:
-                if ((isProposer && trade.proposerCash > 0) || (isReceiver && trade.receiverCash > 0)) return <button onClick={async () => { await submitPayment(trade.id, currentUser.id); addNotification('Payment submitted.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded">Submit Payment</button>;
+                // Show Fund Escrow button that opens the modal
+                if ((isProposer && trade.proposerCash > 0) || (isReceiver && trade.receiverCash > 0)) {
+                    return (
+                        <button
+                            onClick={() => { setActionTrade(trade); setIsEscrowModalOpen(true); }}
+                            className="px-3 py-1 text-xs font-semibold text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 rounded shadow-sm"
+                        >
+                            💳 Fund Escrow
+                        </button>
+                    );
+                }
                 return null;
             case TradeStatus.SHIPPING_PENDING:
                 if (!((isProposer && trade.proposerSubmittedTracking) || (isReceiver && trade.receiverSubmittedTracking))) return <button onClick={async () => { await submitTracking(trade.id, currentUser.id, `TRACK-${Date.now()}`); addNotification('Tracking submitted.', 'success'); loadTrades(); }} className="px-3 py-1 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded">Add Tracking</button>;
@@ -234,7 +290,7 @@ const TradesPage: React.FC = () => {
                         const otherUser = users[otherUserId];
                         if (!otherUser || !currentUser) return null;
                         return (
-                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]}>
+                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
                                 {renderActionButtons(trade)}
                             </TradeCard>
                         )
@@ -319,6 +375,18 @@ const TradesPage: React.FC = () => {
                     otherUser={users[actionTrade.proposerId === currentUser.id ? actionTrade.receiverId : actionTrade.proposerId]}
                     allItems={allItems}
                     onCounterSubmitted={() => { loadTrades(); }}
+                />
+            )}
+
+            {actionTrade && (
+                <EscrowPaymentModal
+                    isOpen={isEscrowModalOpen}
+                    onClose={() => { setIsEscrowModalOpen(false); setActionTrade(null); }}
+                    trade={actionTrade}
+                    onPaymentSuccess={() => {
+                        addNotification('Escrow funded successfully!', 'success');
+                        loadTrades();
+                    }}
                 />
             )}
         </div>

@@ -18,12 +18,23 @@ export interface TradeTrackingData {
     receiver: TrackingDisplayInfo | null;
 }
 
+// Escrow transaction info
+export interface EscrowDisplayInfo {
+    id: string;
+    amount: number;
+    status: string;
+    provider: string;
+    fundedAt: string | null;
+    releasedAt?: string | null;
+}
+
 interface TradeCardProps {
     trade: Trade;
     currentUser: User;
     otherUser: User;
     allItems: Map<string, Item>;
     trackingData?: TradeTrackingData;
+    escrowInfo?: EscrowDisplayInfo | null;
     children?: React.ReactNode;
 }
 
@@ -96,7 +107,7 @@ const ShippingTracker: React.FC<{ tracking: TrackingDisplayInfo; label: string }
 };
 
 
-const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, allItems, trackingData, children }) => {
+const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, allItems, trackingData, escrowInfo, children }) => {
     const wasProposer = trade.proposerId === currentUser.id;
 
     const youGiveItemIds = wasProposer ? trade.proposerItemIds : trade.receiverItemIds;
@@ -138,20 +149,62 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    {/* Escrow status badge */}
+                    {/* Friendly status badges */}
                     {trade.status === TradeStatus.ESCROW_FUNDED && (
                         <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">
-                            💰 Escrow Funded
+                            💰 Money Secured
                         </span>
                     )}
                     {trade.status === TradeStatus.PAYMENT_PENDING && (
                         <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
-                            ⏳ Payment Pending
+                            {youGiveCash > 0 ? '💳 You Need to Pay' : `⏳ Waiting for ${otherUser.name}`}
                         </span>
                     )}
-                    <div className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                        {trade.status.replace(/_/g, ' ')}
-                    </div>
+                    {trade.status === TradeStatus.PENDING_ACCEPTANCE && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            ⏳ Waiting for Response
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.SHIPPING_PENDING && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            📦 Ready to Ship
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.IN_TRANSIT && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            🚚 On Its Way
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            📬 Arrived - Check Items
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.COMPLETED && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            ✅ Done!
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.COMPLETED_AWAITING_RATING && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            ⭐ Leave a Rating
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.REJECTED && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            ❌ Declined
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.CANCELLED && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
+                            🚫 Cancelled
+                        </span>
+                    )}
+                    {trade.status === TradeStatus.DISPUTE_OPENED && (
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800`}>
+                            ⚠️ Issue Reported
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -160,6 +213,38 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 <div className="border-b sm:border-l sm:border-b-0 border-gray-200 dark:border-gray-600"></div>
                 <OfferColumn title="You Get" items={youGetItems} cash={youGetCash} />
             </div>
+
+            {/* Escrow transaction info */}
+            {escrowInfo && (
+                <div className="mt-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-200 dark:border-emerald-800">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">🔒</span>
+                        <h4 className="font-semibold text-emerald-800 dark:text-emerald-200 text-sm">Escrow Details</h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                            <span className="text-gray-500 dark:text-gray-400">Amount Secured</span>
+                            <p className="font-medium text-gray-800 dark:text-white">{formatCurrency(escrowInfo.amount)}</p>
+                        </div>
+                        <div>
+                            <span className="text-gray-500 dark:text-gray-400">Status</span>
+                            <p className="font-medium text-gray-800 dark:text-white">{escrowInfo.status}</p>
+                        </div>
+                        {escrowInfo.fundedAt && (
+                            <div>
+                                <span className="text-gray-500 dark:text-gray-400">Funded</span>
+                                <p className="font-medium text-gray-800 dark:text-white">
+                                    {new Date(escrowInfo.fundedAt).toLocaleString()}
+                                </p>
+                            </div>
+                        )}
+                        <div>
+                            <span className="text-gray-500 dark:text-gray-400">Transaction ID</span>
+                            <p className="font-medium text-gray-800 dark:text-white font-mono text-xs">{escrowInfo.id.slice(-8)}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Shipping tracking section */}
             {(yourTracking || theirTracking) && (

@@ -61,8 +61,12 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
 
     if (!isOpen) return null;
 
-    const isUserPayer = differential?.payerId === Number(currentUser?.id);
-    const isPayer = differential?.payerId !== null && isUserPayer;
+    // Simple logic: if you give cash in this trade, you're the payer
+    const isProposer = String(trade.proposerId) === String(currentUser?.id);
+    const youGiveCash = isProposer ? trade.proposerCash : trade.receiverCash;
+    const youGetCash = isProposer ? trade.receiverCash : trade.proposerCash;
+    const isPayer = youGiveCash > 0;
+    const cashAmount = isPayer ? youGiveCash : youGetCash;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -75,9 +79,11 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
             {/* Modal */}
             <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
                 {/* Header */}
-                <div className="px-6 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-                    <h2 className="text-xl font-bold">💳 Escrow Payment</h2>
-                    <p className="text-blue-100 text-sm mt-1">Secure your trade with escrow protection</p>
+                <div className={`px-6 py-4 ${isPayer ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gradient-to-r from-green-500 to-emerald-600'} text-white`}>
+                    <h2 className="text-xl font-bold">{isPayer ? '💳 Add Cash to Trade' : '🎉 You\'re Getting Paid'}</h2>
+                    <p className="text-white/80 text-sm mt-1">
+                        {isPayer ? 'Add cash to make this trade fair' : 'The other trader adds cash to make this fair'}
+                    </p>
                 </div>
 
                 {/* Content */}
@@ -90,7 +96,7 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400">
                             {error}
                         </div>
-                    ) : differential?.amount === 0 ? (
+                    ) : cashAmount === 0 ? (
                         <div className="text-center py-6">
                             <div className="text-4xl mb-3">✅</div>
                             <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Equal Trade</h3>
@@ -103,13 +109,13 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                             {/* Cash Differential Summary */}
                             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-gray-600 dark:text-gray-300">Cash Differential</span>
+                                    <span className="text-gray-600 dark:text-gray-300">Amount to Add</span>
                                     <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                                        {formatCurrency(differential?.amount || 0)}
+                                        {formatCurrency(cashAmount)}
                                     </span>
                                 </div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                                    {differential?.description}
+                                    This makes the trade fair for both sides.
                                 </p>
                             </div>
 
@@ -119,9 +125,9 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                                     <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                         <span className="text-xl">🔒</span>
                                         <div>
-                                            <h4 className="font-medium text-gray-800 dark:text-white">Secure Escrow</h4>
+                                            <h4 className="font-medium text-gray-800 dark:text-white">How It Works</h4>
                                             <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                                                Your payment is held securely until both parties confirm receipt of items.
+                                                We hold your money safely. Once you both confirm the items arrived, we send it to the other trader.
                                             </p>
                                         </div>
                                     </div>
@@ -129,24 +135,24 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                                     <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
                                         <div className="flex items-center gap-2">
                                             <span className="text-green-500">✓</span>
-                                            Funds are protected in escrow
+                                            Your money stays safe until you're happy
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-green-500">✓</span>
-                                            Released only after mutual confirmation
+                                            Only released when you both say "looks good!"
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-green-500">✓</span>
-                                            Full refund if trade is cancelled
+                                            Full refund if anything goes wrong
                                         </div>
                                     </div>
                                 </div>
                             ) : (
                                 <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
                                     <span className="text-3xl">🎉</span>
-                                    <h4 className="font-medium text-gray-800 dark:text-white mt-2">You're Receiving Payment</h4>
+                                    <h4 className="font-medium text-gray-800 dark:text-white mt-2">You're Getting Paid!</h4>
                                     <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                                        You'll receive {formatCurrency(differential?.amount || 0)} once both parties confirm receipt.
+                                        The other trader adds {formatCurrency(cashAmount)} to make this trade fair. You'll get it once you both confirm the items arrived safely.
                                     </p>
                                 </div>
                             )}
@@ -162,7 +168,7 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                     >
                         Cancel
                     </button>
-                    {isPayer && differential && differential.amount > 0 && (
+                    {isPayer && cashAmount > 0 && (
                         <button
                             onClick={handleFundEscrow}
                             disabled={isProcessing}
@@ -175,7 +181,7 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                                 </>
                             ) : (
                                 <>
-                                    Pay {formatCurrency(differential.amount)} to Escrow
+                                    Pay {formatCurrency(cashAmount)} to Escrow
                                 </>
                             )}
                         </button>
