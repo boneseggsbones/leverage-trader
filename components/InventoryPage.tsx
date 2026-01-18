@@ -5,6 +5,7 @@ import AddItemModal from './AddItemModal.tsx';
 import EditItemModal from './EditItemModal.tsx';
 import ItemValuationModal from './ItemValuationModal.tsx';
 import { ItemCardSkeleton } from './Skeleton.tsx';
+import { EmptyInventory } from './EmptyState.tsx';
 import { Item } from '../types';
 import { fetchAllItems, fetchUser } from '../api/api';
 import { dollarsToCents } from '../utils/currency.ts';
@@ -199,10 +200,7 @@ const InventoryPage: React.FC = () => {
                     ))}
                 </div>
             ) : (
-                <div className="text-center py-16 bg-gray-50 rounded-lg border border-gray-200">
-                    <h3 className="text-xl font-semibold text-gray-700">Your inventory is empty.</h3>
-                    <p className="text-gray-500 mt-2">Click "Add Item" to get started.</p>
-                </div>
+                <EmptyInventory onAddItem={() => setShowAddItemModal(true)} />
             )}
         </div>
     );

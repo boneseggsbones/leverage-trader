@@ -1,12 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, useParams } from 'react-router-dom';
-import { fetchUser, fetchCompletedTradesForUser, fetchAllItems } from '../api/mockApi.ts';
-import { User, Trade, Item } from '../types.ts';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { fetchUser, fetchCompletedTradesForUser, fetchAllItems, fetchTradesForUser } from '../api/api.ts';
+import { User, Trade, Item, TradeStatus } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
+import ItemValuationModal from './ItemValuationModal.tsx';
 import AssetLineageGraph from './visualization/AssetLineageGraph.tsx';
 import GraphInspectorPanel from './visualization/GraphInspectorPanel.tsx';
+import { formatCurrency } from '../utils/currency.ts';
 
 const ProfilePage: React.FC = () => {
     const { currentUser } = useAuth();
@@ -18,6 +19,12 @@ const ProfilePage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
+    const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+    const [showValuationModal, setShowValuationModal] = useState(false);
+    const [showAllItems, setShowAllItems] = useState(false);
+    const [tradesWith, setTradesWith] = useState<Trade[]>([]);
+
+    const isCurrentUserProfile = currentUser?.id?.toString() === userId;
 
     useEffect(() => {
         if (!userId) {
@@ -38,7 +45,16 @@ const ProfilePage: React.FC = () => {
                 if (user) {
                     setProfileUser(user);
                     setCompletedTrades(trades);
-                    setAllItems(new Map(allItemsData.map(item => [item.id, item])));
+                    setAllItems(new Map(allItemsData.map(item => [String(item.id), item])));
+
+                    // If viewing another user, fetch trades between you and them
+                    if (currentUser && !isCurrentUserProfile) {
+                        const myTrades = await fetchTradesForUser(currentUser.id);
+                        const tradesWithUser = myTrades.filter(t =>
+                            (t.proposerId.toString() === userId || t.receiverId.toString() === userId)
+                        );
+                        setTradesWith(tradesWithUser);
+                    }
                 } else {
                     setError("Could not find the specified user.");
                 }
@@ -51,110 +67,355 @@ const ProfilePage: React.FC = () => {
         };
 
         loadProfileData();
-    }, [userId]);
+    }, [userId, currentUser, isCurrentUserProfile]);
 
-    if (isLoading) return <div className="p-8 text-center text-gray-500">Loading Profile...</div>;
-    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
-    if (!profileUser) return <div className="p-8 text-center text-gray-500">User not found.</div>;
-
-    const isCurrentUserProfile = currentUser?.id === profileUser.id;
-
-    const accountAge = Math.floor((new Date().getTime() - new Date(profileUser.accountCreatedAt).getTime()) / (1000 * 60 * 60 * 24));
-    const accountAgeString = accountAge > 30 ? `${Math.floor(accountAge / 30)} months` : `${accountAge} days`;
-
-    return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="mb-8 bg-gradient-to-r from-slate-50 to-sky-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
-                <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
-                        👤
-                    </div>
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                            {isCurrentUserProfile ? 'Your Profile' : `${profileUser.name}'s Profile`}
-                        </h1>
-                        <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
-                            {isCurrentUserProfile
-                                ? "View your trading stats, reputation, and trade-up journey. See how your collection has evolved over time."
-                                : `Check out ${profileUser.name}'s inventory and trading history. Start a trade to make an offer on their items.`
-                            }
-                        </p>
-                    </div>
+    if (isLoading) {
+        return (
+            <div className="max-w-5xl mx-auto px-4 py-8">
+                <div className="animate-pulse space-y-6">
+                    <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-xl"></div>
+                    <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-xl"></div>
                 </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Left Column: Profile Info */}
-                <div className="md:col-span-1">
-                    <div className="p-6 bg-white rounded-lg border border-gray-200 text-center">
-                        <img
-                            src={profileUser.profilePictureUrl}
-                            alt={profileUser.name}
-                            className="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-gray-100"
-                        />
-                        <h1 className="text-2xl font-bold text-gray-800">{profileUser.name}</h1>
-                        <p className="text-sm text-gray-500">{profileUser.city}, {profileUser.state}</p>
+        );
+    }
 
-                        <div className="mt-6 text-left space-y-3">
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Reputation:</span>
-                                <span className="font-bold text-blue-600">{profileUser.valuationReputationScore}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Completed Trades:</span>
-                                <span className="font-bold text-gray-800">{completedTrades.length}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Member For:</span>
-                                <span className="font-bold text-gray-800">{accountAgeString}</span>
+    if (error) return <div className="p-8 text-center text-red-500 dark:text-red-400">{error}</div>;
+    if (!profileUser) return <div className="p-8 text-center text-gray-500 dark:text-gray-400">User not found.</div>;
+
+    const accountAge = Math.floor((new Date().getTime() - new Date(profileUser.accountCreatedAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24));
+    const accountAgeString = accountAge > 365 ? `${Math.floor(accountAge / 365)} years` : accountAge > 30 ? `${Math.floor(accountAge / 30)} months` : `${accountAge} days`;
+
+    // Featured items (top 4 by value)
+    const featuredItems = [...profileUser.inventory]
+        .sort((a, b) => (b.estimatedMarketValue || 0) - (a.estimatedMarketValue || 0))
+        .slice(0, 4);
+
+    // Calculate total inventory value
+    const totalInventoryValue = profileUser.inventory.reduce((sum, item) => sum + (item.estimatedMarketValue || 0), 0);
+
+    // ===========================================
+    // SELF-VIEW: Your Own Profile
+    // ===========================================
+    if (isCurrentUserProfile) {
+        return (
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Header */}
+                <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-blue-100 dark:border-gray-600 shadow-sm">
+                    <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
+                            👤
+                        </div>
+                        <div className="flex-1">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">
+                                Your Profile
+                            </h1>
+                            <p className="mt-2 text-gray-600 dark:text-gray-300">
+                                This is how other traders see you. Edit your profile to make a great impression!
+                            </p>
+                        </div>
+                        <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                            ✏️ Edit Profile
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left: Profile Card */}
+                    <div className="lg:col-span-1 space-y-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center">
+                            <img
+                                src={profileUser.profilePictureUrl || `https://ui-avatars.com/api/?name=${profileUser.name}&background=3B82F6&color=fff`}
+                                alt={profileUser.name}
+                                className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-blue-100 dark:border-gray-600"
+                            />
+                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{profileUser.name}</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {profileUser.city}, {profileUser.state}
+                            </p>
+                            <div className="mt-4 flex justify-center gap-2">
+                                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium">
+                                    ⭐ {profileUser.rating || 0} rating
+                                </span>
+                                <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
+                                    🛡️ {profileUser.valuationReputationScore} rep
+                                </span>
                             </div>
                         </div>
 
-                        <div className="mt-6 pt-6 border-t border-gray-200 text-left">
-                            <h3 className="text-sm font-semibold text-gray-500 mb-2">About Me</h3>
-                            <p className="text-sm text-gray-700">{profileUser.aboutMe}</p>
+                        {/* Quick Links */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                            <h3 className="font-semibold text-gray-800 dark:text-white mb-3">Quick Links</h3>
+                            <div className="space-y-2">
+                                <Link to="/inventory" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                    <span className="text-xl">📦</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Manage Inventory</span>
+                                </Link>
+                                <Link to="/analytics" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                    <span className="text-xl">📊</span>
+                                    <span className="text-gray-700 dark:text-gray-300">View Analytics</span>
+                                </Link>
+                                <Link to="/trades" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                    <span className="text-xl">🔄</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Active Trades</span>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: Stats & Journey */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                <p className="text-2xl font-bold text-gray-800 dark:text-white">{completedTrades.length}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Trades</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                <p className="text-2xl font-bold text-gray-800 dark:text-white">{profileUser.inventory.length}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Items</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalInventoryValue)}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Total Value</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                <p className="text-2xl font-bold text-gray-800 dark:text-white">{accountAgeString}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Member</p>
+                            </div>
                         </div>
 
-                        {!isCurrentUserProfile && (
-                            <button
-                                onClick={() => navigate(`/trade-desk/${profileUser.id}`)}
-                                className="mt-8 w-full px-4 py-2 text-md font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-                            >
-                                Start Trade
-                            </button>
+                        {/* Trade-Up Journey */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">📈 Your Trade-Up Journey</h3>
+                            {completedTrades.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="col-span-2">
+                                        <AssetLineageGraph
+                                            trades={completedTrades}
+                                            userId={profileUser.id}
+                                            allItems={allItems}
+                                            onNodeClick={setSelectedNodeData}
+                                        />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <GraphInspectorPanel
+                                            selectedNodeData={selectedNodeData}
+                                            trades={completedTrades}
+                                            userId={profileUser.id}
+                                            allItems={allItems}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                    <p className="text-4xl mb-2">🚀</p>
+                                    <p>Complete your first trade to start your journey!</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* About Section */}
+                        {profileUser.aboutMe && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">About You</h3>
+                                <p className="text-gray-600 dark:text-gray-300">{profileUser.aboutMe}</p>
+                            </div>
                         )}
                     </div>
                 </div>
+            </div>
+        );
+    }
 
-                {/* Right Column: Inventory and Trade-Up Journey */}
-                <div className="md:col-span-2 space-y-8">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-800 mb-4">{isCurrentUserProfile ? "Your Inventory" : `${profileUser.name}'s Inventory`}</h2>
-                        {profileUser.inventory.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                                {profileUser.inventory.map(item => (
+    // ===========================================
+    // EXTERNAL-VIEW: Another Trader's Profile
+    // ===========================================
+    return (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {/* Trust Header */}
+            <div className="mb-8 bg-gradient-to-r from-slate-50 to-sky-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <img
+                        src={profileUser.profilePictureUrl || `https://ui-avatars.com/api/?name=${profileUser.name}&background=3B82F6&color=fff`}
+                        alt={profileUser.name}
+                        className="w-20 h-20 rounded-full border-4 border-white dark:border-gray-600 shadow-lg"
+                    />
+                    <div className="flex-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">
+                            {profileUser.name}
+                        </h1>
+                        <p className="text-gray-500 dark:text-gray-400">
+                            {profileUser.city}, {profileUser.state} • Member for {accountAgeString}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-medium">
+                                ⭐ {profileUser.rating || 0} rating
+                            </span>
+                            <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium">
+                                🛡️ {profileUser.valuationReputationScore} reputation
+                            </span>
+                            <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
+                                ✅ {completedTrades.length} trades completed
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate(`/trade-desk/${profileUser.id}`)}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-lg hover:shadow-xl"
+                    >
+                        🤝 Start Trade
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column */}
+                <div className="lg:col-span-1 space-y-6">
+                    {/* About */}
+                    {profileUser.aboutMe && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                            <h3 className="font-semibold text-gray-800 dark:text-white mb-2">About</h3>
+                            <p className="text-gray-600 dark:text-gray-300 text-sm">{profileUser.aboutMe}</p>
+                        </div>
+                    )}
+
+                    {/* Trust Signals */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                        <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Trust Signals</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600 dark:text-gray-400 text-sm">Response Time</span>
+                                <span className="text-green-600 dark:text-green-400 font-medium text-sm">Usually &lt; 1 hour</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600 dark:text-gray-400 text-sm">Dispute Rate</span>
+                                <span className="text-green-600 dark:text-green-400 font-medium text-sm">0%</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600 dark:text-gray-400 text-sm">Trades Completed</span>
+                                <span className="font-medium text-gray-800 dark:text-white text-sm">{completedTrades.length}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600 dark:text-gray-400 text-sm">Inventory Value</span>
+                                <span className="font-medium text-gray-800 dark:text-white text-sm">{formatCurrency(totalInventoryValue)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Your History with This Trader */}
+                    {tradesWith.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                            <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Your History Together</h3>
+                            <div className="space-y-2">
+                                {tradesWith.slice(0, 3).map(trade => (
+                                    <div key={trade.id} className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-600 dark:text-gray-400">
+                                            {new Date(trade.createdAt).toLocaleDateString()}
+                                        </span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${trade.status === TradeStatus.COMPLETED
+                                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                                            }`}>
+                                            {trade.status.replace(/_/g, ' ')}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right Column */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Featured Items */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">Featured Items</h3>
+                            {profileUser.inventory.length > 4 && (
+                                <button
+                                    onClick={() => setShowAllItems(true)}
+                                    className="text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
+                                >
+                                    View All {profileUser.inventory.length} Items →
+                                </button>
+                            )}
+                        </div>
+                        {featuredItems.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                {featuredItems.map(item => (
                                     <ItemCard
                                         key={item.id}
                                         item={item}
+                                        onViewValuation={() => {
+                                            setSelectedItem(item);
+                                            setShowValuationModal(true);
+                                        }}
                                     />
                                 ))}
                             </div>
                         ) : (
-                            <div className="text-center py-16 bg-gray-50 rounded-lg border border-gray-200">
-                                <h3 className="text-xl font-semibold text-gray-700">Inventory is empty.</h3>
+                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <p className="text-4xl mb-2">📦</p>
+                                <p>No items in inventory yet</p>
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="col-span-2 bg-white p-6 rounded-lg border border-gray-200">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Trade-Up Journey</h2>
-                            <AssetLineageGraph trades={completedTrades} userId={profileUser.id} allItems={allItems} onNodeClick={setSelectedNodeData} />
-                        </div>
-                        <div className="col-span-1">
-                            <GraphInspectorPanel selectedNodeData={selectedNodeData} trades={completedTrades} userId={profileUser.id} />
+
+                    {/* Recent Reviews Placeholder */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Reviews</h3>
+                        <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                            <p className="text-3xl mb-2">⭐</p>
+                            <p className="text-sm">No reviews yet. Be the first to trade with {profileUser.name}!</p>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* All Items Modal */}
+            {showAllItems && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
+                        <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                                {profileUser.name}'s Full Inventory ({profileUser.inventory.length} items)
+                            </h3>
+                            <button
+                                onClick={() => setShowAllItems(false)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto max-h-[60vh]">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {profileUser.inventory.map(item => (
+                                    <ItemCard
+                                        key={item.id}
+                                        item={item}
+                                        onViewValuation={() => {
+                                            setShowAllItems(false);
+                                            setSelectedItem(item);
+                                            setShowValuationModal(true);
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Valuation Modal */}
+            <ItemValuationModal
+                show={showValuationModal}
+                onClose={() => {
+                    setShowValuationModal(false);
+                    setSelectedItem(null);
+                }}
+                item={selectedItem}
+            />
         </div>
     );
 };

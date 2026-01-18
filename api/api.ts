@@ -112,6 +112,11 @@ export const fetchTradesForUser = async (userId: string | number): Promise<Trade
     return raw.map(normalizeTrade);
 };
 
+export const fetchCompletedTradesForUser = async (userId: string | number): Promise<Trade[]> => {
+    const trades = await fetchTradesForUser(userId);
+    return trades.filter(t => t.status === 'COMPLETED' || t.status === 'DISPUTE_RESOLVED');
+};
+
 export const respondToTrade = async (tradeId: string, responseValue: 'accept' | 'reject'): Promise<any> => {
     const response = await fetch(`${API_URL}/trades/${tradeId}/respond`, {
         method: 'POST',

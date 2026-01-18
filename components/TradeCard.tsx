@@ -155,9 +155,9 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 </div>
             </div>
 
-            <div className="flex gap-4 p-3 bg-white rounded border">
+            <div className="flex flex-col sm:flex-row gap-4 p-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
                 <OfferColumn title="You Give" items={youGiveItems} cash={youGiveCash} />
-                <div className="border-l border-gray-200"></div>
+                <div className="border-b sm:border-l sm:border-b-0 border-gray-200 dark:border-gray-600"></div>
                 <OfferColumn title="You Get" items={youGetItems} cash={youGetCash} />
             </div>
 

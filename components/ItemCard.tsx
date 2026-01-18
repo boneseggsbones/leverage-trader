@@ -39,7 +39,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
     }
 
     return (
-        <div className={cardClasses} onClick={onSelect}>
+        <div className={cardClasses} onClick={onViewValuation || onSelect}>
             <div className="w-full h-24 bg-gray-100 dark:bg-gray-700 rounded-md mb-2 overflow-hidden">
                 <img src={imageUrl} alt={item.name} className="w-full h-full object-cover" />
             </div>
@@ -51,18 +51,25 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
                 <ValuationBadge source={emvSource} size="sm" />
             </div>
 
-            <div className="flex justify-around w-full mt-2 flex-wrap gap-1">
-                {onViewValuation && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onViewValuation(); }}
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
-                    >
-                        💰 Value
-                    </button>
-                )}
-                <button onClick={(e) => { e.stopPropagation(); onEdit?.(); }} className="text-xs text-blue-500 dark:text-blue-400 hover:underline">Edit</button>
-                <button onClick={(e) => { e.stopPropagation(); onDelete?.(); }} className="text-xs text-red-500 dark:text-red-400 hover:underline">Delete</button>
-            </div>
+            {/* Only show action buttons if handlers are provided */}
+            {(onEdit || onDelete || onViewValuation) && (
+                <div className="flex justify-around w-full mt-2 flex-wrap gap-1">
+                    {onViewValuation && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onViewValuation(); }}
+                            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                        >
+                            💰 Value
+                        </button>
+                    )}
+                    {onEdit && (
+                        <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="text-xs text-blue-500 dark:text-blue-400 hover:underline">Edit</button>
+                    )}
+                    {onDelete && (
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-xs text-red-500 dark:text-red-400 hover:underline">Delete</button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

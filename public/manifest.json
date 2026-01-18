@@ -1,0 +1,46 @@
+{
+    "name": "Leverage Trading Platform",
+    "short_name": "Leverage",
+    "description": "Trade collectibles with other collectors safely and securely",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#111827",
+    "theme_color": "#3B82F6",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": [
+        "shopping",
+        "lifestyle"
+    ],
+    "screenshots": [],
+    "shortcuts": [
+        {
+            "name": "Discover Items",
+            "url": "/",
+            "description": "Browse items from other traders"
+        },
+        {
+            "name": "My Inventory",
+            "url": "/inventory",
+            "description": "Manage your items for trade"
+        },
+        {
+            "name": "Active Trades",
+            "url": "/trades",
+            "description": "View and manage your trades"
+        }
+    ]
+}
