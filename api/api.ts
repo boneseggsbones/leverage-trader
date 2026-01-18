@@ -618,3 +618,42 @@ export const submitCounterOffer = async (
     }
     return response.json();
 };
+
+// =====================================================
+// ANALYTICS API
+// =====================================================
+
+export interface UserAnalytics {
+    totalTrades: number;
+    completedTrades: number;
+    totalValueTraded: number;
+    netTradeSurplus: number;
+    avgRating: number | null;
+    ratingCount: number;
+    tradesByMonth: { month: string; count: number }[];
+    tradesByStatus: { status: string; count: number }[];
+    topTradingPartners: { userId: string; name: string; count: number }[];
+}
+
+export interface ItemValuationHistory {
+    itemId: number;
+    name: string;
+    currentValueCents: number;
+    valuations: { date: string; valueCents: number; source: string }[];
+}
+
+export const fetchUserAnalytics = async (userId: string | number): Promise<UserAnalytics> => {
+    const response = await fetch(`${API_URL}/analytics/user/${userId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch user analytics');
+    }
+    return response.json();
+};
+
+export const fetchItemValuationHistory = async (itemId: string | number): Promise<ItemValuationHistory> => {
+    const response = await fetch(`${API_URL}/analytics/item/${itemId}/history`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch item valuation history');
+    }
+    return response.json();
+};

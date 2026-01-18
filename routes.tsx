@@ -11,6 +11,7 @@ import TradesPage from './components/TradesPage';
 import StartTradePage from './components/StartTradePage';
 import ProfilePage from './components/ProfilePage';
 import WishlistPage from './components/WishlistPage';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import DatabaseVisualizer from './src/components/DatabaseVisualizer';
 
@@ -30,6 +31,7 @@ const AppRoutes = () => {
                 <Route path="/trade-history" element={<TradeHistory />} />
                 <Route path="/profile/:userId" element={<ProfilePage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
+                <Route path="/analytics" element={<AnalyticsDashboard />} />
             </Route>
         </Routes>
     );

@@ -1386,6 +1386,181 @@ app.get('/api/pricing/status', (req, res) => {
   });
 });
 
+// =====================================================
+// ANALYTICS ENDPOINTS
+// =====================================================
+
+// Get user analytics dashboard data
+app.get('/api/analytics/user/:userId', (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  // Get all trades for user
+  db.all(`SELECT * FROM trades WHERE proposerId = ? OR receiverId = ?`, [userId, userId], (err: Error | null, trades: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const allTrades = trades || [];
+    const completedTrades = allTrades.filter(t => t.status === 'COMPLETED' || t.status === 'DISPUTE_RESOLVED');
+
+    // Calculate total value traded (sum of item values + cash in completed trades)
+    let totalValueTraded = 0;
+    let netSurplus = 0;
+
+    completedTrades.forEach(t => {
+      const isProposer = String(t.proposerId) === String(userId);
+      // Add cash traded
+      if (isProposer) {
+        totalValueTraded += t.proposerCash + t.receiverCash;
+        netSurplus += t.receiverCash - t.proposerCash;
+      } else {
+        totalValueTraded += t.proposerCash + t.receiverCash;
+        netSurplus += t.proposerCash - t.receiverCash;
+      }
+    });
+
+    // Get average rating
+    db.get('SELECT AVG(overall_score) as avg_rating, COUNT(*) as rating_count FROM trade_ratings WHERE ratee_id = ?',
+      [userId], (err2: Error | null, ratingData: any) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        // Group trades by month
+        const tradesByMonth: Record<string, number> = {};
+        const tradesByStatus: Record<string, number> = {};
+
+        allTrades.forEach(t => {
+          // By month
+          const date = new Date(t.createdAt);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          tradesByMonth[monthKey] = (tradesByMonth[monthKey] || 0) + 1;
+
+          // By status
+          tradesByStatus[t.status] = (tradesByStatus[t.status] || 0) + 1;
+        });
+
+        // Convert to arrays
+        const monthsArray = Object.entries(tradesByMonth)
+          .map(([month, count]) => ({ month, count }))
+          .sort((a, b) => a.month.localeCompare(b.month))
+          .slice(-12); // Last 12 months
+
+        const statusArray = Object.entries(tradesByStatus)
+          .map(([status, count]) => ({ status, count }));
+
+        // Get top trading partners
+        const partnerCounts: Record<string, number> = {};
+        allTrades.forEach(t => {
+          const partnerId = String(t.proposerId) === String(userId) ? t.receiverId : t.proposerId;
+          partnerCounts[partnerId] = (partnerCounts[partnerId] || 0) + 1;
+        });
+
+        const topPartnerIds = Object.entries(partnerCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([id, count]) => ({ id, count }));
+
+        if (topPartnerIds.length === 0) {
+          return res.json({
+            totalTrades: allTrades.length,
+            completedTrades: completedTrades.length,
+            totalValueTraded,
+            netTradeSurplus: netSurplus,
+            avgRating: ratingData?.avg_rating ? Math.round(ratingData.avg_rating * 10) / 10 : null,
+            ratingCount: ratingData?.rating_count || 0,
+            tradesByMonth: monthsArray,
+            tradesByStatus: statusArray,
+            topTradingPartners: []
+          });
+        }
+
+        // Fetch partner names
+        const partnerIdList = topPartnerIds.map(p => p.id).join(',');
+        db.all(`SELECT id, name FROM User WHERE id IN (${partnerIdList})`, [], (err3: Error | null, partners: any[]) => {
+          if (err3) return res.status(500).json({ error: err3.message });
+
+          const partnerMap = new Map((partners || []).map(p => [String(p.id), p.name]));
+          const topTradingPartners = topPartnerIds.map(p => ({
+            userId: p.id,
+            name: partnerMap.get(String(p.id)) || 'Unknown',
+            count: p.count
+          }));
+
+          res.json({
+            totalTrades: allTrades.length,
+            completedTrades: completedTrades.length,
+            totalValueTraded,
+            netTradeSurplus: netSurplus,
+            avgRating: ratingData?.avg_rating ? Math.round(ratingData.avg_rating * 10) / 10 : null,
+            ratingCount: ratingData?.rating_count || 0,
+            tradesByMonth: monthsArray,
+            tradesByStatus: statusArray,
+            topTradingPartners
+          });
+        });
+      });
+  });
+});
+
+// Get item valuation history for trend charts
+app.get('/api/analytics/item/:itemId/history', (req, res) => {
+  const itemId = parseInt(req.params.itemId, 10);
+  if (isNaN(itemId)) {
+    return res.status(400).json({ error: 'Invalid item ID' });
+  }
+
+  // Get the item
+  db.get('SELECT id, name, estimatedMarketValue, emv_source FROM Item WHERE id = ?', [itemId], (err: Error | null, item: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    // Get API valuation history
+    db.all(`SELECT fetched_at as date, value_cents as valueCents, api_provider as source 
+            FROM api_valuations 
+            WHERE item_id = ? 
+            ORDER BY fetched_at ASC`, [itemId], (err2: Error | null, apiHistory: any[]) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      // Get user override history
+      db.all(`SELECT created_at as date, override_value_cents as valueCents, 'user_override' as source 
+              FROM user_value_overrides 
+              WHERE item_id = ? AND status = 'approved'
+              ORDER BY created_at ASC`, [itemId], (err3: Error | null, overrideHistory: any[]) => {
+        if (err3) return res.status(500).json({ error: err3.message });
+
+        // Get trade price signals for this item
+        db.all(`SELECT trade_completed_at as date, implied_value_cents as valueCents, 'trade' as source 
+                FROM trade_price_signals 
+                WHERE item_id = ?
+                ORDER BY trade_completed_at ASC`, [itemId], (err4: Error | null, tradeHistory: any[]) => {
+          if (err4) return res.status(500).json({ error: err4.message });
+
+          // Combine all valuation history
+          const allHistory = [
+            ...(apiHistory || []).map(h => ({ ...h, source: 'api' })),
+            ...(overrideHistory || []),
+            ...(tradeHistory || [])
+          ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+          // If no history, create a single point with current value
+          const valuations = allHistory.length > 0 ? allHistory : [{
+            date: new Date().toISOString(),
+            valueCents: item.estimatedMarketValue || 0,
+            source: item.emv_source || 'user_defined'
+          }];
+
+          res.json({
+            itemId: item.id,
+            name: item.name,
+            currentValueCents: item.estimatedMarketValue || 0,
+            valuations
+          });
+        });
+      });
+    });
+  });
+});
+
 if (require.main === module) {
   // Run non-destructive migrations, then initialize (if needed), seed data, then start server
   migrate()
