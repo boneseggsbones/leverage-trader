@@ -12,6 +12,7 @@ import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSig
 import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
 import { authHandler, authDb } from './auth';
 import { fundEscrow, releaseEscrow, refundEscrow, getEscrowStatus, calculateCashDifferential, EscrowStatus } from './payments';
+import { getNotificationsForUser, getUnreadCount, markAsRead, markAllAsRead, notifyTradeEvent, NotificationType } from './notifications';
 
 const app = express();
 const port = 4000;
@@ -465,6 +466,14 @@ app.post('/api/trades', (req, res) => {
           }
 
           const user = { ...row, inventory: items };
+
+          // Notify the receiver about the new trade proposal
+          db.get('SELECT name FROM User WHERE id = ?', [proposerId], (err, proposerRow: any) => {
+            const proposerName = proposerRow?.name || 'Someone';
+            notifyTradeEvent(NotificationType.TRADE_PROPOSED, receiverId, tradeId, proposerName)
+              .catch(err => console.error('Failed to send trade proposal notification:', err));
+          });
+
           res.json({ trade: newTrade, updatedProposer: user });
         });
       });
@@ -535,6 +544,14 @@ app.post('/api/trades/:id/respond', (req, res) => {
       const updatedAt = new Date().toISOString();
       db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['REJECTED', updatedAt, tradeId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
+
+        // Notify the proposer about rejection
+        db.get('SELECT name FROM User WHERE id = ?', [tradeRow.receiverId], (err, receiverRow: any) => {
+          const receiverName = receiverRow?.name || 'The other trader';
+          notifyTradeEvent(NotificationType.TRADE_REJECTED, tradeRow.proposerId, tradeId, receiverName)
+            .catch(err => console.error('Failed to send rejection notification:', err));
+        });
+
         return res.json({ id: tradeId, status: 'REJECTED' });
       });
       return;
@@ -573,6 +590,13 @@ app.post('/api/trades/:id/respond', (req, res) => {
           console.log(`Price signals generated for trade ${tradeId}:`, result);
         }).catch(err => {
           console.error(`Failed to generate price signals for trade ${tradeId}:`, err);
+        });
+
+        // Notify the proposer about acceptance
+        db.get('SELECT name FROM User WHERE id = ?', [tradeRow.receiverId], (err, receiverRow: any) => {
+          const receiverName = receiverRow?.name || 'The other trader';
+          notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
+            .catch(err => console.error('Failed to send acceptance notification:', err));
         });
 
         return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
@@ -801,6 +825,19 @@ app.post('/api/trades/:id/fund-escrow', async (req, res) => {
 
   try {
     const result = await fundEscrow(tradeId, Number(userId));
+
+    // Notify the recipient that escrow is funded
+    db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, trade: any) => {
+      if (!err && trade) {
+        const recipientId = String(trade.proposerId) === String(userId) ? trade.receiverId : trade.proposerId;
+        db.get('SELECT name FROM User WHERE id = ?', [userId], (err, payerRow: any) => {
+          const payerName = payerRow?.name || 'The other trader';
+          notifyTradeEvent(NotificationType.ESCROW_FUNDED, recipientId, tradeId, payerName)
+            .catch(err => console.error('Failed to send escrow funded notification:', err));
+        });
+      }
+    });
+
     res.json({
       success: true,
       escrowHold: result.escrowHold,
@@ -857,6 +894,52 @@ app.get('/api/trades/:id/cash-differential', async (req, res) => {
     res.json(differential);
   } catch (err: any) {
     console.error('Error calculating cash differential:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =====================================================
+// NOTIFICATION ENDPOINTS
+// =====================================================
+
+// Get notifications for a user
+app.get('/api/notifications', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  try {
+    const notifications = await getNotificationsForUser(String(userId));
+    const unreadCount = await getUnreadCount(String(userId));
+    res.json({ notifications, unreadCount });
+  } catch (err: any) {
+    console.error('Error fetching notifications:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark a notification as read
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const notificationId = req.params.id;
+
+  try {
+    await markAsRead(notificationId);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error marking notification as read:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark all notifications as read for a user
+app.post('/api/notifications/read-all', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  try {
+    await markAllAsRead(String(userId));
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error marking all notifications as read:', err);
     res.status(500).json({ error: err.message });
   }
 });

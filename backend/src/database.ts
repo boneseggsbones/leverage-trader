@@ -193,6 +193,20 @@ const init = () => {
       );
       CREATE INDEX IF NOT EXISTS idx_shipment_trade ON shipment_tracking(trade_id);
 
+      -- User notifications for trade events
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        trade_id TEXT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        is_read INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read);
+
       CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT

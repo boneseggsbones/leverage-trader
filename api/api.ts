@@ -757,3 +757,54 @@ export const refundEscrow = async (tradeId: string, userId: string | number, amo
     }
     return response.json();
 };
+
+// =====================================================
+// NOTIFICATION API
+// =====================================================
+
+export interface UserNotification {
+    id: string;
+    userId: string;
+    type: string;
+    tradeId: string | null;
+    title: string;
+    message: string;
+    isRead: boolean;
+    createdAt: string;
+}
+
+export interface NotificationsResponse {
+    notifications: UserNotification[];
+    unreadCount: number;
+}
+
+export const fetchNotifications = async (userId: string | number): Promise<NotificationsResponse> => {
+    const response = await fetch(`${API_URL}/notifications?userId=${userId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
+    }
+    return response.json();
+};
+
+export const markNotificationRead = async (notificationId: string): Promise<{ success: boolean }> => {
+    const response = await fetch(`${API_URL}/notifications/${notificationId}/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        throw new Error('Failed to mark notification as read');
+    }
+    return response.json();
+};
+
+export const markAllNotificationsRead = async (userId: string | number): Promise<{ success: boolean }> => {
+    const response = await fetch(`${API_URL}/notifications/read-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+    });
+    if (!response.ok) {
+        throw new Error('Failed to mark all notifications as read');
+    }
+    return response.json();
+};

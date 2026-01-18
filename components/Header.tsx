@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Link, NavLink } from 'react-router-dom';
 import UserMenuDropdown from './UserMenuDropdown.tsx';
 import ThemeToggle from './ThemeToggle.tsx';
+import NotificationBell from './NotificationBell.tsx';
 
 const Header: React.FC = () => {
     const { currentUser, oauthProfile } = useAuth();
@@ -64,6 +65,7 @@ const Header: React.FC = () => {
                     {/* Right side: User info and actions */}
                     <div className="flex items-center space-x-4">
                         <ThemeToggle />
+                        <NotificationBell />
                         <Link to="/start-trade" className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors hidden sm:block">
                             Start a New Trade
                         </Link>
