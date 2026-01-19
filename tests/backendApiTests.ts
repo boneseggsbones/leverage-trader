@@ -38,7 +38,7 @@ export interface BackendTest {
 }
 
 // ============================================
-// AUTHENTICATION TESTS (7 tests)
+// AUTHENTICATION TESTS (8 tests)
 // ============================================
 const authTests: BackendTest[] = [
     {
@@ -58,43 +58,55 @@ const authTests: BackendTest[] = [
         }
     },
     {
-        id: 'AUTH-03', name: 'POST /api/auth/login endpoint exists',
+        id: 'AUTH-03', name: 'GET /api/auth-status returns OAuth config',
         category: 'Authentication', icon: '🔐', color: 'from-violet-500 to-purple-600',
         async run() {
-            const { status } = await apiCall('POST', '/api/auth/login', { email: 'test@test.com', password: 'wrong' });
-            assert([200, 401, 400].includes(status), `Expected valid response, got ${status}`);
+            const { status, data } = await apiCall('GET', '/api/auth-status');
+            assert(status === 200, `Expected 200, got ${status}`);
+            assert(data.hasOwnProperty('googleConfigured'), 'Expected googleConfigured property');
+            assert(data.hasOwnProperty('providers'), 'Expected providers property');
         }
     },
     {
-        id: 'AUTH-04', name: 'POST /api/auth/register endpoint exists',
+        id: 'AUTH-04', name: 'POST /api/login with valid credentials',
         category: 'Authentication', icon: '🔐', color: 'from-violet-500 to-purple-600',
         async run() {
-            const { status } = await apiCall('POST', '/api/auth/register', { email: `test${Date.now()}@test.com`, password: 'test123', name: 'Test' });
-            assert([200, 201, 400, 409].includes(status), `Expected valid response, got ${status}`);
+            const { status } = await apiCall('POST', '/api/login', { email: 'alice@example.com', password: 'password123' });
+            assert([200, 401].includes(status), `Expected 200 or 401, got ${status}`);
         }
     },
     {
-        id: 'AUTH-05', name: 'POST /api/auth/logout endpoint exists',
+        id: 'AUTH-05', name: 'POST /api/login rejects invalid credentials',
         category: 'Authentication', icon: '🔐', color: 'from-violet-500 to-purple-600',
         async run() {
-            const { status } = await apiCall('POST', '/api/auth/logout', {});
-            assert([200, 204, 401].includes(status), `Expected valid response, got ${status}`);
+            const { status } = await apiCall('POST', '/api/login', { email: 'test@test.com', password: 'wrong' });
+            assert([400, 401].includes(status), `Expected 400 or 401, got ${status}`);
         }
     },
     {
-        id: 'AUTH-06', name: 'Session persistence check',
+        id: 'AUTH-06', name: 'GET /api/auth/csrf returns CSRF token',
         category: 'Authentication', icon: '🔐', color: 'from-violet-500 to-purple-600',
         async run() {
-            const { status } = await apiCall('GET', '/api/auth/session');
-            assert([200, 401].includes(status), `Session check failed with ${status}`);
+            const { status, data } = await apiCall('GET', '/api/auth/csrf');
+            assert(status === 200, `Expected 200, got ${status}`);
+            assert(data.csrfToken !== undefined, 'Expected csrfToken in response');
         }
     },
     {
-        id: 'AUTH-07', name: 'Auth headers accepted',
+        id: 'AUTH-07', name: 'Session persistence check',
         category: 'Authentication', icon: '🔐', color: 'from-violet-500 to-purple-600',
         async run() {
-            const { status } = await apiCall('GET', '/api/users');
-            assert(status === 200, `Headers not accepted, got ${status}`);
+            const { status } = await apiCall('GET', '/api/session');
+            assert(status === 200, `Session check failed with ${status}`);
+        }
+    },
+    {
+        id: 'AUTH-08', name: 'GET /api/auth/providers lists available providers',
+        category: 'Authentication', icon: '🔐', color: 'from-violet-500 to-purple-600',
+        async run() {
+            const { status, data } = await apiCall('GET', '/api/auth/providers');
+            assert(status === 200, `Expected 200, got ${status}`);
+            assert(data.google !== undefined, 'Expected google provider');
         }
     },
 ];

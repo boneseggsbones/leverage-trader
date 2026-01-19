@@ -50,6 +50,18 @@ app.use('/uploads', express.static('uploads'));
 // Mount Auth.js routes
 app.use('/api/auth/*', authHandler);
 
+// Check OAuth configuration status
+app.get('/api/auth-status', (req, res) => {
+  const { isOAuthConfigured } = require('./auth');
+  res.json({
+    googleConfigured: isOAuthConfigured(),
+    providers: ['google'],
+    message: isOAuthConfigured()
+      ? 'OAuth is properly configured'
+      : 'Google OAuth credentials not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to backend/.env'
+  });
+});
+
 // Mount email preferences routes
 app.use('/api/email-preferences', emailPreferencesRoutes);
 

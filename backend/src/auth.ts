@@ -204,17 +204,33 @@ const sqliteAdapter = {
     },
 };
 
+// Validate OAuth credentials
+const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+
+if (!googleClientId || googleClientId === 'your-google-client-id' || googleClientId === 'your_google_client_id_here') {
+    console.warn('[Auth] ⚠️  GOOGLE_CLIENT_ID is not configured. OAuth sign-in will not work.');
+    console.warn('[Auth]    To enable Google sign-in:');
+    console.warn('[Auth]    1. Go to https://console.cloud.google.com/apis/credentials');
+    console.warn('[Auth]    2. Create OAuth 2.0 Client ID (Web application)');
+    console.warn('[Auth]    3. Add redirect URI: http://localhost:4000/api/auth/callback/google');
+    console.warn('[Auth]    4. Copy credentials to backend/.env file');
+} else {
+    console.log('[Auth] ✅ Google OAuth credentials configured');
+}
+
 // Auth.js configuration
 export const authConfig: AuthConfig = {
     adapter: sqliteAdapter as any,
     providers: [
         Google({
-            clientId: process.env.GOOGLE_CLIENT_ID || '',
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
         }),
     ],
     secret: process.env.AUTH_SECRET || 'development-secret-change-in-production',
     trustHost: true,
+    debug: process.env.AUTH_DEBUG === 'true',
     callbacks: {
         async session({ session, user }: any) {
             // Add leverage user ID to session if linked
@@ -224,6 +240,7 @@ export const authConfig: AuthConfig = {
             return session;
         },
         async signIn({ user, account, profile }: any) {
+            console.log('[Auth] Sign-in attempt:', { provider: account?.provider, email: user?.email });
             // Auto-link to existing Leverage user by email
             if (account?.provider === 'google' && user?.email) {
                 const existingOAuthUser = authDb.prepare(
@@ -233,12 +250,14 @@ export const authConfig: AuthConfig = {
                 if (existingOAuthUser && !existingOAuthUser.leverage_user_id) {
                     // Check if there's a Leverage user with this email
                     // This would need access to the main db - for now just allow sign in
+                    console.log('[Auth] Existing OAuth user found, no Leverage link yet');
                 }
             }
             return true;
         },
         async redirect({ url, baseUrl }: any) {
             // Always redirect to the frontend after auth
+            console.log('[Auth] Redirect callback:', { url, baseUrl });
             return 'http://localhost:3000/';
         },
     },
@@ -249,3 +268,10 @@ export const authHandler = ExpressAuth(authConfig);
 
 // Export the auth database for linking users
 export { authDb };
+
+// Export a function to check if OAuth is properly configured
+export function isOAuthConfigured(): boolean {
+    return googleClientId !== '' &&
+        googleClientId !== 'your-google-client-id' &&
+        googleClientId !== 'your_google_client_id_here';
+}
