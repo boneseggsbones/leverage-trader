@@ -5,8 +5,7 @@ import { fetchUser, fetchCompletedTradesForUser, fetchAllItems, fetchTradesForUs
 import { User, Trade, Item, TradeStatus } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
 import ItemValuationModal from './ItemValuationModal.tsx';
-import AssetLineageGraph from './visualization/AssetLineageGraph.tsx';
-import GraphInspectorPanel from './visualization/GraphInspectorPanel.tsx';
+import TradeJourneyTimeline from './visualization/TradeJourneyTimeline.tsx';
 import EmailPreferencesSettings from './EmailPreferencesSettings.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
@@ -19,7 +18,6 @@ const ProfilePage: React.FC = () => {
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
     const [showValuationModal, setShowValuationModal] = useState(false);
     const [showAllItems, setShowAllItems] = useState(false);
@@ -162,6 +160,9 @@ const ProfilePage: React.FC = () => {
                                 </Link>
                             </div>
                         </div>
+
+                        {/* Email Notification Preferences */}
+                        <EmailPreferencesSettings />
                     </div>
 
                     {/* Right: Stats & Journey */}
@@ -189,31 +190,12 @@ const ProfilePage: React.FC = () => {
                         {/* Trade-Up Journey */}
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
                             <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">📈 Your Trade-Up Journey</h3>
-                            {completedTrades.length > 0 ? (
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="col-span-2">
-                                        <AssetLineageGraph
-                                            trades={completedTrades}
-                                            userId={profileUser.id}
-                                            allItems={allItems}
-                                            onNodeClick={setSelectedNodeData}
-                                        />
-                                    </div>
-                                    <div className="col-span-1">
-                                        <GraphInspectorPanel
-                                            selectedNodeData={selectedNodeData}
-                                            trades={completedTrades}
-                                            userId={profileUser.id}
-                                            allItems={allItems}
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                                    <p className="text-4xl mb-2">🚀</p>
-                                    <p>Complete your first trade to start your journey!</p>
-                                </div>
-                            )}
+                            <TradeJourneyTimeline
+                                trades={completedTrades}
+                                userId={String(profileUser.id)}
+                                allItems={allItems}
+                                onTradeClick={(tradeId) => navigate(`/trades?highlight=${tradeId}`)}
+                            />
                         </div>
 
                         {/* About Section */}
@@ -223,9 +205,6 @@ const ProfilePage: React.FC = () => {
                                 <p className="text-gray-600 dark:text-gray-300">{profileUser.aboutMe}</p>
                             </div>
                         )}
-
-                        {/* Email Notification Preferences */}
-                        <EmailPreferencesSettings />
                     </div>
                 </div>
             </div>

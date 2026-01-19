@@ -115,231 +115,92 @@ const EmailPreferencesSettings: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="email-preferences-loading">
-                <div className="spinner" />
-                <p>Loading preferences...</p>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <div className="flex flex-col items-center justify-center py-8">
+                    <div className="w-8 h-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3" />
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">Loading preferences...</p>
+                </div>
             </div>
         );
     }
 
     if (!preferences) {
         return (
-            <div className="email-preferences-error">
-                <p>Unable to load email preferences</p>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <p className="text-center text-gray-500 dark:text-gray-400">Unable to load email preferences</p>
             </div>
         );
     }
 
     return (
-        <div className="email-preferences-settings">
-            <div className="preferences-header">
-                <h3>📧 Email Notifications</h3>
-                <p className="preferences-description">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            {/* Header */}
+            <div className="mb-5">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                    📧 Email Notifications
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     Choose which trade events send you email alerts
                 </p>
             </div>
 
-            {error && <div className="preferences-error">{error}</div>}
+            {/* Error */}
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+            )}
 
-            <div className="preferences-list">
+            {/* Preferences List */}
+            <div className="space-y-3">
                 {PREFERENCE_OPTIONS.map((option) => (
-                    <div key={option.key} className="preference-item">
-                        <div className="preference-info">
-                            <span className="preference-icon">{option.icon}</span>
-                            <div className="preference-text">
-                                <span className="preference-label">{option.label}</span>
-                                <span className="preference-description">{option.description}</span>
+                    <div
+                        key={option.key}
+                        className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl w-8 text-center">{option.icon}</span>
+                            <div>
+                                <p className="font-medium text-gray-800 dark:text-white text-sm">
+                                    {option.label}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {option.description}
+                                </p>
                             </div>
                         </div>
-                        <label className="toggle-switch">
+
+                        {/* Toggle Switch */}
+                        <label className="relative inline-flex items-center cursor-pointer">
                             <input
                                 type="checkbox"
+                                className="sr-only peer"
                                 checked={preferences[option.key]}
                                 onChange={() => handleToggle(option.key)}
                                 disabled={saving === option.key}
                             />
-                            <span className="toggle-slider">
-                                {saving === option.key && <span className="toggle-spinner" />}
-                            </span>
+                            <div className={`
+                                w-11 h-6 rounded-full peer
+                                bg-gray-300 dark:bg-gray-600
+                                peer-checked:bg-blue-600
+                                peer-focus:ring-4 peer-focus:ring-blue-100 dark:peer-focus:ring-blue-900
+                                peer-disabled:opacity-50 peer-disabled:cursor-not-allowed
+                                after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                after:bg-white after:rounded-full after:h-5 after:w-5
+                                after:transition-all after:shadow-sm
+                                peer-checked:after:translate-x-5
+                                transition-colors
+                            `}>
+                                {saving === option.key && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    </div>
+                                )}
+                            </div>
                         </label>
                     </div>
                 ))}
             </div>
-
-            <style>{`
-                .email-preferences-settings {
-                    background: var(--card-bg, #1e293b);
-                    border-radius: 12px;
-                    padding: 24px;
-                    margin-top: 24px;
-                }
-
-                .preferences-header h3 {
-                    margin: 0 0 8px 0;
-                    font-size: 18px;
-                    color: var(--text-primary, #f8fafc);
-                }
-
-                .preferences-header .preferences-description {
-                    margin: 0;
-                    font-size: 14px;
-                    color: var(--text-secondary, #94a3b8);
-                }
-
-                .preferences-error {
-                    background: rgba(239, 68, 68, 0.1);
-                    border: 1px solid rgba(239, 68, 68, 0.3);
-                    color: #ef4444;
-                    padding: 12px;
-                    border-radius: 8px;
-                    margin: 16px 0;
-                    font-size: 14px;
-                }
-
-                .preferences-list {
-                    margin-top: 20px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                }
-
-                .preference-item {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    padding: 16px;
-                    background: var(--card-bg-secondary, #0f172a);
-                    border-radius: 10px;
-                    transition: background 0.2s ease;
-                }
-
-                .preference-item:hover {
-                    background: var(--card-bg-hover, #1e293b);
-                }
-
-                .preference-info {
-                    display: flex;
-                    align-items: center;
-                    gap: 14px;
-                }
-
-                .preference-icon {
-                    font-size: 24px;
-                    width: 32px;
-                    text-align: center;
-                }
-
-                .preference-text {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                }
-
-                .preference-label {
-                    font-weight: 500;
-                    color: var(--text-primary, #f8fafc);
-                    font-size: 15px;
-                }
-
-                .preference-description {
-                    font-size: 13px;
-                    color: var(--text-secondary, #64748b);
-                }
-
-                /* Toggle Switch */
-                .toggle-switch {
-                    position: relative;
-                    display: inline-block;
-                    width: 48px;
-                    height: 26px;
-                    flex-shrink: 0;
-                }
-
-                .toggle-switch input {
-                    opacity: 0;
-                    width: 0;
-                    height: 0;
-                }
-
-                .toggle-slider {
-                    position: absolute;
-                    cursor: pointer;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: #475569;
-                    transition: 0.3s;
-                    border-radius: 26px;
-                }
-
-                .toggle-slider:before {
-                    position: absolute;
-                    content: "";
-                    height: 20px;
-                    width: 20px;
-                    left: 3px;
-                    bottom: 3px;
-                    background: white;
-                    transition: 0.3s;
-                    border-radius: 50%;
-                }
-
-                .toggle-switch input:checked + .toggle-slider {
-                    background: linear-gradient(135deg, #3b82f6, #6366f1);
-                }
-
-                .toggle-switch input:checked + .toggle-slider:before {
-                    transform: translateX(22px);
-                }
-
-                .toggle-switch input:disabled + .toggle-slider {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                }
-
-                .toggle-spinner {
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 14px;
-                    height: 14px;
-                    border: 2px solid rgba(255,255,255,0.3);
-                    border-top-color: white;
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
-                }
-
-                @keyframes spin {
-                    to { transform: translate(-50%, -50%) rotate(360deg); }
-                }
-
-                .email-preferences-loading {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 40px;
-                    color: var(--text-secondary, #94a3b8);
-                }
-
-                .email-preferences-loading .spinner {
-                    width: 32px;
-                    height: 32px;
-                    border: 3px solid rgba(59, 130, 246, 0.2);
-                    border-top-color: #3b82f6;
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
-                    margin-bottom: 12px;
-                }
-
-                .email-preferences-error {
-                    padding: 24px;
-                    text-align: center;
-                    color: var(--text-secondary, #94a3b8);
-                }
-            `}</style>
         </div>
     );
 };
