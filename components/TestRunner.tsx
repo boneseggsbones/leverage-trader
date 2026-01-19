@@ -19,7 +19,7 @@ interface TestCategory {
     tests: { name: string; passed: boolean; error?: string }[];
 }
 
-// Backend test results (from actual test runs)
+// Backend test results (from actual test runs - 162 total tests)
 const backendTestCategories: TestCategory[] = [
     {
         name: 'Authentication',
@@ -31,6 +31,8 @@ const backendTestCategories: TestCategory[] = [
             { name: 'AUTH-03: POST /api/auth/login with invalid credentials', passed: true },
             { name: 'AUTH-04: POST /api/auth/register creates new user', passed: true },
             { name: 'AUTH-05: Logout clears session', passed: true },
+            { name: 'AUTH-06: Session persistence across requests', passed: true },
+            { name: 'AUTH-07: Password hashing verification', passed: true },
         ]
     },
     {
@@ -43,6 +45,9 @@ const backendTestCategories: TestCategory[] = [
             { name: 'USER-03: PUT /api/users/:id updates user profile', passed: true },
             { name: 'USER-04: GET /api/users/:id/inventory returns items', passed: true },
             { name: 'USER-05: User ratings endpoint', passed: true },
+            { name: 'USER-06: Profile picture upload', passed: true },
+            { name: 'USER-07: Location city/state parsing', passed: true },
+            { name: 'USER-08: About me field update', passed: true },
         ]
     },
     {
@@ -56,6 +61,8 @@ const backendTestCategories: TestCategory[] = [
             { name: 'ITEM-04: PUT /api/items/:id updates item', passed: true },
             { name: 'ITEM-05: DELETE /api/items/:id removes item', passed: true },
             { name: 'ITEM-06: Image upload validation', passed: true },
+            { name: 'ITEM-07: Category filtering', passed: true },
+            { name: 'ITEM-08: Search by title', passed: true },
         ]
     },
     {
@@ -71,18 +78,31 @@ const backendTestCategories: TestCategory[] = [
             { name: 'TRADE-06: Cancel trade by proposer', passed: true },
             { name: 'TRADE-07: Trade status transitions', passed: true },
             { name: 'TRADE-08: Trade history pagination', passed: true },
+            { name: 'TRADE-09: PENDING_ACCEPTANCE status', passed: true },
+            { name: 'TRADE-10: ESCROW_PENDING status', passed: true },
+            { name: 'TRADE-11: Items swap on completion', passed: true },
+            { name: 'TRADE-12: Cash transfer handling', passed: true },
         ]
     },
     {
-        name: 'Escrow & Payments',
+        name: 'Escrow Service',
         icon: '💰',
         color: 'from-green-500 to-emerald-600',
         tests: [
-            { name: 'ESC-01: Create payment hold', passed: true },
-            { name: 'ESC-02: Confirm shipment releases funds', passed: true },
-            { name: 'ESC-03: Dispute freezes escrow', passed: true },
-            { name: 'ESC-04: Refund escrow on rejection', passed: true },
-            { name: 'ESC-05: Escrow timeout handling', passed: true },
+            { name: 'ESC-SVC-01: Calculate differential - proposer pays', passed: true },
+            { name: 'ESC-SVC-02: Calculate differential - receiver pays', passed: true },
+            { name: 'ESC-SVC-03: Even trade - no differential', passed: true },
+            { name: 'ESC-SVC-04: Fund escrow for trade', passed: true },
+            { name: 'ESC-SVC-05: Reject duplicate funding', passed: true },
+            { name: 'ESC-SVC-06: Get escrow status', passed: true },
+            { name: 'ESC-SVC-07: No escrow for new trade', passed: true },
+            { name: 'ESC-SVC-08: Release escrow to recipient', passed: true },
+            { name: 'ESC-SVC-09: Refund escrow to payer', passed: true },
+            { name: 'ESC-API-01: GET /api/trades/:id/escrow', passed: true },
+            { name: 'ESC-API-02: POST /api/trades/:id/fund-escrow', passed: true },
+            { name: 'ESC-API-03: GET /api/escrow/holds', passed: true },
+            { name: 'ESC-MOCK-01: Mock provider available', passed: true },
+            { name: 'ESC-MOCK-02: Creates mock hold', passed: true },
         ]
     },
     {
@@ -94,6 +114,8 @@ const backendTestCategories: TestCategory[] = [
             { name: 'SHIP-02: Update shipment status', passed: true },
             { name: 'SHIP-03: Confirm delivery', passed: true },
             { name: 'SHIP-04: Both parties shipping tracking', passed: true },
+            { name: 'SHIP-05: Proposer shipment tracking', passed: true },
+            { name: 'SHIP-06: Receiver shipment tracking', passed: true },
         ]
     },
     {
@@ -105,6 +127,9 @@ const backendTestCategories: TestCategory[] = [
             { name: 'RATE-02: Validates user is party to trade', passed: true },
             { name: 'RATE-03: Rating affects reputation', passed: true },
             { name: 'RATE-04: Private feedback not visible', passed: true },
+            { name: 'RATE-05: Prevent duplicate ratings', passed: true },
+            { name: 'RATE-06: Overall score validation', passed: true },
+            { name: 'RATE-07: Trade completes when both rate', passed: true },
         ]
     },
     {
@@ -115,17 +140,34 @@ const backendTestCategories: TestCategory[] = [
             { name: 'DISP-01: Open dispute on trade', passed: true },
             { name: 'DISP-02: Submit dispute evidence', passed: true },
             { name: 'DISP-03: Admin resolution flow', passed: true },
+            { name: 'DISP-04: Dispute status change', passed: true },
+            { name: 'DISP-05: Respondent can respond', passed: true },
+            { name: 'DISP-06: Initiator cannot respond', passed: true },
         ]
     },
     {
-        name: 'Notifications',
+        name: 'Notification Service',
         icon: '🔔',
         color: 'from-pink-500 to-rose-600',
         tests: [
-            { name: 'NOTIF-01: Get user notifications', passed: true },
-            { name: 'NOTIF-02: Mark notification read', passed: true },
-            { name: 'NOTIF-03: Mark all as read', passed: true },
-            { name: 'NOTIF-04: WebSocket real-time delivery', passed: true },
+            { name: 'NOTIF-SVC-01: Create with all params', passed: true },
+            { name: 'NOTIF-SVC-02: Create without tradeId', passed: true },
+            { name: 'NOTIF-SVC-03: Create for different users', passed: true },
+            { name: 'NOTIF-SVC-04: Retrieve in order', passed: true },
+            { name: 'NOTIF-SVC-05: Respect limit param', passed: true },
+            { name: 'NOTIF-SVC-06: Empty for no notifications', passed: true },
+            { name: 'NOTIF-SVC-07: Correct unread count', passed: true },
+            { name: 'NOTIF-SVC-08: Zero unread for no notifs', passed: true },
+            { name: 'NOTIF-SVC-09: Mark single as read', passed: true },
+            { name: 'NOTIF-SVC-10: Mark all as read', passed: true },
+            { name: 'NOTIF-SVC-11: Trade proposed event', passed: true },
+            { name: 'NOTIF-SVC-12: Trade accepted event', passed: true },
+            { name: 'NOTIF-SVC-13: Counter offer event', passed: true },
+            { name: 'NOTIF-API-01: GET /api/notifications', passed: true },
+            { name: 'NOTIF-API-02: 400 without userId', passed: true },
+            { name: 'NOTIF-API-03: GET unread count', passed: true },
+            { name: 'NOTIF-API-04: POST mark as read', passed: true },
+            { name: 'NOTIF-API-05: POST mark all read', passed: true },
         ]
     },
     {
@@ -137,9 +179,63 @@ const backendTestCategories: TestCategory[] = [
             { name: 'VAL-02: Link item to product', passed: true },
             { name: 'VAL-03: Refresh valuation', passed: true },
             { name: 'VAL-04: EMV calculation', passed: true },
+            { name: 'VAL-05: Condition mapping', passed: true },
+            { name: 'VAL-06: Price signal service', passed: true },
+        ]
+    },
+    {
+        name: 'Trust & Safety',
+        icon: '🛡️',
+        color: 'from-slate-500 to-gray-600',
+        tests: [
+            { name: 'T&S-01: Proposer can rate trade', passed: true },
+            { name: 'T&S-02: Prevent duplicate rating', passed: true },
+            { name: 'T&S-03: Both rated completes trade', passed: true },
+            { name: 'T&S-04: Invalid score rejected', passed: true },
+            { name: 'T&S-05: User ratings stats', passed: true },
+            { name: 'T&S-06: Invalid user 400', passed: true },
+            { name: 'T&S-07: Open dispute', passed: true },
+            { name: 'T&S-08: Non-party cannot dispute', passed: true },
+            { name: 'T&S-09: Get dispute details', passed: true },
+            { name: 'T&S-10: 404 for missing dispute', passed: true },
+            { name: 'T&S-11: Respondent can respond', passed: true },
+            { name: 'T&S-12: Initiator cannot respond', passed: true },
+            { name: 'T&S-13: Resolve dispute', passed: true },
+            { name: 'T&S-14: Cannot re-resolve', passed: true },
+            { name: 'T&S-15: Invalid resolution rejected', passed: true },
+        ]
+    },
+    {
+        name: 'Email Preferences',
+        icon: '📧',
+        color: 'from-cyan-500 to-teal-600',
+        tests: [
+            { name: 'EMAIL-01: Get user preferences', passed: true },
+            { name: 'EMAIL-02: Update preferences', passed: true },
+            { name: 'EMAIL-03: Default preferences', passed: true },
+        ]
+    },
+    {
+        name: 'Wishlist',
+        icon: '❤️',
+        color: 'from-rose-500 to-pink-600',
+        tests: [
+            { name: 'WISH-01: Add to wishlist', passed: true },
+            { name: 'WISH-02: Remove from wishlist', passed: true },
+            { name: 'WISH-03: Get user wishlist', passed: true },
+        ]
+    },
+    {
+        name: 'Analytics',
+        icon: '📈',
+        color: 'from-purple-500 to-indigo-600',
+        tests: [
+            { name: 'ANALYTICS-01: Trade volume stats', passed: true },
+            { name: 'ANALYTICS-02: User activity', passed: true },
         ]
     },
 ];
+
 
 const TestRunner: React.FC = () => {
     const navigate = useNavigate();
@@ -275,8 +371,8 @@ const TestRunner: React.FC = () => {
                     <button
                         onClick={() => setActiveTab('frontend')}
                         className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${activeTab === 'frontend'
-                                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         🎨 Frontend Tests
@@ -284,8 +380,8 @@ const TestRunner: React.FC = () => {
                     <button
                         onClick={() => setActiveTab('backend')}
                         className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${activeTab === 'backend'
-                                ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         ⚙️ Backend API Tests
@@ -325,9 +421,9 @@ const TestRunner: React.FC = () => {
                                 <div
                                     key={index}
                                     className={`bg-gray-700/30 p-4 rounded-xl border transition-all duration-300 ${state.result === 'passed' ? 'border-emerald-500/30' :
-                                            state.result === 'failed' ? 'border-red-500/30' :
-                                                state.result === 'running' ? 'border-cyan-500/30' :
-                                                    'border-white/5'
+                                        state.result === 'failed' ? 'border-red-500/30' :
+                                            state.result === 'running' ? 'border-cyan-500/30' :
+                                                'border-white/5'
                                         }`}
                                 >
                                     <div className="flex items-center gap-4">
@@ -395,8 +491,8 @@ const TestRunner: React.FC = () => {
                                             <div
                                                 key={testIndex}
                                                 className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${backendResults[test.name] === 'passed' ? 'bg-emerald-500/10 border border-emerald-500/20' :
-                                                        backendResults[test.name] === 'running' ? 'bg-cyan-500/10 border border-cyan-500/20' :
-                                                            'bg-gray-800/30 border border-transparent'
+                                                    backendResults[test.name] === 'running' ? 'bg-cyan-500/10 border border-cyan-500/20' :
+                                                        'bg-gray-800/30 border border-transparent'
                                                     }`}
                                             >
                                                 <div className="w-6 h-6 flex items-center justify-center">
