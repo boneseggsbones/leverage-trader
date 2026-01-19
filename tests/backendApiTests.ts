@@ -5,8 +5,14 @@
 
 const API_BASE = 'http://localhost:4000';
 
+let requestCounter = 0;
+
 // Helper to make API calls with error handling
-async function apiCall(method: string, path: string, body?: any): Promise<{ status: number; data: any }> {
+async function apiCall(method: string, path: string, body?: any): Promise<{ status: number; data: any; durationMs: number }> {
+    const reqId = ++requestCounter;
+    const startTime = performance.now();
+    console.log(`[TEST-REQ-${reqId}] ${method} ${path}`, body ? JSON.stringify(body).substring(0, 100) : '');
+
     try {
         const options: RequestInit = {
             method,
@@ -17,8 +23,12 @@ async function apiCall(method: string, path: string, body?: any): Promise<{ stat
         }
         const res = await fetch(`${API_BASE}${path}`, options);
         const data = await res.json().catch(() => ({}));
-        return { status: res.status, data };
+        const durationMs = Math.round(performance.now() - startTime);
+        console.log(`[TEST-REQ-${reqId}] ${method} ${path} → ${res.status} (${durationMs}ms)`);
+        return { status: res.status, data, durationMs };
     } catch (error: any) {
+        const durationMs = Math.round(performance.now() - startTime);
+        console.error(`[TEST-REQ-${reqId}] ${method} ${path} → FAILED (${durationMs}ms):`, error.message);
         throw new Error(`Network error: ${error.message}`);
     }
 }
@@ -344,9 +354,13 @@ const tradeTests: BackendTest[] = [
         id: 'TRADE-09', name: 'PENDING_ACCEPTANCE status check',
         category: 'Trades API', icon: '🔄', color: 'from-amber-500 to-orange-600',
         async run() {
-            const create = await apiCall('POST', '/api/trades', { proposerId: 1, receiverId: 2, proposerItemIds: [], receiverItemIds: [], proposerCash: 65 });
-            const { data } = await apiCall('GET', `/api/trades/${create.data.trade?.id || create.data.id}`);
-            assert(data.status || data.trade?.status, 'Trade should have status');
+            const { status, data } = await apiCall('POST', '/api/trades', { proposerId: 1, receiverId: 2, proposerItemIds: [], receiverItemIds: [], proposerCash: 75 });
+            assert(status === 200, `Expected 200, got ${status}`);
+            assert(data.trade?.status === 'PENDING_ACCEPTANCE', `Trade should have PENDING_ACCEPTANCE status, got ${data.trade?.status}`);
+            // Also verify via GET endpoint
+            const { status: getStatus, data: getTrade } = await apiCall('GET', `/api/trades/${data.trade.id}`);
+            assert(getStatus === 200, `GET trade should return 200, got ${getStatus}`);
+            assert(getTrade.status === 'PENDING_ACCEPTANCE', `GET trade should have PENDING_ACCEPTANCE status`);
         }
     },
     {

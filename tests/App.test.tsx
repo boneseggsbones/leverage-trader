@@ -59,7 +59,7 @@ export const testSuite: Test[] = [
             const proposerCash = 1000; // $10.00
 
             await proposeTrade(proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash);
-            
+
             const trades = await fetchTradesForUser('user-1');
             const newTrade = trades.find(t => t.status === TradeStatus.PENDING_ACCEPTANCE && t.proposerId === proposerId && t.receiverId === receiverId);
 
@@ -103,15 +103,15 @@ export const testSuite: Test[] = [
             const aliceLostItem1 = !alice!.inventory.some(i => i.id === 'item-1');
             assert(aliceHasItem4, 'Alice should have received item-4');
             assert(aliceLostItem1, 'Alice should have lost item-1');
-            
+
             const bobHasItem1 = bob!.inventory.some(i => i.id === 'item-1');
             const bobLostItem4 = !bob!.inventory.some(i => i.id === 'item-4');
             assert(bobHasItem1, 'Bob should have received item-1');
             assert(bobLostItem4, 'Bob should have lost item-4');
 
-            // Verify cash is unchanged
-            assert(alice!.cash === 20000, `Alice's cash should be unchanged at 20000, but is ${alice!.cash}`);
-            assert(bob!.cash === 5000, `Bob's cash should be unchanged at 5000, but is ${bob!.cash}`);
+            // Verify balance is unchanged (no cash in this trade)
+            assert(alice!.balance === 20000, `Alice's balance should be unchanged at 20000, but is ${alice!.balance}`);
+            assert(bob!.balance === 5000, `Bob's balance should be unchanged at 5000, but is ${bob!.balance}`);
 
             // Verify reputation update for an unbalanced trade
             assert(alice!.valuationReputationScore === 106, `Alice's rep should be 106, but is ${alice!.valuationReputationScore}`);
@@ -126,7 +126,7 @@ export const testSuite: Test[] = [
             const originalAlice = await fetchUser('user-1');
 
             const updatedTrade = await respondToTrade(tradeId, 'reject');
-            
+
             assert(updatedTrade.status === TradeStatus.REJECTED, `Trade status should be REJECTED, but is ${updatedTrade.status}`);
 
             // Ensure no data was changed for users
@@ -146,9 +146,9 @@ export const testSuite: Test[] = [
             const results = await valuationRouterService.routeValuationRequest(input);
             assert(results.length === 1, `Expected 1 valuation result, got ${results.length}`);
             assert(results[0].apiName === 'PriceChartingProvider', `Expected PriceChartingProvider, got ${results[0].apiName}`);
-            
+
             const finalValuation = emvCalculatorService.calculateFinalEMV(input.condition, results[0]);
-            
+
             assert(finalValuation.status === 'API_VERIFIED', `Status should be API_VERIFIED, got ${finalValuation.status}`);
             assert(finalValuation.finalEMV === 7500, `Final EMV should be 7500 cents, got ${finalValuation.finalEMV}`);
             assert(finalValuation.apiMetadata.apiConditionUsed === 'cib-price', `API condition used should be 'cib-price', got ${finalValuation.apiMetadata.apiConditionUsed}`);

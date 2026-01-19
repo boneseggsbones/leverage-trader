@@ -595,6 +595,25 @@ app.get('/api/trades', (req, res) => {
   });
 });
 
+// Get a single trade by ID
+app.get('/api/trades/:id', (req, res) => {
+  const tradeId = req.params.id;
+  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Trade not found' });
+    try {
+      const trade = {
+        ...row,
+        proposerItemIds: JSON.parse(row.proposerItemIds || '[]'),
+        receiverItemIds: JSON.parse(row.receiverItemIds || '[]')
+      };
+      res.json(trade);
+    } catch (e: any) {
+      res.status(500).json({ error: 'Failed to parse trade' });
+    }
+  });
+});
+
 // Cancel a trade (proposer only)
 app.post('/api/trades/:id/cancel', (req, res) => {
   const tradeId = req.params.id;
