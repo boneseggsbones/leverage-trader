@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import {
     fetchTradesForUser,
@@ -28,6 +28,7 @@ import { TradeCardSkeleton } from './Skeleton.tsx';
 const TradesPage: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { addNotification } = useNotification();
 
     const [trades, setTrades] = useState<Trade[]>([]);
@@ -37,6 +38,8 @@ const TradesPage: React.FC = () => {
     const [escrowData, setEscrowData] = useState<Record<string, EscrowDisplayInfo | null>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [highlightedTradeId, setHighlightedTradeId] = useState<string | null>(null);
+    const tradeRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const [actionTrade, setActionTrade] = useState<Trade | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -45,6 +48,29 @@ const TradesPage: React.FC = () => {
     const [isEscrowModalOpen, setIsEscrowModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState<'accept' | 'reject' | 'cancel' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Handle highlight from URL parameter
+    useEffect(() => {
+        const highlight = searchParams.get('highlight');
+        if (highlight) {
+            setHighlightedTradeId(highlight);
+            // Clear the URL parameter
+            searchParams.delete('highlight');
+            setSearchParams(searchParams, { replace: true });
+            // Auto-clear highlight after 3 seconds
+            setTimeout(() => setHighlightedTradeId(null), 3000);
+        }
+    }, [searchParams, setSearchParams]);
+
+    // Scroll to highlighted trade when trades load
+    useEffect(() => {
+        if (highlightedTradeId && !isLoading && tradeRefs.current[highlightedTradeId]) {
+            tradeRefs.current[highlightedTradeId]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+        }
+    }, [highlightedTradeId, isLoading]);
 
     const loadTrades = useCallback(async () => {
         if (!currentUser) {
@@ -289,10 +315,20 @@ const TradesPage: React.FC = () => {
                         const otherUserId = trade.proposerId === currentUser?.id ? trade.receiverId : trade.proposerId;
                         const otherUser = users[otherUserId];
                         if (!otherUser || !currentUser) return null;
+                        const isHighlighted = highlightedTradeId === trade.id;
                         return (
-                            <TradeCard key={trade.id} trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
-                                {renderActionButtons(trade)}
-                            </TradeCard>
+                            <div
+                                key={trade.id}
+                                ref={el => { tradeRefs.current[trade.id] = el; }}
+                                className={`transition-all duration-500 rounded-lg ${isHighlighted
+                                        ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse shadow-lg shadow-blue-200 dark:shadow-blue-900'
+                                        : ''
+                                    }`}
+                            >
+                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
+                                    {renderActionButtons(trade)}
+                                </TradeCard>
+                            </div>
                         )
                     })}
                 </div>

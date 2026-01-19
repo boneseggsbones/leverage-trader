@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead, UserNotification } from '../api/api';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const NotificationBell: React.FC = () => {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const [notifications, setNotifications] = useState<UserNotification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
@@ -27,9 +29,23 @@ const NotificationBell: React.FC = () => {
         }
     };
 
+    // WebSocket for real-time updates
+    const handleWebSocketMessage = useCallback((message: any) => {
+        if (message.type === 'NEW_NOTIFICATION' && message.notification) {
+            console.log('[NotificationBell] Received real-time notification');
+            setNotifications(prev => [message.notification, ...prev]);
+            setUnreadCount(prev => prev + 1);
+        }
+    }, []);
+
+    useWebSocket({
+        userId: currentUser?.id || null,
+        onMessage: handleWebSocketMessage
+    });
+
     useEffect(() => {
         loadNotifications();
-        // Poll for new notifications every 30 seconds
+        // Poll for new notifications every 30 seconds as fallback
         const interval = setInterval(loadNotifications, 30000);
         return () => clearInterval(interval);
     }, [currentUser?.id]);
@@ -62,7 +78,7 @@ const NotificationBell: React.FC = () => {
         // Navigate to trade if applicable
         if (notification.tradeId) {
             setIsOpen(false);
-            navigate('/trades');
+            navigate(`/trades?highlight=${notification.tradeId}`);
         }
     };
 

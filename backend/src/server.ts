@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { db, init, migrate, seedValuationData } from './database';
@@ -13,9 +14,12 @@ import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './ship
 import { authHandler, authDb } from './auth';
 import { fundEscrow, releaseEscrow, refundEscrow, getEscrowStatus, calculateCashDifferential, EscrowStatus } from './payments';
 import { getNotificationsForUser, getUnreadCount, markAsRead, markAllAsRead, notifyTradeEvent, NotificationType } from './notifications';
+import { initWebSocket } from './websocket';
 
 const app = express();
+const httpServer = createServer(app);
 const port = 4000;
+
 
 // Create uploads directory if it doesn't exist
 const dir = './uploads';
@@ -1826,8 +1830,12 @@ if (require.main === module) {
     .then(() => init())
     .then(() => seedValuationData())
     .then(() => {
-      app.listen(port, '127.0.0.1', () => {
+      // Initialize WebSocket server
+      initWebSocket(httpServer);
+
+      httpServer.listen(port, '127.0.0.1', () => {
         console.log(`Server is running on http://localhost:${port}`);
+        console.log(`WebSocket available at ws://localhost:${port}/ws`);
       });
     })
     .catch((err: any) => {
@@ -1837,3 +1845,4 @@ if (require.main === module) {
 }
 
 export default app;
+

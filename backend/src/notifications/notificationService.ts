@@ -5,6 +5,7 @@
 
 import { db } from '../database';
 import { NotificationType, Notification, getNotificationIcon } from './types';
+import { broadcastToUser } from '../websocket';
 
 /**
  * Create a notification for a user
@@ -30,7 +31,7 @@ export async function createNotification(
                     reject(err);
                 } else {
                     console.log(`[Notifications] Created ${type} notification for user ${userId}`);
-                    resolve({
+                    const notification: Notification = {
                         id,
                         userId: String(userId),
                         type,
@@ -39,7 +40,15 @@ export async function createNotification(
                         message,
                         isRead: false,
                         createdAt: now,
+                    };
+
+                    // Broadcast notification via WebSocket for real-time updates
+                    broadcastToUser(userId, {
+                        type: 'NEW_NOTIFICATION',
+                        notification
                     });
+
+                    resolve(notification);
                 }
             }
         );
