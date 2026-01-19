@@ -670,8 +670,30 @@ app.post('/api/trades/:id/respond', (req, res) => {
 
     if (response === 'accept') {
       const updatedAt = new Date().toISOString();
+      const proposerCash = Number(tradeRow.proposerCash || 0);
+      const receiverCash = Number(tradeRow.receiverCash || 0);
+      const hasCash = proposerCash > 0 || receiverCash > 0;
 
-      // Update status to completed awaiting rating and transfer item ownership
+      // If there's cash involved, go to PAYMENT_PENDING for escrow funding
+      // Otherwise complete the trade immediately
+      if (hasCash) {
+        db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?',
+          ['PAYMENT_PENDING', updatedAt, tradeId], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Notify the proposer about acceptance (they may need to fund)
+            db.get('SELECT name FROM User WHERE id = ?', [tradeRow.receiverId], (err, receiverRow: any) => {
+              const receiverName = receiverRow?.name || 'The other trader';
+              notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
+                .catch(err => console.error('Failed to send acceptance notification:', err));
+            });
+
+            return res.json({ id: tradeId, status: 'PAYMENT_PENDING' });
+          });
+        return;
+      }
+
+      // No cash involved - complete immediately
       db.serialize(() => {
         db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COMPLETED_AWAITING_RATING', updatedAt, tradeId]);
 
@@ -686,15 +708,6 @@ app.post('/api/trades/:id/respond', (req, res) => {
         receiverItemIds.forEach((itemId: string) => {
           db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.proposerId, itemId]);
         });
-
-        // Transfer cash between users if applicable (ensure User.balance exists)
-        const proposerCash = Number(tradeRow.proposerCash || 0);
-        const receiverCash = Number(tradeRow.receiverCash || 0);
-
-        // Update balances: proposer.balance = proposer.balance - proposerCash + receiverCash
-        // receiver.balance = receiver.balance - receiverCash + proposerCash
-        db.run('UPDATE User SET balance = balance - ? + ? WHERE id = ?', [proposerCash, receiverCash, tradeRow.proposerId]);
-        db.run('UPDATE User SET balance = balance - ? + ? WHERE id = ?', [receiverCash, proposerCash, tradeRow.receiverId]);
 
         // Generate price signals for all items in the completed trade
         generatePriceSignalsForTrade(tradeId).then(result => {
@@ -922,6 +935,60 @@ app.get('/api/trades/:id/escrow', async (req, res) => {
   } catch (err: any) {
     console.error('Error getting escrow status:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a payment intent for Stripe (returns client secret)
+app.post('/api/trades/:id/create-payment-intent', async (req, res) => {
+  const tradeId = req.params.id;
+  const { userId } = req.body;
+
+  if (!tradeId || !userId) {
+    return res.status(400).json({ error: 'tradeId and userId are required' });
+  }
+
+  try {
+    // Get trade to determine amount
+    const trade = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row) => {
+        if (err) reject(err);
+        else if (!row) reject(new Error('Trade not found'));
+        else resolve(row);
+      });
+    });
+
+    // Determine who pays and how much
+    const isProposer = String(trade.proposerId) === String(userId);
+    const payerCash = isProposer ? trade.proposerCash : trade.receiverCash;
+    const recipientId = isProposer ? trade.receiverId : trade.proposerId;
+
+    if (payerCash <= 0) {
+      return res.status(400).json({ error: 'No cash payment required from this user' });
+    }
+
+    // Create escrow hold (which creates PaymentIntent for Stripe provider)
+    const result = await fundEscrow(tradeId, Number(userId));
+
+    // For Stripe, the escrowHold will have the clientSecret in a special field
+    // We need to get it from the PaymentIntent
+    let clientSecret = null;
+    if (result.escrowHold.providerReference && process.env.PAYMENT_PROVIDER === 'stripe') {
+      // For Stripe, return the provider reference which frontend can use
+      // The clientSecret was stored during holdFunds call
+      clientSecret = result.escrowHold.providerReference;
+    }
+
+    res.json({
+      success: true,
+      escrowHoldId: result.escrowHold.id,
+      amount: payerCash,
+      provider: result.escrowHold.provider,
+      clientSecret: clientSecret,
+      requiresConfirmation: result.requiresConfirmation,
+    });
+  } catch (err: any) {
+    console.error('Error creating payment intent:', err);
+    res.status(400).json({ error: err.message });
   }
 });
 

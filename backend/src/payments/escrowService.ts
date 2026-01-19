@@ -7,19 +7,18 @@
 import { db } from '../database';
 import { PaymentProvider, CashDifferential, EscrowHold, EscrowStatus } from './types';
 import { MockPaymentProvider } from './mockProvider';
+import { StripePaymentProvider } from './stripeProvider';
 
 // Get configured payment provider
-// TODO: Make this configurable via environment variable
+// Configured via PAYMENT_PROVIDER environment variable
 function getPaymentProvider(): PaymentProvider {
     const provider = process.env.PAYMENT_PROVIDER || 'mock';
 
     switch (provider) {
         case 'mock':
             return new MockPaymentProvider();
-        // case 'stripe':
-        //     return new StripePaymentProvider();
-        // case 'paypal':
-        //     return new PayPalPaymentProvider();
+        case 'stripe':
+            return new StripePaymentProvider();
         default:
             console.warn(`Unknown payment provider: ${provider}, falling back to mock`);
             return new MockPaymentProvider();

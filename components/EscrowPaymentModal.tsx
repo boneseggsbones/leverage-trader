@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Trade } from '../types';
-import { fetchCashDifferential, fundEscrow, CashDifferential } from '../api/api';
+import { createPaymentIntent, fundEscrow, CashDifferential, CreatePaymentIntentResult } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../utils/currency';
+import StripeCardForm from './StripeCardForm';
 
 interface EscrowPaymentModalProps {
     trade: Trade;
@@ -18,23 +19,27 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
     onPaymentSuccess,
 }) => {
     const { currentUser } = useAuth();
-    const [differential, setDifferential] = useState<CashDifferential | null>(null);
+    const [paymentIntent, setPaymentIntent] = useState<CreatePaymentIntentResult | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (isOpen && trade) {
-            loadCashDifferential();
+        if (isOpen && trade && currentUser) {
+            initializePayment();
         }
-    }, [isOpen, trade.id]);
+    }, [isOpen, trade.id, currentUser?.id]);
 
-    const loadCashDifferential = async () => {
+    const initializePayment = async () => {
+        if (!currentUser) return;
+
         setIsLoading(true);
         setError(null);
+        setPaymentIntent(null);
+
         try {
-            const diff = await fetchCashDifferential(trade.id);
-            setDifferential(diff);
+            const result = await createPaymentIntent(trade.id, currentUser.id);
+            setPaymentIntent(result);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -42,8 +47,8 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
         }
     };
 
-    const handleFundEscrow = async () => {
-        if (!currentUser || !differential) return;
+    const handleMockPayment = async () => {
+        if (!currentUser) return;
 
         setIsProcessing(true);
         setError(null);
@@ -59,6 +64,15 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
         }
     };
 
+    const handleStripeSuccess = () => {
+        onPaymentSuccess();
+        onClose();
+    };
+
+    const handleStripeError = (errorMessage: string) => {
+        setError(errorMessage);
+    };
+
     if (!isOpen) return null;
 
     // Simple logic: if you give cash in this trade, you're the payer
@@ -67,6 +81,7 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
     const youGetCash = isProposer ? trade.receiverCash : trade.proposerCash;
     const isPayer = youGiveCash > 0;
     const cashAmount = isPayer ? youGiveCash : youGetCash;
+    const isStripe = paymentIntent?.provider === 'stripe';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -92,7 +107,7 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                         <div className="flex items-center justify-center py-8">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
                         </div>
-                    ) : error ? (
+                    ) : error && !paymentIntent ? (
                         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400">
                             {error}
                         </div>
@@ -125,27 +140,45 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                                     <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                         <span className="text-xl">🔒</span>
                                         <div>
-                                            <h4 className="font-medium text-gray-800 dark:text-white">How It Works</h4>
+                                            <h4 className="font-medium text-gray-800 dark:text-white">Secure Escrow</h4>
                                             <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                                                We hold your money safely. Once you both confirm the items arrived, we send it to the other trader.
+                                                Your money is held safely until both parties confirm receipt.
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-green-500">✓</span>
-                                            Your money stays safe until you're happy
+                                    {/* Stripe Card Form or Mock Payment */}
+                                    {isStripe && paymentIntent?.clientSecret ? (
+                                        <div className="mt-4">
+                                            <StripeCardForm
+                                                clientSecret={paymentIntent.clientSecret}
+                                                amount={cashAmount}
+                                                onSuccess={handleStripeSuccess}
+                                                onError={handleStripeError}
+                                            />
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-green-500">✓</span>
-                                            Only released when you both say "looks good!"
+                                    ) : (
+                                        <button
+                                            onClick={handleMockPayment}
+                                            disabled={isProcessing}
+                                            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {isProcessing ? (
+                                                <>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                                                    Processing...
+                                                </>
+                                            ) : (
+                                                <>Pay {formatCurrency(cashAmount)} to Escrow</>
+                                            )}
+                                        </button>
+                                    )}
+
+                                    {error && (
+                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-red-600 dark:text-red-400 text-sm">
+                                            {error}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-green-500">✓</span>
-                                            Full refund if anything goes wrong
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
@@ -161,31 +194,13 @@ const EscrowPaymentModal: React.FC<EscrowPaymentModalProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 flex gap-3">
+                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50">
                     <button
                         onClick={onClose}
-                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                     >
                         Cancel
                     </button>
-                    {isPayer && cashAmount > 0 && (
-                        <button
-                            onClick={handleFundEscrow}
-                            disabled={isProcessing}
-                            className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                                    Processing...
-                                </>
-                            ) : (
-                                <>
-                                    Pay {formatCurrency(cashAmount)} to Escrow
-                                </>
-                            )}
-                        </button>
-                    )}
                 </div>
             </div>
         </div>

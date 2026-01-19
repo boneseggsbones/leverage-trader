@@ -709,6 +709,28 @@ export const fetchCashDifferential = async (tradeId: string): Promise<CashDiffer
     return response.json();
 };
 
+export interface CreatePaymentIntentResult {
+    success: boolean;
+    escrowHoldId: string;
+    amount: number;
+    provider: string;
+    clientSecret: string | null;
+    requiresConfirmation: boolean;
+}
+
+export const createPaymentIntent = async (tradeId: string, userId: string | number): Promise<CreatePaymentIntentResult> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/create-payment-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to create payment intent: ${text}`);
+    }
+    return response.json();
+};
+
 export const fundEscrow = async (tradeId: string, userId: string | number): Promise<{
     success: boolean;
     escrowHold: EscrowHold;
