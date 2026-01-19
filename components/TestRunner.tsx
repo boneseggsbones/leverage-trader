@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { testSuite, Test } from '../tests/App.test.tsx';
-import { allBackendTests, BackendTest } from '../tests/backendApiTests';
+import { allBackendTests, BackendTest, categoryMeta } from '../tests/backendApiTests';
 import { useNavigate } from 'react-router-dom';
 
 type TestResult = 'idle' | 'running' | 'passed' | 'failed';
@@ -494,53 +494,56 @@ const TestRunner: React.FC = () => {
                         </div>
 
                         <div className="p-6 space-y-6 max-h-[600px] overflow-y-auto">
-                            {Object.entries(testsByCategory).map(([categoryName, tests], catIndex) => (
-                                <div key={catIndex} className="bg-gray-700/20 rounded-xl border border-white/5 overflow-hidden">
-                                    <div className="bg-gradient-to-r from-violet-500 to-purple-600 px-5 py-3 flex items-center gap-3">
-                                        <span className="text-2xl">🧪</span>
-                                        <h3 className="font-semibold text-white">{categoryName}</h3>
-                                        <span className="ml-auto text-sm text-white/70 bg-white/20 px-2 py-0.5 rounded-full">
-                                            {tests.filter(t => backendResults[t.id] === 'passed').length}/{tests.length}
-                                        </span>
-                                    </div>
-                                    <div className="p-4 space-y-2">
-                                        {tests.map((test, testIndex) => (
-                                            <div key={testIndex}>
-                                                <div
-                                                    className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${backendResults[test.id] === 'passed' ? 'bg-emerald-500/10 border border-emerald-500/20' :
-                                                        backendResults[test.id] === 'failed' ? 'bg-red-500/10 border border-red-500/20' :
-                                                            backendResults[test.id] === 'running' ? 'bg-cyan-500/10 border border-cyan-500/20' :
-                                                                'bg-gray-800/30 border border-transparent'
-                                                        }`}
-                                                >
-                                                    <div className="w-6 h-6 flex items-center justify-center">
-                                                        {backendResults[test.id] === 'passed' ? (
-                                                            <span className="text-emerald-400">✓</span>
-                                                        ) : backendResults[test.id] === 'failed' ? (
-                                                            <span className="text-red-400">✗</span>
-                                                        ) : backendResults[test.id] === 'running' ? (
-                                                            <div className="w-4 h-4 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
-                                                        ) : (
-                                                            <span className="text-gray-500">○</span>
-                                                        )}
+                            {Object.entries(testsByCategory).map(([categoryName, tests], catIndex) => {
+                                const meta = categoryMeta[categoryName] || { icon: '🧪', color: 'from-gray-500 to-gray-600' };
+                                return (
+                                    <div key={catIndex} className="bg-gray-700/20 rounded-xl border border-white/5 overflow-hidden">
+                                        <div className={`bg-gradient-to-r ${meta.color} px-5 py-3 flex items-center gap-3`}>
+                                            <span className="text-2xl">{meta.icon}</span>
+                                            <h3 className="font-semibold text-white">{categoryName}</h3>
+                                            <span className="ml-auto text-sm text-white/70 bg-white/20 px-2 py-0.5 rounded-full">
+                                                {tests.filter(t => backendResults[t.id] === 'passed').length}/{tests.length}
+                                            </span>
+                                        </div>
+                                        <div className="p-4 space-y-2">
+                                            {tests.map((test, testIndex) => (
+                                                <div key={testIndex}>
+                                                    <div
+                                                        className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${backendResults[test.id] === 'passed' ? 'bg-emerald-500/10 border border-emerald-500/20' :
+                                                            backendResults[test.id] === 'failed' ? 'bg-red-500/10 border border-red-500/20' :
+                                                                backendResults[test.id] === 'running' ? 'bg-cyan-500/10 border border-cyan-500/20' :
+                                                                    'bg-gray-800/30 border border-transparent'
+                                                            }`}
+                                                    >
+                                                        <div className="w-6 h-6 flex items-center justify-center">
+                                                            {backendResults[test.id] === 'passed' ? (
+                                                                <span className="text-emerald-400">✓</span>
+                                                            ) : backendResults[test.id] === 'failed' ? (
+                                                                <span className="text-red-400">✗</span>
+                                                            ) : backendResults[test.id] === 'running' ? (
+                                                                <div className="w-4 h-4 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
+                                                            ) : (
+                                                                <span className="text-gray-500">○</span>
+                                                            )}
+                                                        </div>
+                                                        <span className={`text-sm ${backendResults[test.id] === 'passed' ? 'text-white' :
+                                                            backendResults[test.id] === 'failed' ? 'text-red-300' :
+                                                                'text-gray-400'
+                                                            }`}>
+                                                            {test.id}: {test.name}
+                                                        </span>
                                                     </div>
-                                                    <span className={`text-sm ${backendResults[test.id] === 'passed' ? 'text-white' :
-                                                        backendResults[test.id] === 'failed' ? 'text-red-300' :
-                                                            'text-gray-400'
-                                                        }`}>
-                                                        {test.id}: {test.name}
-                                                    </span>
+                                                    {backendErrors[test.id] && (
+                                                        <pre className="mt-1 ml-9 p-2 bg-red-950/40 text-red-300 rounded text-xs whitespace-pre-wrap break-all border border-red-500/20">
+                                                            {backendErrors[test.id]}
+                                                        </pre>
+                                                    )}
                                                 </div>
-                                                {backendErrors[test.id] && (
-                                                    <pre className="mt-1 ml-9 p-2 bg-red-950/40 text-red-300 rounded text-xs whitespace-pre-wrap break-all border border-red-500/20">
-                                                        {backendErrors[test.id]}
-                                                    </pre>
-                                                )}
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
