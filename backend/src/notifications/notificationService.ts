@@ -6,6 +6,26 @@
 import { db } from '../database';
 import { NotificationType, Notification, getNotificationIcon } from './types';
 import { broadcastToUser } from '../websocket';
+import { sendTradeEventEmail } from './emailService';
+
+/**
+ * Helper to get user's email from the database
+ */
+async function getUserEmail(userId: string | number): Promise<string | null> {
+    return new Promise((resolve) => {
+        db.get(
+            'SELECT email FROM User WHERE id = ?',
+            [String(userId)],
+            (err, row: any) => {
+                if (err || !row) {
+                    resolve(null);
+                } else {
+                    resolve(row.email || null);
+                }
+            }
+        );
+    });
+}
 
 /**
  * Create a notification for a user
@@ -198,7 +218,18 @@ export async function notifyTradeEvent(
             message = `There's an update on your trade with ${otherUserName}.`;
     }
 
-    return createNotification(recipientId, type, title, message, tradeId);
+    const notification = await createNotification(recipientId, type, title, message, tradeId);
+
+    // Send email notification for high-priority events (fire and forget)
+    getUserEmail(recipientId).then((email) => {
+        if (email) {
+            sendTradeEventEmail(email, type, otherUserName, tradeId).catch((err) => {
+                console.error('[Notifications] Email send failed:', err);
+            });
+        }
+    });
+
+    return notification;
 }
 
 // Export for use

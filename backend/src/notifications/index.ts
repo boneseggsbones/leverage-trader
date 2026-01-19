@@ -12,3 +12,5 @@ export {
     markAllAsRead,
     notifyTradeEvent,
 } from './notificationService';
+export { verifyEmailConnection, sendEmail } from './emailService';
+
