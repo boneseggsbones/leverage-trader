@@ -15,6 +15,7 @@ import { authHandler, authDb } from './auth';
 import { fundEscrow, releaseEscrow, refundEscrow, getEscrowStatus, calculateCashDifferential, EscrowStatus } from './payments';
 import { getNotificationsForUser, getUnreadCount, markAsRead, markAllAsRead, notifyTradeEvent, NotificationType } from './notifications';
 import { initWebSocket } from './websocket';
+import emailPreferencesRoutes from './emailPreferencesRoutes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -48,6 +49,9 @@ app.use('/uploads', express.static('uploads'));
 
 // Mount Auth.js routes
 app.use('/api/auth/*', authHandler);
+
+// Mount email preferences routes
+app.use('/api/email-preferences', emailPreferencesRoutes);
 
 // Get current user from OAuth session (creates Leverage user if needed)
 app.get('/api/session', async (req, res) => {

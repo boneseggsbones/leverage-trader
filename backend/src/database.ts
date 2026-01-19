@@ -207,6 +207,18 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read);
 
+      -- User email notification preferences
+      CREATE TABLE IF NOT EXISTS email_preferences (
+        user_id INTEGER PRIMARY KEY REFERENCES User(id),
+        trade_proposed INTEGER DEFAULT 1,
+        trade_accepted INTEGER DEFAULT 1,
+        escrow_funded INTEGER DEFAULT 1,
+        trade_completed INTEGER DEFAULT 1,
+        counter_offer INTEGER DEFAULT 1,
+        dispute_opened INTEGER DEFAULT 1,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
       CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT

@@ -7,6 +7,7 @@ import { db } from '../database';
 import { NotificationType, Notification, getNotificationIcon } from './types';
 import { broadcastToUser } from '../websocket';
 import { sendTradeEventEmail } from './emailService';
+import { shouldSendEmailForType } from '../emailPreferencesRoutes';
 
 /**
  * Helper to get user's email from the database
@@ -221,12 +222,24 @@ export async function notifyTradeEvent(
     const notification = await createNotification(recipientId, type, title, message, tradeId);
 
     // Send email notification for high-priority events (fire and forget)
-    getUserEmail(recipientId).then((email) => {
-        if (email) {
-            sendTradeEventEmail(email, type, otherUserName, tradeId).catch((err) => {
-                console.error('[Notifications] Email send failed:', err);
-            });
+    // First check if user has this notification type enabled
+    const userId = typeof recipientId === 'string' ? parseInt(recipientId, 10) : recipientId;
+
+    shouldSendEmailForType(userId, type).then((shouldSend) => {
+        if (!shouldSend) {
+            console.log(`[Notifications] Email disabled by user preference: ${type}`);
+            return;
         }
+
+        getUserEmail(recipientId).then((email) => {
+            if (email) {
+                sendTradeEventEmail(email, type, otherUserName, tradeId).catch((err) => {
+                    console.error('[Notifications] Email send failed:', err);
+                });
+            }
+        });
+    }).catch((err) => {
+        console.error('[Notifications] Error checking email preferences:', err);
     });
 
     return notification;

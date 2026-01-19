@@ -7,6 +7,7 @@ import ItemCard from './ItemCard.tsx';
 import ItemValuationModal from './ItemValuationModal.tsx';
 import AssetLineageGraph from './visualization/AssetLineageGraph.tsx';
 import GraphInspectorPanel from './visualization/GraphInspectorPanel.tsx';
+import EmailPreferencesSettings from './EmailPreferencesSettings.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 const ProfilePage: React.FC = () => {
@@ -222,6 +223,9 @@ const ProfilePage: React.FC = () => {
                                 <p className="text-gray-600 dark:text-gray-300">{profileUser.aboutMe}</p>
                             </div>
                         )}
+
+                        {/* Email Notification Preferences */}
+                        <EmailPreferencesSettings />
                     </div>
                 </div>
             </div>
