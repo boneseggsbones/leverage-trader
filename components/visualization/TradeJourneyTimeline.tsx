@@ -105,23 +105,43 @@ const TradeJourneyTimeline: React.FC<TradeJourneyTimelineProps> = ({
 
     return (
         <div className="trade-journey-timeline">
+            {/* Explainer Section */}
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30">
+                <div className="flex items-start gap-3">
+                    <span className="text-2xl">💡</span>
+                    <div>
+                        <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">How to read your journey</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            Each card shows a trade you made. <span className="text-green-600 dark:text-green-400 font-medium">Green = you gained value</span>, <span className="text-red-500 dark:text-red-400 font-medium">Red = you lost value</span>.
+                            The <span className="font-medium">Running Total</span> shows your cumulative gains over time. Click any trade for details!
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* Summary Stats */}
             <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl">
+                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl group relative">
                     <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{trades.length}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trades</p>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+                        Total completed trades in your history
+                    </div>
                 </div>
-                <div className={`text-center p-4 rounded-xl ${totalNetGain >= 0
-                        ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20'
-                        : 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20'
+                <div className={`text-center p-4 rounded-xl group relative ${totalNetGain >= 0
+                    ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20'
+                    : 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20'
                     }`}>
                     <p className={`text-2xl font-bold ${totalNetGain >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {totalNetGain >= 0 ? '+' : ''}{formatCurrency(totalNetGain)}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Net Gain</p>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+                        Total value gained (or lost) from all trades
+                    </div>
                 </div>
-                <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 rounded-xl">
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                <div className="text-center p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl group relative">
+                    <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                         {trades.length > 0 ? Math.round((trades.filter(t => {
                             const wasProposer = String(t.proposerId) === String(userId);
                             const givenIds = wasProposer ? t.proposerItemIds : t.receiverItemIds;
@@ -134,17 +154,20 @@ const TradeJourneyTimeline: React.FC<TradeJourneyTimelineProps> = ({
                         }).length / trades.length) * 100) : 0}%
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Win Rate</p>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+                        % of trades where you gained value
+                    </div>
                 </div>
             </div>
 
             {/* Timeline */}
             <div className="relative">
                 {/* Connecting Line */}
-                <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-gradient-to-b from-blue-500 via-indigo-500 to-purple-500 rounded-full" />
+                <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-gradient-to-b from-purple-500 via-indigo-500 to-blue-500 rounded-full" />
 
-                {/* Steps */}
+                {/* Steps - reversed so journey starts at bottom */}
                 <div className="space-y-4">
-                    {journeySteps.map((step, index) => (
+                    {[...journeySteps].reverse().map((step, index) => (
                         <div
                             key={index}
                             className={`relative pl-14 transition-all duration-300 ${hoveredStep === index ? 'scale-[1.02]' : ''
@@ -154,12 +177,12 @@ const TradeJourneyTimeline: React.FC<TradeJourneyTimelineProps> = ({
                         >
                             {/* Node */}
                             <div className={`absolute left-0 w-12 h-12 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${step.type === 'start'
-                                    ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
-                                    : step.type === 'current'
-                                        ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white shadow-lg shadow-purple-500/30 animate-pulse'
-                                        : step.netChange && step.netChange >= 0
-                                            ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30'
-                                            : 'bg-gradient-to-br from-red-400 to-rose-500 text-white shadow-lg shadow-red-500/30'
+                                ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
+                                : step.type === 'current'
+                                    ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white shadow-lg shadow-purple-500/30 animate-pulse'
+                                    : step.netChange && step.netChange >= 0
+                                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/30'
+                                        : 'bg-gradient-to-br from-red-400 to-rose-500 text-white shadow-lg shadow-red-500/30'
                                 }`}>
                                 {step.type === 'start' && <span className="text-lg">🎯</span>}
                                 {step.type === 'current' && <span className="text-lg">⭐</span>}
@@ -192,8 +215,8 @@ const TradeJourneyTimeline: React.FC<TradeJourneyTimelineProps> = ({
                             ) : (
                                 <div
                                     className={`bg-white dark:bg-gray-800 border rounded-xl p-4 cursor-pointer hover:shadow-lg transition-shadow ${step.netChange && step.netChange >= 0
-                                            ? 'border-green-200 dark:border-green-800/50 hover:border-green-300'
-                                            : 'border-red-200 dark:border-red-800/50 hover:border-red-300'
+                                        ? 'border-green-200 dark:border-green-800/50 hover:border-green-300'
+                                        : 'border-red-200 dark:border-red-800/50 hover:border-red-300'
                                         }`}
                                     onClick={() => step.trade && onTradeClick?.(step.trade.id)}
                                 >
@@ -207,8 +230,8 @@ const TradeJourneyTimeline: React.FC<TradeJourneyTimelineProps> = ({
                                             }) : ''}
                                         </span>
                                         <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${step.netChange && step.netChange >= 0
-                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                                             }`}>
                                             {step.netChange && step.netChange >= 0 ? '+' : ''}{formatCurrency(step.netChange || 0)}
                                         </span>
