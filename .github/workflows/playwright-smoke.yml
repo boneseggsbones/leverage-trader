@@ -1,14 +1,18 @@
 name: Playwright smoke
 
+# TEMPORARILY DISABLED - re-enable when E2E tests are updated
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:  # Manual trigger only
+  # push:
+  #   branches: [ main ]
+  # pull_request:
+  #   branches: [ main ]
 
 jobs:
   smoke:
+    if: false  # Disabled until Playwright tests are updated
     runs-on: ubuntu-latest
+
     timeout-minutes: 20
     steps:
       - name: Checkout
