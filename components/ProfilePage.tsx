@@ -7,6 +7,7 @@ import ItemCard from './ItemCard.tsx';
 import ItemValuationModal from './ItemValuationModal.tsx';
 import TradeJourneyTimeline from './visualization/TradeJourneyTimeline.tsx';
 import EmailPreferencesSettings from './EmailPreferencesSettings.tsx';
+import EditProfileModal from './EditProfileModal.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 const ProfilePage: React.FC = () => {
@@ -21,6 +22,7 @@ const ProfilePage: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
     const [showValuationModal, setShowValuationModal] = useState(false);
     const [showAllItems, setShowAllItems] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
     const [tradesWith, setTradesWith] = useState<Trade[]>([]);
 
     const isCurrentUserProfile = currentUser?.id?.toString() === userId;
@@ -98,7 +100,7 @@ const ProfilePage: React.FC = () => {
     // ===========================================
     if (isCurrentUserProfile) {
         return (
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <>
                 {/* Header */}
                 <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-blue-100 dark:border-gray-600 shadow-sm">
                     <div className="flex items-start gap-4">
@@ -113,7 +115,10 @@ const ProfilePage: React.FC = () => {
                                 This is how other traders see you. Edit your profile to make a great impression!
                             </p>
                         </div>
-                        <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                        <button
+                            onClick={() => setShowEditModal(true)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                        >
                             ✏️ Edit Profile
                         </button>
                     </div>
@@ -207,13 +212,22 @@ const ProfilePage: React.FC = () => {
                         )}
                     </div>
                 </div>
-            </div>
+
+                {/* Edit Profile Modal */}
+                <EditProfileModal
+                    show={showEditModal}
+                    onClose={() => setShowEditModal(false)}
+                    user={profileUser}
+                    onSave={(updatedUser) => {
+                        setProfileUser(updatedUser);
+                    }}
+                />
+            </>
         );
     }
 
     // ===========================================
     // EXTERNAL-VIEW: Another Trader's Profile
-    // ===========================================
     return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {/* Trust Header */}

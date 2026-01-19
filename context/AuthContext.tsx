@@ -112,7 +112,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const logout = async () => {
         setCurrentUser(null);
         setOauthProfile(null);
-        try { localStorage.removeItem('leverage_currentUser'); } catch (e) { }
+        try {
+            localStorage.removeItem('leverage_currentUser');
+            localStorage.removeItem('leverage_oauthProfile');
+        } catch (e) { }
 
         // Also sign out from Auth.js
         try {

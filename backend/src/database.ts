@@ -442,6 +442,24 @@ const migrate = () => {
         if (!userColumns.includes('balance')) {
           tasks.push(addColumnIfMissing('User', 'balance', 'INTEGER DEFAULT 0'));
         }
+        if (!userColumns.includes('city')) {
+          tasks.push(addColumnIfMissing('User', 'city', 'TEXT'));
+        }
+        if (!userColumns.includes('state')) {
+          tasks.push(addColumnIfMissing('User', 'state', 'TEXT'));
+        }
+        if (!userColumns.includes('aboutMe')) {
+          tasks.push(addColumnIfMissing('User', 'aboutMe', 'TEXT'));
+        }
+        if (!userColumns.includes('valuationReputationScore')) {
+          tasks.push(addColumnIfMissing('User', 'valuationReputationScore', 'INTEGER DEFAULT 100'));
+        }
+        if (!userColumns.includes('profilePictureUrl')) {
+          tasks.push(addColumnIfMissing('User', 'profilePictureUrl', 'TEXT'));
+        }
+        if (!userColumns.includes('createdAt')) {
+          tasks.push(addColumnIfMissing('User', 'createdAt', 'TEXT'));
+        }
 
         Promise.all(tasks).then(() => resolve()).catch(reject);
       });

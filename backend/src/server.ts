@@ -392,6 +392,78 @@ app.get('/api/users/:id', (req, res) => {
   });
 });
 
+// Update user profile
+app.put('/api/users/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  const { name, city, state, location, aboutMe } = req.body;
+
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (name !== undefined) {
+    updates.push('name = ?');
+    values.push(name);
+  }
+
+  // Handle location field - parse "City, State" or just store as city
+  if (location !== undefined) {
+    const parts = location.split(',').map((p: string) => p.trim());
+    updates.push('city = ?');
+    values.push(parts[0] || '');
+    updates.push('state = ?');
+    values.push(parts[1] || '');
+  } else {
+    if (city !== undefined) {
+      updates.push('city = ?');
+      values.push(city);
+    }
+    if (state !== undefined) {
+      updates.push('state = ?');
+      values.push(state);
+    }
+  }
+
+  if (aboutMe !== undefined) {
+    updates.push('aboutMe = ?');
+    values.push(aboutMe);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'No valid fields to update' });
+  }
+
+  values.push(id);
+
+  db.run(
+    `UPDATE User SET ${updates.join(', ')} WHERE id = ?`,
+    values,
+    function (err) {
+      if (err) {
+        console.error('[Profile] Error updating:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      // Fetch and return updated user with inventory
+      db.get('SELECT * FROM User WHERE id = ?', [id], (err2: Error | null, row: any) => {
+        if (err2 || !row) {
+          return res.status(500).json({ error: 'Failed to fetch updated user' });
+        }
+        db.all('SELECT * FROM Item WHERE owner_id = ?', [id], (err3: Error | null, items: any[]) => {
+          if (err3) {
+            return res.status(500).json({ error: err3.message });
+          }
+          console.log(`[Profile] Updated user ${id}`);
+          res.json({ ...row, inventory: items });
+        });
+      });
+    }
+  );
+});
+
 // Propose a new trade
 app.post('/api/trades', (req, res) => {
   const { proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash } = req.body;
