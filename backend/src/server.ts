@@ -1976,6 +1976,46 @@ app.get('/api/pricing/status', (req, res) => {
 });
 
 // =====================================================
+// ZIP CODE LOOKUP
+// =====================================================
+
+// Look up zip code to get city/state
+app.get('/api/zipcode/:zip', async (req, res) => {
+  const { zip } = req.params;
+
+  // Validate 5-digit zip
+  if (!/^\d{5}$/.test(zip)) {
+    return res.status(400).json({ error: 'Invalid zip code format' });
+  }
+
+  try {
+    // Use free zippopotam.us API
+    const response = await fetch(`https://api.zippopotam.us/us/${zip}`);
+
+    if (!response.ok) {
+      return res.status(404).json({ error: 'Zip code not found' });
+    }
+
+    const data = await response.json();
+    const place = data.places?.[0];
+
+    if (!place) {
+      return res.status(404).json({ error: 'Zip code not found' });
+    }
+
+    res.json({
+      zip,
+      city: place['place name'],
+      state: place['state abbreviation'],
+      stateFull: place.state
+    });
+  } catch (err: any) {
+    console.error('Zip code lookup error:', err);
+    res.status(500).json({ error: 'Failed to look up zip code' });
+  }
+});
+
+// =====================================================
 // ANALYTICS ENDPOINTS
 // =====================================================
 

@@ -39,6 +39,32 @@ const Dashboard: React.FC = () => {
     const [searchDistance, setSearchDistance] = useState(50);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [locationInput, setLocationInput] = useState('');
+    const [resolvedZip, setResolvedZip] = useState<{ city: string; state: string } | null>(null);
+    const [zipLookupLoading, setZipLookupLoading] = useState(false);
+
+    // Look up zip codes as user types
+    useEffect(() => {
+        const lookupZip = async () => {
+            if (/^\d{5}$/.test(locationInput)) {
+                setZipLookupLoading(true);
+                try {
+                    const res = await fetch(`http://localhost:4000/api/zipcode/${locationInput}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setResolvedZip({ city: data.city, state: data.state });
+                    } else {
+                        setResolvedZip(null);
+                    }
+                } catch {
+                    setResolvedZip(null);
+                }
+                setZipLookupLoading(false);
+            } else {
+                setResolvedZip(null);
+            }
+        };
+        lookupZip();
+    }, [locationInput]);
 
     useEffect(() => {
         const loadDashboardData = async () => {
@@ -304,32 +330,84 @@ const Dashboard: React.FC = () => {
                                     {showLocationPicker && (
                                         <div className="absolute z-50 mt-2 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4">
                                             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enter Location</p>
-                                            <div className="flex gap-2 mb-3">
-                                                <input
-                                                    type="text"
-                                                    placeholder="City"
-                                                    value={locationInput.split(',')[0]?.trim() || searchCity}
-                                                    onChange={e => setLocationInput(e.target.value + (locationInput.includes(',') ? ',' + locationInput.split(',')[1] : ''))}
-                                                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    placeholder="State"
-                                                    maxLength={2}
-                                                    value={locationInput.split(',')[1]?.trim() || searchState}
-                                                    onChange={e => setLocationInput((locationInput.split(',')[0] || searchCity) + ', ' + e.target.value.toUpperCase())}
-                                                    className="w-16 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm uppercase"
-                                                />
-                                            </div>
+                                            <input
+                                                type="text"
+                                                placeholder="City, State or Zip Code"
+                                                value={locationInput}
+                                                onChange={e => setLocationInput(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm mb-2"
+                                                autoFocus
+                                            />
+
+                                            {/* Show resolved zip code location */}
+                                            {/^\d{5}$/.test(locationInput) && (
+                                                <div className="mb-2 px-2 py-1.5 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                                    {zipLookupLoading ? (
+                                                        <p className="text-sm text-gray-500">Looking up...</p>
+                                                    ) : resolvedZip ? (
+                                                        <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-1">
+                                                            ✓ {resolvedZip.city}, {resolvedZip.state}
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-sm text-red-500">Zip code not found</p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Autocomplete suggestions from other traders' locations */}
+                                            {locationInput.length >= 2 && !/^\d{5}$/.test(locationInput) && (
+                                                <div className="max-h-32 overflow-y-auto mb-2">
+                                                    {(() => {
+                                                        // Get unique locations from users
+                                                        const locations = [...new Set(
+                                                            users
+                                                                .filter(u => u.city && u.state)
+                                                                .map(u => `${u.city}, ${u.state}`)
+                                                        )].filter(loc =>
+                                                            loc.toLowerCase().includes(locationInput.toLowerCase())
+                                                        ).slice(0, 4);
+
+                                                        return locations.map(loc => (
+                                                            <button
+                                                                key={loc}
+                                                                onClick={() => {
+                                                                    const [city, state] = loc.split(',').map(s => s.trim());
+                                                                    setSearchCity(city);
+                                                                    setSearchState(state);
+                                                                    setLocationInput('');
+                                                                    setShowLocationPicker(false);
+                                                                }}
+                                                                className="w-full text-left px-2 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                                                            >
+                                                                📍 {loc}
+                                                            </button>
+                                                        ));
+                                                    })()}
+                                                </div>
+                                            )}
+
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => {
-                                                        const parts = locationInput.split(',').map(s => s.trim());
-                                                        if (parts[0]) setSearchCity(parts[0]);
-                                                        if (parts[1]) setSearchState(parts[1].toUpperCase());
+                                                        const input = locationInput.trim();
+                                                        // Check if it's a zip code - use resolved city
+                                                        if (/^\d{5}$/.test(input) && resolvedZip) {
+                                                            setSearchCity(resolvedZip.city);
+                                                            setSearchState(resolvedZip.state);
+                                                        } else if (input.includes(',')) {
+                                                            const [city, state] = input.split(',').map(s => s.trim());
+                                                            setSearchCity(city);
+                                                            setSearchState(state.toUpperCase());
+                                                        } else if (input) {
+                                                            setSearchCity(input);
+                                                            setSearchState('');
+                                                        }
+                                                        setLocationInput('');
+                                                        setResolvedZip(null);
                                                         setShowLocationPicker(false);
                                                     }}
-                                                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                                                    disabled={/^\d{5}$/.test(locationInput) && !resolvedZip}
+                                                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     Apply
                                                 </button>
@@ -339,6 +417,7 @@ const Dashboard: React.FC = () => {
                                                             setSearchCity(currentUser.city);
                                                             setSearchState(currentUser.state);
                                                         }
+                                                        setLocationInput('');
                                                         setShowLocationPicker(false);
                                                     }}
                                                     className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
