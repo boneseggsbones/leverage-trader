@@ -191,6 +191,49 @@ const TradeDesk: React.FC = () => {
         return item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
     };
 
+    // Draggable Offer Item - items in the offer zone that can be dragged back to collection
+    const DraggableOfferItem = ({ item, owner, onRemove }: { item: Item; owner: 'current' | 'other'; onRemove: () => void }) => {
+        const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+            id: `offer-item-${item.id}-${owner}`,
+            data: { item, owner, isRemoving: true }, // Always removing since it's already in the offer
+        });
+
+        const style = transform ? {
+            transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        } : undefined;
+
+        return (
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...listeners}
+                {...attributes}
+                className={`flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border transition-all cursor-grab ${isDragging
+                    ? 'opacity-50 scale-95 border-red-400 cursor-grabbing shadow-lg z-50'
+                    : 'border-slate-200 hover:border-red-300 hover:bg-red-50'
+                    }`}
+                onClick={(e) => {
+                    if (!isDragging) {
+                        onRemove();
+                    }
+                }}
+                title="Drag to collection or click to remove"
+            >
+                <img
+                    src={getItemImageUrl(item)}
+                    alt={item.name}
+                    className="w-8 h-8 rounded object-cover pointer-events-none"
+                    draggable={false}
+                />
+                <div className="pointer-events-none">
+                    <p className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{item.name}</p>
+                    <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue || 0)}</p>
+                </div>
+                <span className="text-red-400 text-xs ml-1 pointer-events-none">✕</span>
+            </div>
+        );
+    };
+
     // Offer Zone Component - droppable zone for items
     const OfferZone = ({ title, items, isYours, dropId }: { title: string; items: Item[]; isYours: boolean; dropId: string }) => {
         const { isOver, setNodeRef } = useDroppable({
@@ -233,19 +276,12 @@ const TradeDesk: React.FC = () => {
                 ) : (
                     <div className="flex flex-wrap gap-2">
                         {items.map(item => (
-                            <div
+                            <DraggableOfferItem
                                 key={item.id}
-                                className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-slate-200 cursor-pointer hover:border-red-300 hover:bg-red-50 transition-colors"
-                                onClick={() => toggleItemSelection(item, isYours ? 'current' : 'other')}
-                                title="Click to remove"
-                            >
-                                <img src={getItemImageUrl(item)} alt={item.name} className="w-8 h-8 rounded object-cover" />
-                                <div>
-                                    <p className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{item.name}</p>
-                                    <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue || 0)}</p>
-                                </div>
-                                <span className="text-red-400 text-xs ml-1">✕</span>
-                            </div>
+                                item={item}
+                                owner={isYours ? 'current' : 'other'}
+                                onRemove={() => toggleItemSelection(item, isYours ? 'current' : 'other')}
+                            />
                         ))}
                         {isYours && currentUserCash > 0 && (
                             <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-green-200">
@@ -280,8 +316,8 @@ const TradeDesk: React.FC = () => {
     }) => {
         const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
             id: `item-${item.id}-${owner}`,
-            data: { item, owner, isRemoving: isSelected }, // Track if dragging to remove
-            disabled: false, // Always allow dragging
+            data: { item, owner, isRemoving: false }, // Collection cards are for adding only
+            disabled: isSelected, // Disable dragging when already in offer - use offer zone cards instead
         });
 
         const imageUrl = item.imageUrl && item.imageUrl.startsWith('/')
@@ -301,7 +337,7 @@ const TradeDesk: React.FC = () => {
                 className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden ${isDragging
                     ? 'opacity-50 scale-95 z-50 shadow-2xl cursor-grabbing'
                     : isSelected
-                        ? 'opacity-50 grayscale border-slate-300 cursor-grab' // Grayed out when in offer
+                        ? 'opacity-50 grayscale border-slate-300 cursor-pointer' // Grayed out when in offer, click to remove
                         : 'border-slate-200 hover:border-slate-300 hover:shadow-md cursor-grab'
                     }`}
                 onClick={(e) => {
@@ -400,11 +436,11 @@ const TradeDesk: React.FC = () => {
         return (
             <div
                 ref={setNodeRef}
-                className={`transition-all rounded-xl p-1 -m-1 ${isValidDropTarget
+                className={`bg-white rounded-2xl shadow-sm border p-5 transition-all ${isValidDropTarget
                     ? isYours
-                        ? 'ring-2 ring-orange-400 bg-orange-50'
-                        : 'ring-2 ring-green-400 bg-green-50'
-                    : ''
+                        ? 'ring-2 ring-orange-400 bg-orange-50 border-orange-300'
+                        : 'ring-2 ring-green-400 bg-green-50 border-green-300'
+                    : 'border-slate-200'
                     }`}
             >
                 <div className="flex items-center justify-between mb-3">
@@ -509,28 +545,24 @@ const TradeDesk: React.FC = () => {
 
                     {/* Collections - Side by Side */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-                            <CollectionGrid
-                                title="Your Collection"
-                                user={currentUser}
-                                selectedItems={currentUserItems}
-                                onSelect={(item) => toggleItemSelection(item, 'current')}
-                                onPreview={(item) => { setPreviewItem(item); setPreviewOwner('current'); }}
-                                isYours={true}
-                                dropId="yours-collection"
-                            />
-                        </div>
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-                            <CollectionGrid
-                                title={`${otherUser.name}'s Collection`}
-                                user={otherUser}
-                                selectedItems={otherUserItems}
-                                onSelect={(item) => toggleItemSelection(item, 'other')}
-                                onPreview={(item) => { setPreviewItem(item); setPreviewOwner('other'); }}
-                                isYours={false}
-                                dropId="theirs-collection"
-                            />
-                        </div>
+                        <CollectionGrid
+                            title="Your Collection"
+                            user={currentUser}
+                            selectedItems={currentUserItems}
+                            onSelect={(item) => toggleItemSelection(item, 'current')}
+                            onPreview={(item) => { setPreviewItem(item); setPreviewOwner('current'); }}
+                            isYours={true}
+                            dropId="yours-collection"
+                        />
+                        <CollectionGrid
+                            title={`${otherUser.name}'s Collection`}
+                            user={otherUser}
+                            selectedItems={otherUserItems}
+                            onSelect={(item) => toggleItemSelection(item, 'other')}
+                            onPreview={(item) => { setPreviewItem(item); setPreviewOwner('other'); }}
+                            isYours={false}
+                            dropId="theirs-collection"
+                        />
                     </div>
                 </div>
 
@@ -580,10 +612,96 @@ const TradeDesk: React.FC = () => {
                     onClose={() => setIsModalOpen(false)}
                     onConfirm={handleProposeTrade}
                     title="Confirm Trade Proposal"
-                    confirmButtonText="Yes, Propose Trade"
+                    confirmButtonText="Send Proposal"
                     confirmButtonClass="bg-blue-600 hover:bg-blue-700"
                 >
-                    Are you sure you want to propose this trade to {otherUser.name}?
+                    <div className="space-y-4">
+                        {/* Trade Summary */}
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Your Offer */}
+                            <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                                <h4 className="text-sm font-semibold text-orange-700 mb-2">You're Offering</h4>
+                                {currentUserItems.length > 0 ? (
+                                    <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                        {currentUserItems.map(item => (
+                                            <div key={item.id} className="flex items-center gap-2 text-xs">
+                                                <div className="w-6 h-6 rounded bg-slate-200 overflow-hidden flex-shrink-0">
+                                                    {item.imageUrl && (
+                                                        <img
+                                                            src={item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl}
+                                                            alt=""
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    )}
+                                                </div>
+                                                <span className="truncate flex-1 text-slate-700">{item.name}</span>
+                                                <span className="text-slate-500">{formatCurrency(item.estimatedMarketValue || 0)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-400">No items</p>
+                                )}
+                                {currentUserCash > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-orange-200 flex items-center justify-between text-xs">
+                                        <span className="text-green-600 font-medium">+ Cash</span>
+                                        <span className="text-green-600 font-medium">{formatCurrency(dollarsToCents(currentUserCash))}</span>
+                                    </div>
+                                )}
+                                <div className="mt-2 pt-2 border-t border-orange-200 flex items-center justify-between text-sm font-semibold">
+                                    <span className="text-orange-700">Total</span>
+                                    <span className="text-orange-700">{formatCurrency(yourOfferValue)}</span>
+                                </div>
+                            </div>
+
+                            {/* Their Request */}
+                            <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                                <h4 className="text-sm font-semibold text-green-700 mb-2">You're Requesting</h4>
+                                {otherUserItems.length > 0 ? (
+                                    <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                        {otherUserItems.map(item => (
+                                            <div key={item.id} className="flex items-center gap-2 text-xs">
+                                                <div className="w-6 h-6 rounded bg-slate-200 overflow-hidden flex-shrink-0">
+                                                    {item.imageUrl && (
+                                                        <img
+                                                            src={item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl}
+                                                            alt=""
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    )}
+                                                </div>
+                                                <span className="truncate flex-1 text-slate-700">{item.name}</span>
+                                                <span className="text-slate-500">{formatCurrency(item.estimatedMarketValue || 0)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-400">No items</p>
+                                )}
+                                <div className="mt-2 pt-2 border-t border-green-200 flex items-center justify-between text-sm font-semibold">
+                                    <span className="text-green-700">Total</span>
+                                    <span className="text-green-700">{formatCurrency(theirOfferValue)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Value Difference */}
+                        {valueDifference !== 0 && (
+                            <div className={`text-center py-2 px-3 rounded-lg text-sm ${valueDifference > 0
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-green-100 text-green-700'
+                                }`}>
+                                {valueDifference > 0
+                                    ? `⚠️ You're offering ${formatCurrency(Math.abs(valueDifference))} more in value`
+                                    : `✓ You're receiving ${formatCurrency(Math.abs(valueDifference))} more in value`
+                                }
+                            </div>
+                        )}
+
+                        <p className="text-xs text-center text-slate-500">
+                            This proposal will be sent to <strong>{otherUser.name}</strong> for review
+                        </p>
+                    </div>
                 </ConfirmationModal>
 
                 {/* Item Detail Preview Modal */}
