@@ -496,33 +496,39 @@ const AdminDashboard: React.FC = () => {
             {/* Trades Tab */}
             {activeTab === 'trades' && (
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-4">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">All Trades</h2>
-                        <div className="flex-1"></div>
-                        <input
-                            type="date"
-                            value={dateRange.start}
-                            onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                            placeholder="Start date"
-                        />
-                        <input
-                            type="date"
-                            value={dateRange.end}
-                            onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                            placeholder="End date"
-                        />
-                        <select
-                            value={statusFilter}
-                            onChange={e => setStatusFilter(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                        >
-                            <option value="">All Statuses</option>
-                            {Object.keys(STATUS_LABELS).map(status => (
-                                <option key={status} value={status}>{STATUS_LABELS[status]}</option>
-                            ))}
-                        </select>
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">All Trades</h2>
+                            <div className="flex-1"></div>
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                                <div className="flex gap-2 flex-1 sm:flex-none">
+                                    <input
+                                        type="date"
+                                        value={dateRange.start}
+                                        onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                        className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm min-w-0"
+                                        placeholder="Start date"
+                                    />
+                                    <input
+                                        type="date"
+                                        value={dateRange.end}
+                                        onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                        className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm min-w-0"
+                                        placeholder="End date"
+                                    />
+                                </div>
+                                <select
+                                    value={statusFilter}
+                                    onChange={e => setStatusFilter(e.target.value)}
+                                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                >
+                                    <option value="">All Statuses</option>
+                                    {Object.keys(STATUS_LABELS).map(status => (
+                                        <option key={status} value={status}>{STATUS_LABELS[status]}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">

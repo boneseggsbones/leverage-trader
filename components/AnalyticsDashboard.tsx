@@ -114,25 +114,25 @@ const AnalyticsDashboard: React.FC = () => {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Trades</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">{analytics.totalTrades}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1">Total Trades</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{analytics.totalTrades}</p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{analytics.completedTrades} completed</p>
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Value Traded</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">{formatCurrency(analytics.totalValueTraded)}</p>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1">Value Traded</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white truncate">{formatCurrency(analytics.totalValueTraded)}</p>
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Net Surplus</p>
-                    <p className={`text-3xl font-bold ${surplusColor}`}>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1">Net Surplus</p>
+                    <p className={`text-2xl sm:text-3xl font-bold truncate ${surplusColor}`}>
                         {surplusPrefix}{formatCurrency(Math.abs(analytics.netTradeSurplus))}
                     </p>
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Average Rating</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1">Average Rating</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                         {analytics.avgRating ? `${analytics.avgRating} ★` : 'N/A'}
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{analytics.ratingCount} reviews</p>
