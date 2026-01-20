@@ -118,13 +118,11 @@ const TradeDesk: React.FC = () => {
         const isCurrentUser = user.id === currentUser?.id;
         return (
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 transition-colors">
-                <div className="mb-4">
+                <div className="flex items-center gap-3 mb-4">
                     <h3 className="text-xl font-bold text-gray-700 dark:text-white">{title}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        {isCurrentUser
-                            ? "👆 Click items you want to OFFER"
-                            : "👆 Click items you want to RECEIVE"}
-                    </p>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${isCurrentUser ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}>
+                        {isCurrentUser ? 'Click to offer →' : '← Click to receive'}
+                    </span>
                 </div>
                 {user.inventory.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -163,10 +161,20 @@ const TradeDesk: React.FC = () => {
                                 <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
                                     Trade with {otherUser.name}
                                 </h1>
-                                <p className="mt-2 text-slate-600 leading-relaxed max-w-2xl">
-                                    Select items from both inventories to propose a swap. You can also
-                                    add cash to balance the deal. Review values in real-time.
-                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-sm font-medium text-slate-600 border border-slate-200 shadow-sm">
+                                        <span className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                                        Click items to trade
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-sm font-medium text-slate-600 border border-slate-200 shadow-sm">
+                                        <span className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                                        Add cash if needed
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-sm font-medium text-slate-600 border border-slate-200 shadow-sm">
+                                        <span className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                                        Propose Trade
+                                    </span>
+                                </div>
                             </div>
                         </div>
                         <button

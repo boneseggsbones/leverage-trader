@@ -70,18 +70,7 @@ const TradeBalancer: React.FC<TradeBalancerProps> = ({
 
     return (
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-            <h2 className="text-xl font-bold text-center mb-2 text-gray-700">Trade Balancer</h2>
-
-            {/* ELI5 Instructions */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-blue-800 font-medium mb-2">📝 How to propose a trade:</p>
-                <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-                    <li><strong>Scroll down</strong> and click items from <em>your inventory</em> to offer them</li>
-                    <li>Click items from <em>{otherUser.name}'s inventory</em> that you want to receive</li>
-                    <li>Add <strong>cash</strong> if needed to make the values more equal</li>
-                    <li>Click <strong>"Propose Trade"</strong> when you're ready!</li>
-                </ol>
-            </div>
+            <h2 className="text-xl font-bold text-center mb-4 text-gray-700">Trade Balancer</h2>
             <div className="flex flex-col md:flex-row gap-4">
                 {renderSide(currentUser, currentUserItems, currentUserCash, currentUserValue, true)}
                 <div className="flex items-center justify-center p-2">
