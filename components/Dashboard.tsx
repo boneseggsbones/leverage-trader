@@ -88,14 +88,64 @@ const Dashboard: React.FC = () => {
         navigate(`/trade-desk/${itemOwnerId}`);
     };
 
-    // Filter users based on search (excluding current user)
+    // Simple fuzzy match - allows for minor typos/differences
+    const fuzzyMatch = (text: string, query: string): boolean => {
+        const t = text.toLowerCase();
+        const q = query.toLowerCase();
+        if (t.includes(q)) return true;
+
+        // Check if query is substring with 1-2 char difference
+        if (q.length >= 3) {
+            // Check each word in text
+            const words = t.split(/\s+/);
+            for (const word of words) {
+                // Simple Levenshtein-like: check if first chars match and length is similar
+                if (word.charAt(0) === q.charAt(0) && Math.abs(word.length - q.length) <= 2) {
+                    let matches = 0;
+                    for (let i = 0; i < Math.min(word.length, q.length); i++) {
+                        if (word.charAt(i) === q.charAt(i)) matches++;
+                    }
+                    if (matches >= q.length * 0.6) return true; // 60% char match
+                }
+            }
+        }
+        return false;
+    };
+
+    // Filter users based on search (excluding current user) - includes item search
     const filteredUsers = useMemo(() => {
         if (!userSearch.trim()) return [];
-        const search = userSearch.toLowerCase();
+        const search = userSearch.toLowerCase().trim();
+
         return users
             .filter(u => u.id !== currentUser?.id)
-            .filter(u => u.name.toLowerCase().includes(search) || (u as any).email?.toLowerCase().includes(search))
-            .slice(0, 5);
+            .map(u => {
+                // Check name and email
+                const nameMatch = fuzzyMatch(u.name, search);
+                const emailMatch = (u as any).email ? fuzzyMatch((u as any).email, search) : false;
+
+                // Check inventory items
+                const matchingItems = (u.inventory || []).filter(item =>
+                    fuzzyMatch(item.name, search)
+                );
+
+                return {
+                    user: u,
+                    nameMatch,
+                    emailMatch,
+                    matchingItems,
+                    hasMatch: nameMatch || emailMatch || matchingItems.length > 0
+                };
+            })
+            .filter(result => result.hasMatch)
+            .sort((a, b) => {
+                // Prioritize name matches, then email, then item matches
+                if (a.nameMatch && !b.nameMatch) return -1;
+                if (!a.nameMatch && b.nameMatch) return 1;
+                if (a.matchingItems.length > b.matchingItems.length) return -1;
+                return 0;
+            })
+            .slice(0, 8);
     }, [users, userSearch, currentUser?.id]);
 
     if (isLoading) {
@@ -144,14 +194,15 @@ const Dashboard: React.FC = () => {
         return items.map(item => {
             const owner = users.find(u => u.id === item.ownerId);
             return owner ? (
-                <DiscoveryItemCard
-                    key={item.id}
-                    item={item}
-                    owner={owner}
-                    onClick={() => handleItemClick(owner.id)}
-                    isWishlisted={(currentUser.wishlist || []).includes(item.id)}
-                    onToggleWishlist={() => handleToggleWishlist(item.id)}
-                />
+                <div key={item.id} className="flex-shrink-0 w-64">
+                    <DiscoveryItemCard
+                        item={item}
+                        owner={owner}
+                        onClick={() => handleItemClick(owner.id)}
+                        isWishlisted={(currentUser.wishlist || []).includes(item.id)}
+                        onToggleWishlist={() => handleToggleWishlist(item.id)}
+                    />
+                </div>
             ) : null;
         });
     };
@@ -183,34 +234,41 @@ const Dashboard: React.FC = () => {
                                     value={userSearch}
                                     onChange={e => { setUserSearch(e.target.value); setShowUserDropdown(true); }}
                                     onFocus={() => setShowUserDropdown(true)}
-                                    placeholder="Search traders by name or email..."
+                                    placeholder="Search traders by name or item..."
                                     className="w-full px-4 py-3 pl-11 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
                                 />
                                 <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">👤</span>
 
                                 {/* Dropdown */}
                                 {showUserDropdown && filteredUsers.length > 0 && (
-                                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
-                                        {filteredUsers.map(user => (
+                                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden max-h-96 overflow-y-auto">
+                                        {filteredUsers.map(result => (
                                             <button
-                                                key={user.id}
+                                                key={result.user.id}
                                                 onClick={() => {
-                                                    navigate(`/trade-desk/${user.id}`);
+                                                    navigate(`/trade-desk/${result.user.id}`);
                                                     setUserSearch('');
                                                     setShowUserDropdown(false);
                                                 }}
-                                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
+                                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                                             >
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
-                                                    {user.name.charAt(0).toUpperCase()}
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                                                    {result.user.name.charAt(0).toUpperCase()}
                                                 </div>
-                                                <div className="flex-1">
-                                                    <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                        {(user as any).rating ? `★ ${(user as any).rating.toFixed(1)}` : 'No ratings'} • {(user.inventory || []).length} items
-                                                    </p>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-gray-900 dark:text-white truncate">{result.user.name}</p>
+                                                    {result.matchingItems.length > 0 ? (
+                                                        <p className="text-xs text-green-600 dark:text-green-400 truncate">
+                                                            🎯 Has: {result.matchingItems.slice(0, 2).map(i => i.name).join(', ')}
+                                                            {result.matchingItems.length > 2 && ` +${result.matchingItems.length - 2} more`}
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                            {(result.user as any).rating ? `★ ${(result.user as any).rating.toFixed(1)}` : 'No ratings'} • {(result.user.inventory || []).length} items
+                                                        </p>
+                                                    )}
                                                 </div>
-                                                <span className="text-blue-500 text-sm font-medium">Trade →</span>
+                                                <span className="text-blue-500 text-sm font-medium flex-shrink-0">Trade →</span>
                                             </button>
                                         ))}
                                     </div>
