@@ -285,14 +285,34 @@ app.delete('/api/items/:id', (req, res) => {
 });
 
 // Get all users
-app.get('/api/users', (req, res) => {
-  db.all('SELECT * FROM User', [], (err: Error | null, rows: any[]) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+app.get('/api/users', async (req, res) => {
+  try {
+    // Get all users
+    const users: any[] = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM User', [], (err: Error | null, rows: any[]) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
+    });
+
+    // Get all items
+    const items: any[] = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM Item', [], (err: Error | null, rows: any[]) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
+    });
+
+    // Attach inventory to each user
+    const usersWithInventory = users.map(user => ({
+      ...user,
+      inventory: items.filter(item => item.owner_id === user.id)
+    }));
+
+    res.json(usersWithInventory);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create a new user (simple signup — demo only)
