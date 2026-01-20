@@ -17,6 +17,7 @@ import { getNotificationsForUser, getUnreadCount, markAsRead, markAllAsRead, not
 import { initWebSocket } from './websocket';
 import emailPreferencesRoutes from './emailPreferencesRoutes';
 import { handleStripeWebhook } from './webhooks';
+import { findTopMatches } from './matchingService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -312,6 +313,25 @@ app.get('/api/users', async (req, res) => {
     res.json(usersWithInventory);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Get trade match suggestions for a user
+app.get('/api/users/:userId/matches', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const limit = parseInt(req.query.limit as string, 10) || 10;
+
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    const matches = await findTopMatches(userId, limit);
+    res.json({ matches });
+  } catch (err: any) {
+    console.error('Error finding matches:', err?.message || err);
+    console.error('Stack:', err?.stack);
+    res.status(500).json({ error: 'Failed to find matches', details: err?.message });
   }
 });
 

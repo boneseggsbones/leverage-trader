@@ -33,6 +33,18 @@ const Dashboard: React.FC = () => {
     const [userSearch, setUserSearch] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
 
+    // Trade matches
+    interface TradeMatch {
+        userId: number;
+        userName: string;
+        score: number;
+        tier: 'hot' | 'good' | 'explore';
+        reasons: { type: string; description: string; score: number }[];
+        theirWishlistMatchCount: number;
+        yourWishlistMatchCount: number;
+    }
+    const [tradeMatches, setTradeMatches] = useState<TradeMatch[]>([]);
+
     // Location filtering state
     const [searchCity, setSearchCity] = useState('');
     const [searchState, setSearchState] = useState('');
@@ -85,6 +97,17 @@ const Dashboard: React.FC = () => {
                     ]);
                     setUsers(usersData);
                     setDashboardData(data);
+
+                    // Fetch trade matches
+                    try {
+                        const matchRes = await fetch(`http://localhost:4000/api/users/${currentUser.id}/matches?limit=5`);
+                        if (matchRes.ok) {
+                            const { matches } = await matchRes.json();
+                            setTradeMatches(matches || []);
+                        }
+                    } catch (matchErr) {
+                        console.error('Error fetching matches:', matchErr);
+                    }
                 } catch (err) {
                     setError("Failed to load dashboard data.");
                     console.error(err);
@@ -455,6 +478,74 @@ const Dashboard: React.FC = () => {
                             )}
                         </div>
                     </section>
+
+                    {/* Trade Matches Section */}
+                    {tradeMatches.length > 0 && (
+                        <section>
+                            <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 mb-4">
+                                🎯 Trade Matches
+                                <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+                                    Traders who complement your collection
+                                </span>
+                            </h2>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {tradeMatches.map(match => (
+                                    <button
+                                        key={match.userId}
+                                        onClick={() => navigate(`/trade-desk/${match.userId}`)}
+                                        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-left hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all group"
+                                    >
+                                        <div className="flex items-start gap-3 mb-3">
+                                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                                                {match.userName.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold text-gray-900 dark:text-white truncate">
+                                                        {match.userName}
+                                                    </span>
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${match.tier === 'hot'
+                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                            : match.tier === 'good'
+                                                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                                        }`}>
+                                                        {match.tier === 'hot' ? '🔥 Hot' : match.tier === 'good' ? '⭐ Good' : '👀 Explore'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1 mt-0.5">
+                                                    <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full ${match.score >= 80 ? 'bg-red-500' : match.score >= 50 ? 'bg-yellow-500' : 'bg-blue-500'
+                                                                }`}
+                                                            style={{ width: `${match.score}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">{match.score}%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Match Reasons */}
+                                        <div className="space-y-1">
+                                            {match.reasons.slice(0, 2).map((reason, idx) => (
+                                                <p key={idx} className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                                                    <span className="text-green-500">✓</span>
+                                                    {reason.description}
+                                                </p>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                            <span className="text-sm text-blue-600 dark:text-blue-400 font-medium group-hover:underline">
+                                                View Trade Desk →
+                                            </span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     <ItemCarousel title="Recommended For You">
                         {renderCarouselItems(dashboardData.recommendedItems)}
