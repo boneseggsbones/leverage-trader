@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -7,6 +6,7 @@ import { fetchUser, proposeTrade } from '../api/api';
 import { User, Item } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
+import ItemDetailModal from './ItemDetailModal.tsx';
 import { formatCurrency, dollarsToCents } from '../utils/currency.ts';
 
 const TradeDesk: React.FC = () => {
@@ -26,6 +26,10 @@ const TradeDesk: React.FC = () => {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Item detail preview state
+    const [previewItem, setPreviewItem] = useState<Item | null>(null);
+    const [previewOwner, setPreviewOwner] = useState<'current' | 'other'>('current');
 
     useEffect(() => {
         if (!otherUserId) {
@@ -124,8 +128,8 @@ const TradeDesk: React.FC = () => {
     // Offer Zone Component
     const OfferZone = ({ title, items, isYours }: { title: string; items: Item[]; isYours: boolean }) => (
         <div className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${items.length > 0
-                ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
-                : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+            ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
+            : 'border-slate-200 bg-slate-50 hover:border-slate-300'
             }`}>
             <h3 className={`text-sm font-semibold mb-3 ${isYours ? 'text-orange-700' : 'text-green-700'
                 }`}>{title}</h3>
@@ -162,37 +166,124 @@ const TradeDesk: React.FC = () => {
         </div>
     );
 
-    // Collection Grid Component
+    // Custom Trade Item Card with preview and quick-add
+    const TradeItemCard = ({
+        item,
+        isSelected,
+        onPreview,
+        onToggle,
+        accentColor
+    }: {
+        item: Item;
+        isSelected: boolean;
+        onPreview: () => void;
+        onToggle: () => void;
+        accentColor: 'orange' | 'green';
+    }) => {
+        const imageUrl = item.imageUrl && item.imageUrl.startsWith('/')
+            ? `http://localhost:4000${item.imageUrl}`
+            : item.imageUrl;
+
+        return (
+            <div
+                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-pointer ${isSelected
+                    ? accentColor === 'orange'
+                        ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg'
+                        : 'border-green-400 ring-2 ring-green-200 shadow-lg'
+                    : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                    }`}
+                onClick={onPreview}
+            >
+                {/* Image - larger and more prominent */}
+                <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
+                    {imageUrl ? (
+                        <img
+                            src={imageUrl}
+                            alt={item.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">📦</div>
+                    )}
+                </div>
+
+                {/* Info */}
+                <div className="p-3">
+                    <h4 className="font-semibold text-sm text-slate-800 line-clamp-2 leading-tight mb-1">{item.name}</h4>
+                    <p className="text-sm font-medium text-slate-600">{formatCurrency(item.estimatedMarketValue || 0)}</p>
+                </div>
+
+                {/* Quick-add button - small corner button, not full overlay */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggle(); }}
+                    className={`absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg transition-all ${isSelected
+                            ? 'bg-red-500 hover:bg-red-600 opacity-100'
+                            : accentColor === 'orange'
+                                ? 'bg-orange-500 hover:bg-orange-600 opacity-0 group-hover:opacity-100'
+                                : 'bg-green-500 hover:bg-green-600 opacity-0 group-hover:opacity-100'
+                        }`}
+                    title={isSelected ? 'Remove from trade' : 'Add to trade'}
+                >
+                    {isSelected ? '−' : '+'}
+                </button>
+
+                {/* Selected indicator - top right */}
+                {isSelected && (
+                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${accentColor === 'orange' ? 'bg-orange-500' : 'bg-green-500'
+                        }`}>
+                        ✓
+                    </div>
+                )}
+
+                {/* "Tap for details" hint on hover */}
+                <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                    View details
+                </div>
+            </div>
+        );
+    };
+
+    // Collection Grid Component - now with larger cards
     const CollectionGrid = ({
         title,
         user,
         selectedItems,
         onSelect,
+        onPreview,
         isYours
     }: {
         title: string;
         user: User;
         selectedItems: Item[];
         onSelect: (item: Item) => void;
+        onPreview: (item: Item) => void;
         isYours: boolean;
     }) => (
         <div>
-            <h3 className={`text-base font-semibold mb-3 ${isYours ? 'text-orange-700' : 'text-green-700'}`}>
-                {title}
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+                <h3 className={`text-base font-semibold ${isYours ? 'text-orange-700' : 'text-green-700'}`}>
+                    {title}
+                </h3>
+                <span className="text-xs text-slate-500">{user.inventory.length} items</span>
+            </div>
             {user.inventory.length > 0 ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {user.inventory.map(item => (
-                        <ItemCard
+                        <TradeItemCard
                             key={item.id}
                             item={item}
-                            onSelect={() => onSelect(item)}
                             isSelected={!!selectedItems.find(i => i.id === item.id)}
+                            onPreview={() => onPreview(item)}
+                            onToggle={() => onSelect(item)}
+                            accentColor={isYours ? 'orange' : 'green'}
                         />
                     ))}
                 </div>
             ) : (
-                <p className="text-slate-500 text-sm">No items available.</p>
+                <div className="text-center py-8 text-slate-400">
+                    <div className="text-4xl mb-2">📦</div>
+                    <p className="text-sm">No items available</p>
+                </div>
             )}
         </div>
     );
@@ -246,7 +337,7 @@ const TradeDesk: React.FC = () => {
                                 </div>
                                 {(yourOfferValue > 0 || theirOfferValue > 0) && (
                                     <p className={`text-xs mt-1 ${valueDifference === 0 ? 'text-slate-500' :
-                                            valueDifference > 0 ? 'text-orange-500' : 'text-green-500'
+                                        valueDifference > 0 ? 'text-orange-500' : 'text-green-500'
                                         }`}>
                                         {valueDifference === 0 ? 'Balanced' :
                                             valueDifference > 0 ? `You're offering ${formatCurrency(Math.abs(valueDifference))} more` :
@@ -269,6 +360,7 @@ const TradeDesk: React.FC = () => {
                             user={currentUser}
                             selectedItems={currentUserItems}
                             onSelect={(item) => toggleItemSelection(item, 'current')}
+                            onPreview={(item) => { setPreviewItem(item); setPreviewOwner('current'); }}
                             isYours={true}
                         />
                     </div>
@@ -278,6 +370,7 @@ const TradeDesk: React.FC = () => {
                             user={otherUser}
                             selectedItems={otherUserItems}
                             onSelect={(item) => toggleItemSelection(item, 'other')}
+                            onPreview={(item) => { setPreviewItem(item); setPreviewOwner('other'); }}
                             isYours={false}
                         />
                     </div>
@@ -335,6 +428,24 @@ const TradeDesk: React.FC = () => {
             >
                 Are you sure you want to propose this trade to {otherUser.name}?
             </ConfirmationModal>
+
+            {/* Item Detail Preview Modal */}
+            <ItemDetailModal
+                item={previewItem}
+                isOpen={!!previewItem}
+                onClose={() => setPreviewItem(null)}
+                onAddToTrade={() => {
+                    if (previewItem) {
+                        toggleItemSelection(previewItem, previewOwner);
+                    }
+                }}
+                isInTrade={previewItem ? (
+                    previewOwner === 'current'
+                        ? !!currentUserItems.find(i => i.id === previewItem.id)
+                        : !!otherUserItems.find(i => i.id === previewItem.id)
+                ) : false}
+                actionLabel={previewOwner === 'current' ? 'Add to Your Offer' : 'Request This Item'}
+            />
         </div>
     );
 };
