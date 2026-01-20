@@ -8,6 +8,17 @@ import ItemCard from './ItemCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
 import ItemDetailModal from './ItemDetailModal.tsx';
 import { formatCurrency, dollarsToCents } from '../utils/currency.ts';
+import {
+    DndContext,
+    DragEndEvent,
+    DragOverlay,
+    DragStartEvent,
+    useDraggable,
+    useDroppable,
+    PointerSensor,
+    useSensor,
+    useSensors
+} from '@dnd-kit/core';
 
 const TradeDesk: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -30,6 +41,47 @@ const TradeDesk: React.FC = () => {
     // Item detail preview state
     const [previewItem, setPreviewItem] = useState<Item | null>(null);
     const [previewOwner, setPreviewOwner] = useState<'current' | 'other'>('current');
+
+    // Drag and drop state
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const [activeDragData, setActiveDragData] = useState<{ item: Item; owner: 'current' | 'other' } | null>(null);
+
+    // Configure sensors - require 8px movement before starting drag (prevents accidental drags)
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
+
+    // Drag event handlers
+    const handleDragStart = (event: DragStartEvent) => {
+        const { active } = event;
+        setActiveId(active.id as string);
+        setActiveDragData(active.data.current as { item: Item; owner: 'current' | 'other' });
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (over && activeDragData) {
+            const dropZoneId = over.id as string;
+            const { item, owner } = activeDragData;
+
+            // Check if valid drop: "yours" only accepts items from current user, "theirs" only from other user
+            const isValidDrop =
+                (dropZoneId === 'yours-drop' && owner === 'current') ||
+                (dropZoneId === 'theirs-drop' && owner === 'other');
+
+            if (isValidDrop) {
+                toggleItemSelection(item, owner);
+            }
+        }
+
+        setActiveId(null);
+        setActiveDragData(null);
+    };
 
     useEffect(() => {
         if (!otherUserId) {
@@ -125,13 +177,28 @@ const TradeDesk: React.FC = () => {
         return item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
     };
 
-    // Offer Zone Component - displays items in the trade offer
-    const OfferZone = ({ title, items, isYours }: { title: string; items: Item[]; isYours: boolean }) => {
+    // Offer Zone Component - droppable zone for items
+    const OfferZone = ({ title, items, isYours, dropId }: { title: string; items: Item[]; isYours: boolean; dropId: string }) => {
+        const { isOver, setNodeRef } = useDroppable({
+            id: dropId,
+        });
+
+        // Check if the item being dragged can be dropped here
+        const canReceive = activeDragData && (
+            (isYours && activeDragData.owner === 'current') ||
+            (!isYours && activeDragData.owner === 'other')
+        );
+
+        const isValidDropTarget = isOver && canReceive;
+
         return (
             <div
-                className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${items.length > 0
-                    ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
-                    : 'border-slate-200 bg-slate-50'
+                ref={setNodeRef}
+                className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${isValidDropTarget
+                    ? isYours ? 'border-orange-500 bg-orange-100 scale-[1.02] shadow-lg' : 'border-green-500 bg-green-100 scale-[1.02] shadow-lg'
+                    : items.length > 0
+                        ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
+                        : 'border-slate-200 bg-slate-50'
                     }`}
             >
                 <h3 className={`text-sm font-semibold mb-3 ${isYours ? 'text-orange-700' : 'text-green-700'
@@ -139,10 +206,15 @@ const TradeDesk: React.FC = () => {
 
                 {items.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-[120px] text-slate-400">
-                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center mb-2">
-                            <span className="text-2xl text-slate-300">+</span>
+                        <div className={`w-12 h-12 rounded-full border-2 border-dashed flex items-center justify-center mb-2 transition-all ${isValidDropTarget ? 'border-current scale-110' : 'border-slate-300'
+                            }`}>
+                            <span className={`text-2xl ${isValidDropTarget ? 'text-current' : 'text-slate-300'}`}>
+                                {isValidDropTarget ? '↓' : '+'}
+                            </span>
                         </div>
-                        <p className="text-xs text-center">Click items below to add</p>
+                        <p className="text-xs text-center">
+                            {isValidDropTarget ? 'Drop here!' : 'Drag or click items below to add'}
+                        </p>
                     </div>
                 ) : (
                     <div className="flex flex-wrap gap-2">
@@ -176,41 +248,64 @@ const TradeDesk: React.FC = () => {
         );
     };
 
-    // Custom Trade Item Card with preview and quick-add
+    // Custom Trade Item Card with preview, quick-add, and drag support
     const TradeItemCard = ({
         item,
         isSelected,
         onPreview,
         onToggle,
-        accentColor
+        accentColor,
+        owner
     }: {
         item: Item;
         isSelected: boolean;
         onPreview: () => void;
         onToggle: () => void;
         accentColor: 'orange' | 'green';
+        owner: 'current' | 'other';
     }) => {
+        const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+            id: `item-${item.id}-${owner}`,
+            data: { item, owner },
+            disabled: isSelected, // Can't drag items already in offer
+        });
+
         const imageUrl = item.imageUrl && item.imageUrl.startsWith('/')
             ? `http://localhost:4000${item.imageUrl}`
             : item.imageUrl;
 
+        const style = transform ? {
+            transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        } : undefined;
+
         return (
             <div
-                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-pointer ${isSelected
-                    ? accentColor === 'orange'
-                        ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg'
-                        : 'border-green-400 ring-2 ring-green-200 shadow-lg'
-                    : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                ref={setNodeRef}
+                style={style}
+                {...listeners}
+                {...attributes}
+                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden ${isDragging ? 'opacity-50 scale-95 z-50 shadow-2xl cursor-grabbing' :
+                    isSelected
+                        ? accentColor === 'orange'
+                            ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg cursor-pointer'
+                            : 'border-green-400 ring-2 ring-green-200 shadow-lg cursor-pointer'
+                        : 'border-slate-200 hover:border-slate-300 hover:shadow-md cursor-grab'
                     }`}
-                onClick={onPreview}
+                onClick={(e) => {
+                    // Only trigger preview if not dragging
+                    if (!isDragging) {
+                        onPreview();
+                    }
+                }}
             >
                 {/* Image - larger and more prominent */}
-                <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
+                <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden pointer-events-none">
                     {imageUrl ? (
                         <img
                             src={imageUrl}
                             alt={item.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            draggable={false}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">📦</div>
@@ -218,7 +313,7 @@ const TradeDesk: React.FC = () => {
                 </div>
 
                 {/* Info */}
-                <div className="p-3">
+                <div className="p-3 pointer-events-none">
                     <h4 className="font-semibold text-sm text-slate-800 line-clamp-2 leading-tight mb-1">{item.name}</h4>
                     <p className="text-sm font-medium text-slate-600">{formatCurrency(item.estimatedMarketValue || 0)}</p>
                 </div>
@@ -226,7 +321,7 @@ const TradeDesk: React.FC = () => {
                 {/* Quick-add button - visible on hover, always visible if selected */}
                 <button
                     onClick={(e) => { e.stopPropagation(); onToggle(); }}
-                    className={`absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg transition-all ${isSelected
+                    className={`absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg transition-all pointer-events-auto ${isSelected
                         ? 'bg-red-500 hover:bg-red-600 opacity-100'
                         : accentColor === 'orange'
                             ? 'bg-orange-500 hover:bg-orange-600 opacity-0 group-hover:opacity-100'
@@ -246,8 +341,8 @@ const TradeDesk: React.FC = () => {
                 )}
 
                 {/* Hover hint */}
-                <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isSelected ? '✓ Added' : 'Click for details'}
+                <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {isSelected ? '✓ Added' : isDragging ? 'Dragging...' : 'Drag or click'}
                 </div>
             </div>
         );
@@ -286,6 +381,7 @@ const TradeDesk: React.FC = () => {
                             onPreview={() => onPreview(item)}
                             onToggle={() => onSelect(item)}
                             accentColor={isYours ? 'orange' : 'green'}
+                            owner={isYours ? 'current' : 'other'}
                         />
                     ))}
                 </div>
@@ -303,160 +399,188 @@ const TradeDesk: React.FC = () => {
     if (!otherUser) return <div className="p-8 text-center text-red-500">Could not load trade partner.</div>;
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-            {/* Minimal Header */}
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
-                <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="text-slate-500 hover:text-slate-700 transition-colors"
-                        >
-                            ← Back
-                        </button>
-                        <div className="h-5 w-px bg-slate-200" />
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                                {otherUser.name.charAt(0)}
-                            </div>
-                            <h1 className="text-lg font-semibold text-slate-800">Trade with {otherUser.name}</h1>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="max-w-6xl mx-auto px-4 py-6">
-                {/* Trade Builder - Side by Side Offer Zones */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-                    <div className="flex flex-col md:flex-row gap-4 items-stretch">
-                        {/* Your Offer */}
-                        <OfferZone title="You're Offering" items={currentUserItems} isYours={true} />
-
-                        {/* Balance Scale Center */}
-                        <div className="flex flex-col items-center justify-center px-4 py-2">
-                            <div className="text-3xl mb-2">⚖️</div>
-                            <div className="text-center">
-                                <div className="flex items-center gap-2 text-sm font-mono">
-                                    <span className={`font-semibold ${yourOfferValue > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
-                                        {formatCurrency(yourOfferValue)}
-                                    </span>
-                                    <span className="text-slate-300">↔</span>
-                                    <span className={`font-semibold ${theirOfferValue > 0 ? 'text-green-600' : 'text-slate-400'}`}>
-                                        {formatCurrency(theirOfferValue)}
-                                    </span>
+        <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+        >
+            <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+                {/* Minimal Header */}
+                <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+                    <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => navigate('/')}
+                                className="text-slate-500 hover:text-slate-700 transition-colors"
+                            >
+                                ← Back
+                            </button>
+                            <div className="h-5 w-px bg-slate-200" />
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                    {otherUser.name.charAt(0)}
                                 </div>
-                                {(yourOfferValue > 0 || theirOfferValue > 0) && (
-                                    <p className={`text-xs mt-1 ${valueDifference === 0 ? 'text-slate-500' :
-                                        valueDifference > 0 ? 'text-orange-500' : 'text-green-500'
-                                        }`}>
-                                        {valueDifference === 0 ? 'Balanced' :
-                                            valueDifference > 0 ? `You're offering ${formatCurrency(Math.abs(valueDifference))} more` :
-                                                `You're receiving ${formatCurrency(Math.abs(valueDifference))} more`}
-                                    </p>
-                                )}
+                                <h1 className="text-lg font-semibold text-slate-800">Trade with {otherUser.name}</h1>
                             </div>
                         </div>
-
-                        {/* Their Offer */}
-                        <OfferZone title={`${otherUser.name}'s Offer`} items={otherUserItems} isYours={false} />
                     </div>
                 </div>
 
-                {/* Collections - Side by Side */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-                        <CollectionGrid
-                            title="Your Collection"
-                            user={currentUser}
-                            selectedItems={currentUserItems}
-                            onSelect={(item) => toggleItemSelection(item, 'current')}
-                            onPreview={(item) => { setPreviewItem(item); setPreviewOwner('current'); }}
-                            isYours={true}
-                        />
-                    </div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-                        <CollectionGrid
-                            title={`${otherUser.name}'s Collection`}
-                            user={otherUser}
-                            selectedItems={otherUserItems}
-                            onSelect={(item) => toggleItemSelection(item, 'other')}
-                            onPreview={(item) => { setPreviewItem(item); setPreviewOwner('other'); }}
-                            isYours={false}
-                        />
-                    </div>
-                </div>
-            </div>
+                <div className="max-w-6xl mx-auto px-4 py-6">
+                    {/* Trade Builder - Side by Side Offer Zones */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+                        <div className="flex flex-col md:flex-row gap-4 items-stretch">
+                            {/* Your Offer */}
+                            <OfferZone title="You're Offering" items={currentUserItems} isYours={true} dropId="yours-drop" />
 
-            {/* Floating Action Bar */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 shadow-lg">
-                <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
-                    {/* Cash Input */}
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm text-slate-600">Add cash:</span>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
-                            <input
-                                type="number"
-                                value={currentUserCash || ''}
-                                onChange={(e) => setCurrentUserCash(Math.max(0, parseInt(e.target.value) || 0))}
-                                onBlur={(e) => {
-                                    if (parseInt(e.target.value) > currentUserCashInDollars) {
-                                        setCurrentUserCash(Math.floor(currentUserCashInDollars));
-                                        addNotification(`You only have ${formatCurrency(currentUser.balance)} available.`, 'warning');
-                                    }
-                                }}
-                                className="w-28 pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                placeholder="0"
-                                min="0"
-                                max={currentUserCashInDollars}
+                            {/* Balance Scale Center */}
+                            <div className="flex flex-col items-center justify-center px-4 py-2">
+                                <div className="text-3xl mb-2">⚖️</div>
+                                <div className="text-center">
+                                    <div className="flex items-center gap-2 text-sm font-mono">
+                                        <span className={`font-semibold ${yourOfferValue > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
+                                            {formatCurrency(yourOfferValue)}
+                                        </span>
+                                        <span className="text-slate-300">↔</span>
+                                        <span className={`font-semibold ${theirOfferValue > 0 ? 'text-green-600' : 'text-slate-400'}`}>
+                                            {formatCurrency(theirOfferValue)}
+                                        </span>
+                                    </div>
+                                    {(yourOfferValue > 0 || theirOfferValue > 0) && (
+                                        <p className={`text-xs mt-1 ${valueDifference === 0 ? 'text-slate-500' :
+                                            valueDifference > 0 ? 'text-orange-500' : 'text-green-500'
+                                            }`}>
+                                            {valueDifference === 0 ? 'Balanced' :
+                                                valueDifference > 0 ? `You're offering ${formatCurrency(Math.abs(valueDifference))} more` :
+                                                    `You're receiving ${formatCurrency(Math.abs(valueDifference))} more`}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Their Offer */}
+                            <OfferZone title={`${otherUser.name}'s Offer`} items={otherUserItems} isYours={false} dropId="theirs-drop" />
+                        </div>
+                    </div>
+
+                    {/* Collections - Side by Side */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                            <CollectionGrid
+                                title="Your Collection"
+                                user={currentUser}
+                                selectedItems={currentUserItems}
+                                onSelect={(item) => toggleItemSelection(item, 'current')}
+                                onPreview={(item) => { setPreviewItem(item); setPreviewOwner('current'); }}
+                                isYours={true}
                             />
                         </div>
-                        <span className="text-xs text-slate-400">/ {formatCurrency(currentUser.balance)} available</span>
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                            <CollectionGrid
+                                title={`${otherUser.name}'s Collection`}
+                                user={otherUser}
+                                selectedItems={otherUserItems}
+                                onSelect={(item) => toggleItemSelection(item, 'other')}
+                                onPreview={(item) => { setPreviewItem(item); setPreviewOwner('other'); }}
+                                isYours={false}
+                            />
+                        </div>
                     </div>
-
-                    {/* Propose Button */}
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        disabled={isSubmitting || (currentUserItems.length === 0 && currentUserCash === 0)}
-                        className="px-8 py-3 text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-md disabled:cursor-not-allowed"
-                    >
-                        {isSubmitting ? "Submitting..." : "Propose Trade"}
-                    </button>
                 </div>
+
+                {/* Floating Action Bar */}
+                <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 shadow-lg">
+                    <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+                        {/* Cash Input */}
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-600">Add cash:</span>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                <input
+                                    type="number"
+                                    value={currentUserCash || ''}
+                                    onChange={(e) => setCurrentUserCash(Math.max(0, parseInt(e.target.value) || 0))}
+                                    onBlur={(e) => {
+                                        if (parseInt(e.target.value) > currentUserCashInDollars) {
+                                            setCurrentUserCash(Math.floor(currentUserCashInDollars));
+                                            addNotification(`You only have ${formatCurrency(currentUser.balance)} available.`, 'warning');
+                                        }
+                                    }}
+                                    className="w-28 pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                    placeholder="0"
+                                    min="0"
+                                    max={currentUserCashInDollars}
+                                />
+                            </div>
+                            <span className="text-xs text-slate-400">/ {formatCurrency(currentUser.balance)} available</span>
+                        </div>
+
+                        {/* Propose Button */}
+                        <button
+                            onClick={() => setIsModalOpen(true)}
+                            disabled={isSubmitting || (currentUserItems.length === 0 && currentUserCash === 0)}
+                            className="px-8 py-3 text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-md disabled:cursor-not-allowed"
+                        >
+                            {isSubmitting ? "Submitting..." : "Propose Trade"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Add padding at bottom for floating bar */}
+                <div className="h-24" />
+
+                <ConfirmationModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    onConfirm={handleProposeTrade}
+                    title="Confirm Trade Proposal"
+                    confirmButtonText="Yes, Propose Trade"
+                    confirmButtonClass="bg-blue-600 hover:bg-blue-700"
+                >
+                    Are you sure you want to propose this trade to {otherUser.name}?
+                </ConfirmationModal>
+
+                {/* Item Detail Preview Modal */}
+                <ItemDetailModal
+                    item={previewItem}
+                    isOpen={!!previewItem}
+                    onClose={() => setPreviewItem(null)}
+                    onAddToTrade={() => {
+                        if (previewItem) {
+                            toggleItemSelection(previewItem, previewOwner);
+                        }
+                    }}
+                    isInTrade={previewItem ? (
+                        previewOwner === 'current'
+                            ? !!currentUserItems.find(i => i.id === previewItem.id)
+                            : !!otherUserItems.find(i => i.id === previewItem.id)
+                    ) : false}
+                    actionLabel={previewOwner === 'current' ? 'Add to Your Offer' : 'Request This Item'}
+                />
             </div>
 
-            {/* Add padding at bottom for floating bar */}
-            <div className="h-24" />
-
-            <ConfirmationModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onConfirm={handleProposeTrade}
-                title="Confirm Trade Proposal"
-                confirmButtonText="Yes, Propose Trade"
-                confirmButtonClass="bg-blue-600 hover:bg-blue-700"
-            >
-                Are you sure you want to propose this trade to {otherUser.name}?
-            </ConfirmationModal>
-
-            {/* Item Detail Preview Modal */}
-            <ItemDetailModal
-                item={previewItem}
-                isOpen={!!previewItem}
-                onClose={() => setPreviewItem(null)}
-                onAddToTrade={() => {
-                    if (previewItem) {
-                        toggleItemSelection(previewItem, previewOwner);
-                    }
-                }}
-                isInTrade={previewItem ? (
-                    previewOwner === 'current'
-                        ? !!currentUserItems.find(i => i.id === previewItem.id)
-                        : !!otherUserItems.find(i => i.id === previewItem.id)
-                ) : false}
-                actionLabel={previewOwner === 'current' ? 'Add to Your Offer' : 'Request This Item'}
-            />
-        </div>
+            {/* Drag Overlay - shows a preview of the item being dragged */}
+            <DragOverlay>
+                {activeDragData ? (
+                    <div className="w-32 h-40 bg-white rounded-xl border-2 border-blue-400 shadow-2xl overflow-hidden opacity-90 rotate-3">
+                        <div className="aspect-square bg-slate-100">
+                            {activeDragData.item.imageUrl && (
+                                <img
+                                    src={activeDragData.item.imageUrl.startsWith('/')
+                                        ? `http://localhost:4000${activeDragData.item.imageUrl}`
+                                        : activeDragData.item.imageUrl}
+                                    alt={activeDragData.item.name}
+                                    className="w-full h-full object-cover"
+                                />
+                            )}
+                        </div>
+                        <div className="p-2">
+                            <p className="text-xs font-semibold text-slate-800 truncate">{activeDragData.item.name}</p>
+                        </div>
+                    </div>
+                ) : null}
+            </DragOverlay>
+        </DndContext>
     );
 };
 
