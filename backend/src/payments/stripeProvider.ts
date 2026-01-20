@@ -28,6 +28,13 @@ function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// Helper to extract PaymentIntent ID from clientSecret
+// Format: pi_xxx_secret_yyy -> pi_xxx
+function extractPaymentIntentId(clientSecret: string): string {
+    const parts = clientSecret.split('_secret_');
+    return parts[0];
+}
+
 export class StripePaymentProvider implements PaymentProvider {
     readonly name = 'stripe';
 
@@ -96,7 +103,7 @@ export class StripePaymentProvider implements PaymentProvider {
         tradeId: string,
         payerId: number,
         recipientId: number
-    ): Promise<EscrowHold> {
+    ): Promise<EscrowHold & { clientSecret?: string }> {
         // Create PaymentIntent with manual capture
         const paymentIntent = await this.createPaymentIntent(
             amount,
@@ -108,33 +115,34 @@ export class StripePaymentProvider implements PaymentProvider {
 
         const id = generateId('escrow');
         const now = new Date().toISOString();
+        // Store PaymentIntent ID (not clientSecret) for later capture/refund
+        const paymentIntentId = paymentIntent.providerReference;
 
-        // Store escrow hold in database - store clientSecret in provider_reference for now
-        // We'll also store the PaymentIntent ID for later capture
         return new Promise((resolve, reject) => {
             db.run(
                 `INSERT INTO escrow_holds 
                 (id, trade_id, payer_id, recipient_id, amount, status, provider, provider_reference, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, tradeId, payerId, recipientId, amount, EscrowStatus.PENDING, this.name, paymentIntent.clientSecret, now, now],
+                [id, tradeId, payerId, recipientId, amount, EscrowStatus.PENDING, this.name, paymentIntentId, now, now],
                 function (err) {
                     if (err) {
                         console.error('[Stripe] Failed to create escrow hold:', err);
                         reject(err);
                     } else {
-                        const hold: EscrowHold = {
+                        const hold: EscrowHold & { clientSecret?: string } = {
                             id,
                             tradeId,
                             payerId,
                             recipientId,
                             amount,
-                            status: EscrowStatus.PENDING, // Will be FUNDED after frontend confirms
+                            status: EscrowStatus.PENDING,
                             provider: 'stripe',
-                            providerReference: paymentIntent.clientSecret || null,
+                            providerReference: paymentIntentId,
                             createdAt: now,
                             updatedAt: now,
+                            clientSecret: paymentIntent.clientSecret, // Return separately for frontend
                         };
-                        console.log(`[Stripe] Created escrow hold: ${id} for trade ${tradeId}, clientSecret: ${paymentIntent.clientSecret?.substring(0, 20)}...`);
+                        console.log(`[Stripe] Created escrow hold: ${id} for trade ${tradeId}, PI: ${paymentIntentId}`);
                         resolve(hold);
                     }
                 }

@@ -16,6 +16,7 @@ import { fundEscrow, releaseEscrow, refundEscrow, getEscrowStatus, calculateCash
 import { getNotificationsForUser, getUnreadCount, markAsRead, markAllAsRead, notifyTradeEvent, NotificationType } from './notifications';
 import { initWebSocket } from './websocket';
 import emailPreferencesRoutes from './emailPreferencesRoutes';
+import { handleStripeWebhook } from './webhooks';
 
 const app = express();
 const httpServer = createServer(app);
@@ -44,6 +45,21 @@ app.use(cors({
   credentials: true
 }));
 app.use(cookieParser());
+
+// Stripe webhook needs raw body - must be before express.json()
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature'] as string;
+
+  try {
+    const result = await handleStripeWebhook(req.body, signature);
+    console.log(`[Webhook] ${result.event}: ${result.message}`);
+    res.json({ received: true, ...result });
+  } catch (err: any) {
+    console.error('[Webhook] Error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
@@ -615,23 +631,62 @@ app.get('/api/trades/:id', (req, res) => {
 });
 
 // Cancel a trade (proposer only)
-app.post('/api/trades/:id/cancel', (req, res) => {
+app.post('/api/trades/:id/cancel', async (req, res) => {
   const tradeId = req.params.id;
   const { userId } = req.body;
   if (!tradeId || !userId) return res.status(400).json({ error: 'tradeId and userId are required' });
 
-  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
-    if (String(tradeRow.proposerId) !== String(userId)) return res.status(403).json({ error: 'Only proposer can cancel' });
-    if (tradeRow.status !== 'PENDING_ACCEPTANCE') return res.status(400).json({ error: 'Can only cancel pending trades' });
+  try {
+    const tradeRow = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row) => {
+        if (err) reject(err);
+        else if (!row) reject(new Error('Trade not found'));
+        else resolve(row);
+      });
+    });
+
+    // Can only cancel if you're the proposer or if trade is in a cancellable state
+    const isProposer = String(tradeRow.proposerId) === String(userId);
+    const isReceiver = String(tradeRow.receiverId) === String(userId);
+    if (!isProposer && !isReceiver) {
+      return res.status(403).json({ error: 'Only trade participants can cancel' });
+    }
+
+    // Check cancellable states
+    const cancellableStates = ['PENDING_ACCEPTANCE', 'PAYMENT_PENDING', 'ESCROW_FUNDED'];
+    if (!cancellableStates.includes(tradeRow.status)) {
+      return res.status(400).json({ error: `Cannot cancel trade in ${tradeRow.status} status` });
+    }
+
+    // Only proposer can cancel pending trades
+    if (tradeRow.status === 'PENDING_ACCEPTANCE' && !isProposer) {
+      return res.status(403).json({ error: 'Only proposer can cancel pending trades' });
+    }
+
+    // Refund any escrow if exists
+    let refunded = false;
+    try {
+      await refundEscrow(tradeId);
+      refunded = true;
+      console.log(`[Trade] Refunded escrow for cancelled trade ${tradeId}`);
+    } catch (escrowErr: any) {
+      // No escrow to refund - continue
+      console.log(`[Trade] No escrow to refund for trade ${tradeId}: ${escrowErr.message}`);
+    }
 
     const updatedAt = new Date().toISOString();
-    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['CANCELLED', updatedAt, tradeId], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: tradeId, status: 'CANCELLED' });
+    await new Promise<void>((resolve, reject) => {
+      db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['CANCELLED', updatedAt, tradeId], function (err) {
+        if (err) reject(err);
+        else resolve();
+      });
     });
-  });
+
+    res.json({ id: tradeId, status: 'CANCELLED', escrowRefunded: refunded });
+  } catch (err: any) {
+    console.error('Error cancelling trade:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Respond to a trade (accept or reject)
@@ -969,21 +1024,12 @@ app.post('/api/trades/:id/create-payment-intent', async (req, res) => {
     // Create escrow hold (which creates PaymentIntent for Stripe provider)
     const result = await fundEscrow(tradeId, Number(userId));
 
-    // For Stripe, the escrowHold will have the clientSecret in a special field
-    // We need to get it from the PaymentIntent
-    let clientSecret = null;
-    if (result.escrowHold.providerReference && process.env.PAYMENT_PROVIDER === 'stripe') {
-      // For Stripe, return the provider reference which frontend can use
-      // The clientSecret was stored during holdFunds call
-      clientSecret = result.escrowHold.providerReference;
-    }
-
     res.json({
       success: true,
       escrowHoldId: result.escrowHold.id,
       amount: payerCash,
       provider: result.escrowHold.provider,
-      clientSecret: clientSecret,
+      clientSecret: result.clientSecret || null, // Use clientSecret from result
       requiresConfirmation: result.requiresConfirmation,
     });
   } catch (err: any) {
@@ -1192,50 +1238,100 @@ app.get('/api/trades/:id/tracking', async (req, res) => {
   }
 });
 
-// Verify satisfaction for a trade (marks verifier; when both verified, set status and rating deadline)
-app.post('/api/trades/:id/verify', (req, res) => {
+// Verify satisfaction for a trade (marks verifier; when both verified, capture payment and complete)
+app.post('/api/trades/:id/verify', async (req, res) => {
   const tradeId = req.params.id;
   const { userId } = req.body;
   if (!tradeId || !userId) return res.status(400).json({ error: 'tradeId and userId are required' });
 
-  db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, tradeRow: any) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!tradeRow) return res.status(404).json({ error: 'Trade not found' });
+  try {
+    const tradeRow = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row) => {
+        if (err) reject(err);
+        else if (!row) reject(new Error('Trade not found'));
+        else resolve(row);
+      });
+    });
 
     const isProposer = String(tradeRow.proposerId) === String(userId);
     const field = isProposer ? 'proposerVerifiedSatisfaction' : 'receiverVerifiedSatisfaction';
 
-    db.run(`UPDATE trades SET ${field} = 1, updatedAt = ? WHERE id = ?`, [new Date().toISOString(), tradeId], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-
-      // Re-fetch trade to inspect both flags
-      db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err2, updated: any) => {
-        if (err2) return res.status(500).json({ error: err2.message });
-        const both = updated.proposerVerifiedSatisfaction && updated.receiverVerifiedSatisfaction;
-        if (both) {
-          const ratingDeadline = new Date();
-          ratingDeadline.setDate(ratingDeadline.getDate() + 7);
-          db.run('UPDATE trades SET status = ?, ratingDeadline = ?, updatedAt = ? WHERE id = ?', ['COMPLETED_AWAITING_RATING', ratingDeadline.toISOString(), new Date().toISOString(), tradeId]);
-        }
-
-        // Return updated user objects for proposer and receiver
-        db.get('SELECT * FROM User WHERE id = ?', [tradeRow.proposerId], (err3, proposer: any) => {
-          if (err3) return res.status(500).json({ error: err3.message });
-          db.get('SELECT * FROM User WHERE id = ?', [tradeRow.receiverId], (err4, receiver: any) => {
-            if (err4) return res.status(500).json({ error: err4.message });
-            // populate inventories
-            db.all('SELECT * FROM Item WHERE owner_id = ?', [proposer.id], (errP: any, pItems: any[]) => {
-              if (errP) return res.status(500).json({ error: errP.message });
-              db.all('SELECT * FROM Item WHERE owner_id = ?', [receiver.id], (errR: any, rItems: any[]) => {
-                if (errR) return res.status(500).json({ error: errR.message });
-                res.json({ proposer: { ...proposer, inventory: pItems }, receiver: { ...receiver, inventory: rItems } });
-              });
-            });
-          });
-        });
+    await new Promise<void>((resolve, reject) => {
+      db.run(`UPDATE trades SET ${field} = 1, updatedAt = ? WHERE id = ?`, [new Date().toISOString(), tradeId], function (err) {
+        if (err) reject(err);
+        else resolve();
       });
     });
-  });
+
+    // Re-fetch trade to inspect both flags
+    const updated = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const both = updated.proposerVerifiedSatisfaction && updated.receiverVerifiedSatisfaction;
+    if (both) {
+      // Both parties verified - capture payment and complete trade
+      try {
+        await releaseEscrow(tradeId);
+        console.log(`[Trade] Captured escrow payment for trade ${tradeId}`);
+      } catch (escrowErr: any) {
+        // Escrow may not exist (no cash trade) or already released - log but continue
+        console.log(`[Trade] No escrow to capture for trade ${tradeId}: ${escrowErr.message}`);
+      }
+
+      const ratingDeadline = new Date();
+      ratingDeadline.setDate(ratingDeadline.getDate() + 7);
+      await new Promise<void>((resolve, reject) => {
+        db.run('UPDATE trades SET status = ?, ratingDeadline = ?, updatedAt = ? WHERE id = ?',
+          ['COMPLETED_AWAITING_RATING', ratingDeadline.toISOString(), new Date().toISOString(), tradeId],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+
+    // Return updated user objects for proposer and receiver
+    const [proposer, receiver] = await Promise.all([
+      new Promise<any>((resolve, reject) => {
+        db.get('SELECT * FROM User WHERE id = ?', [tradeRow.proposerId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      }),
+      new Promise<any>((resolve, reject) => {
+        db.get('SELECT * FROM User WHERE id = ?', [tradeRow.receiverId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      })
+    ]);
+
+    const [pItems, rItems] = await Promise.all([
+      new Promise<any[]>((resolve, reject) => {
+        db.all('SELECT * FROM Item WHERE owner_id = ?', [proposer.id], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      }),
+      new Promise<any[]>((resolve, reject) => {
+        db.all('SELECT * FROM Item WHERE owner_id = ?', [receiver.id], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      })
+    ]);
+
+    res.json({
+      proposer: { ...proposer, inventory: pItems },
+      receiver: { ...receiver, inventory: rItems },
+      paymentCaptured: both
+    });
+  } catch (err: any) {
+    console.error('Error verifying trade:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Open a dispute for a trade

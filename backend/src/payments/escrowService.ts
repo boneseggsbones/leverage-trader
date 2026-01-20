@@ -119,7 +119,7 @@ export async function calculateCashDifferential(tradeId: string): Promise<CashDi
 export async function fundEscrow(
     tradeId: string,
     payerId: number
-): Promise<{ escrowHold: EscrowHold; requiresConfirmation: boolean }> {
+): Promise<{ escrowHold: EscrowHold; requiresConfirmation: boolean; clientSecret?: string }> {
     // Get trade directly and use cash fields
     const trade = await new Promise<any>((resolve, reject) => {
         db.get('SELECT * FROM trades WHERE id = ?', [tradeId], (err, row) => {
@@ -139,12 +139,12 @@ export async function fundEscrow(
     }
 
     // Hold funds via payment provider
-    const escrowHold = await paymentProvider.holdFunds(
+    const holdResult = await paymentProvider.holdFunds(
         payerCash,
         tradeId,
         payerId,
         Number(recipientId)
-    );
+    ) as EscrowHold & { clientSecret?: string };
 
     // Update trade status
     await updateTradeStatus(tradeId, 'ESCROW_FUNDED');
@@ -152,8 +152,9 @@ export async function fundEscrow(
     console.log(`[Escrow] Funded escrow for trade ${tradeId}: $${payerCash / 100}`);
 
     return {
-        escrowHold,
-        requiresConfirmation: false, // Mock provider doesn't require frontend confirmation
+        escrowHold: holdResult,
+        requiresConfirmation: process.env.PAYMENT_PROVIDER === 'stripe', // Stripe requires frontend confirmation
+        clientSecret: holdResult.clientSecret, // Return clientSecret for Stripe
     };
 }
 
