@@ -40,8 +40,10 @@ const Dashboard: React.FC = () => {
         score: number;
         tier: 'hot' | 'good' | 'explore';
         reasons: { type: string; description: string; score: number }[];
-        theirWishlistMatchCount: number;
-        yourWishlistMatchCount: number;
+        theirWishlistMatchCount: number;  // Items they have that you want
+        yourWishlistMatchCount: number;   // Items you have that they want
+        theirWishlistItems: { id: number; name: string }[];  // Items they have that you want
+        yourWishlistItems: { id: number; name: string }[];   // Items you have that they want
     }
     const [tradeMatches, setTradeMatches] = useState<TradeMatch[]>([]);
 
@@ -505,10 +507,10 @@ const Dashboard: React.FC = () => {
                                                         {match.userName}
                                                     </span>
                                                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${match.tier === 'hot'
-                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                                            : match.tier === 'good'
-                                                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                        : match.tier === 'good'
+                                                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                                                         }`}>
                                                         {match.tier === 'hot' ? '🔥 Hot' : match.tier === 'good' ? '⭐ Good' : '👀 Explore'}
                                                     </span>

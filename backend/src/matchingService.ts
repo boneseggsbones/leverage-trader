@@ -23,8 +23,10 @@ export interface TradeMatch {
     tier: 'hot' | 'good' | 'explore';
     reasons: MatchReason[];
     // Summary data for UI
-    theirWishlistMatchCount: number;
-    yourWishlistMatchCount: number;
+    theirWishlistMatchCount: number;  // Items they have that you want
+    yourWishlistMatchCount: number;   // Items you have that they want
+    theirWishlistItems: { id: number; name: string }[];  // Specific items they have that you want
+    yourWishlistItems: { id: number; name: string }[];   // Specific items you have that they want
     sharedCategories: string[];
     isNearby: boolean;
 }
@@ -106,35 +108,36 @@ function calculateMatchScore(currentUser: UserData, otherUser: UserData): TradeM
     const otherInventoryIds = new Set(otherUser.inventory.map(i => i.id));
 
     // --- WISHLIST MATCH (40% weight) ---
-    // Items in your inventory that they want
-    const theirWishlistMatches = currentUser.inventory.filter(item =>
-        otherUser.wishlist.includes(item.id)
-    );
-
-    // Items in their inventory that you want
-    const yourWishlistMatches = otherUser.inventory.filter(item =>
+    // Items in THEIR inventory that YOU want (i.e., items on your wishlist that they own)
+    const theyHaveWhatYouWant = otherUser.inventory.filter(item =>
         currentUser.wishlist.includes(item.id)
     );
 
+    // Items in YOUR inventory that THEY want (i.e., items on their wishlist that you own)
+    const youHaveWhatTheyWant = currentUser.inventory.filter(item =>
+        otherUser.wishlist.includes(item.id)
+    );
+
     const wishlistScore = Math.min(40,
-        (theirWishlistMatches.length * 15) + (yourWishlistMatches.length * 15)
+        (theyHaveWhatYouWant.length * 15) + (youHaveWhatTheyWant.length * 15)
     );
     totalScore += wishlistScore;
 
-    if (theirWishlistMatches.length > 0) {
+    if (theyHaveWhatYouWant.length > 0) {
+        const itemNames = theyHaveWhatYouWant.slice(0, 2).map(i => i.name).join(', ');
         reasons.push({
             type: 'wishlist_theirs',
-            description: `Has ${theirWishlistMatches.length} item${theirWishlistMatches.length > 1 ? 's' : ''} on your wishlist`,
-            score: yourWishlistMatches.length * 15
+            description: `Has ${theyHaveWhatYouWant.length === 1 ? itemNames : theyHaveWhatYouWant.length + ' items you want'}${theyHaveWhatYouWant.length > 2 ? ` (${itemNames}...)` : theyHaveWhatYouWant.length === 1 ? '' : ` (${itemNames})`}`,
+            score: theyHaveWhatYouWant.length * 15
         });
     }
 
-    if (yourWishlistMatches.length > 0) {
-        const itemNames = yourWishlistMatches.slice(0, 2).map(i => i.name).join(', ');
+    if (youHaveWhatTheyWant.length > 0) {
+        const itemNames = youHaveWhatTheyWant.slice(0, 2).map(i => i.name).join(', ');
         reasons.push({
             type: 'wishlist_yours',
-            description: `Wants your ${itemNames}${yourWishlistMatches.length > 2 ? ` +${yourWishlistMatches.length - 2} more` : ''}`,
-            score: theirWishlistMatches.length * 15
+            description: `Wants your ${itemNames}${youHaveWhatTheyWant.length > 2 ? ` +${youHaveWhatTheyWant.length - 2} more` : ''}`,
+            score: youHaveWhatTheyWant.length * 15
         });
     }
 
@@ -203,8 +206,10 @@ function calculateMatchScore(currentUser: UserData, otherUser: UserData): TradeM
         score: totalScore,
         tier,
         reasons,
-        theirWishlistMatchCount: theirWishlistMatches.length,
-        yourWishlistMatchCount: yourWishlistMatches.length,
+        theirWishlistMatchCount: theyHaveWhatYouWant.length,
+        yourWishlistMatchCount: youHaveWhatTheyWant.length,
+        theirWishlistItems: theyHaveWhatYouWant.map(i => ({ id: i.id, name: i.name })),
+        yourWishlistItems: youHaveWhatTheyWant.map(i => ({ id: i.id, name: i.name })),
         sharedCategories: sharedCategories.map(String),
         isNearby: !!isNearby
     };
