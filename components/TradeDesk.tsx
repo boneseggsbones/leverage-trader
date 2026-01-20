@@ -114,25 +114,35 @@ const TradeDesk: React.FC = () => {
         }
     };
 
-    const renderInventory = (title: string, user: User, selectedItems: Item[], onSelect: (item: Item) => void) => (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 transition-colors">
-            <h3 className="text-xl font-bold text-gray-700 dark:text-white mb-4">{title}</h3>
-            {user.inventory.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {user.inventory.map(item => (
-                        <ItemCard
-                            key={item.id}
-                            item={item}
-                            onSelect={() => onSelect(item)}
-                            isSelected={!!selectedItems.find(i => i.id === item.id)}
-                        />
-                    ))}
+    const renderInventory = (title: string, user: User, selectedItems: Item[], onSelect: (item: Item) => void) => {
+        const isCurrentUser = user.id === currentUser?.id;
+        return (
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 transition-colors">
+                <div className="mb-4">
+                    <h3 className="text-xl font-bold text-gray-700 dark:text-white">{title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {isCurrentUser
+                            ? "👆 Click items you want to OFFER"
+                            : "👆 Click items you want to RECEIVE"}
+                    </p>
                 </div>
-            ) : (
-                <p className="text-slate-500">No items in inventory.</p>
-            )}
-        </div>
-    );
+                {user.inventory.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {user.inventory.map(item => (
+                            <ItemCard
+                                key={item.id}
+                                item={item}
+                                onSelect={() => onSelect(item)}
+                                isSelected={!!selectedItems.find(i => i.id === item.id)}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-slate-500">No items in inventory.</p>
+                )}
+            </div>
+        );
+    };
 
     if (isLoading) return <div className="p-8 text-center">Loading Trade Desk...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
