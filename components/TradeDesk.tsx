@@ -44,7 +44,7 @@ const TradeDesk: React.FC = () => {
 
     // Drag and drop state
     const [activeId, setActiveId] = useState<string | null>(null);
-    const [activeDragData, setActiveDragData] = useState<{ item: Item; owner: 'current' | 'other' } | null>(null);
+    const [activeDragData, setActiveDragData] = useState<{ item: Item; owner: 'current' | 'other'; isRemoving?: boolean } | null>(null);
 
     // Configure sensors - require 8px movement before starting drag (prevents accidental drags)
     const sensors = useSensors(
@@ -59,7 +59,7 @@ const TradeDesk: React.FC = () => {
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
         setActiveId(active.id as string);
-        setActiveDragData(active.data.current as { item: Item; owner: 'current' | 'other' });
+        setActiveDragData(active.data.current as { item: Item; owner: 'current' | 'other'; isRemoving?: boolean });
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -67,15 +67,26 @@ const TradeDesk: React.FC = () => {
 
         if (over && activeDragData) {
             const dropZoneId = over.id as string;
-            const { item, owner } = activeDragData;
+            const { item, owner, isRemoving } = activeDragData;
 
-            // Check if valid drop: "yours" only accepts items from current user, "theirs" only from other user
-            const isValidDrop =
-                (dropZoneId === 'yours-drop' && owner === 'current') ||
-                (dropZoneId === 'theirs-drop' && owner === 'other');
+            if (isRemoving) {
+                // Dragging a selected item - dropping on collection zone removes it
+                const isValidRemove =
+                    (dropZoneId === 'yours-collection' && owner === 'current') ||
+                    (dropZoneId === 'theirs-collection' && owner === 'other');
 
-            if (isValidDrop) {
-                toggleItemSelection(item, owner);
+                if (isValidRemove) {
+                    toggleItemSelection(item, owner); // Remove from offer
+                }
+            } else {
+                // Dragging an unselected item - dropping on offer zone adds it
+                const isValidAdd =
+                    (dropZoneId === 'yours-drop' && owner === 'current') ||
+                    (dropZoneId === 'theirs-drop' && owner === 'other');
+
+                if (isValidAdd) {
+                    toggleItemSelection(item, owner); // Add to offer
+                }
             }
         }
 
@@ -266,8 +277,8 @@ const TradeDesk: React.FC = () => {
     }) => {
         const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
             id: `item-${item.id}-${owner}`,
-            data: { item, owner },
-            disabled: isSelected, // Can't drag items already in offer
+            data: { item, owner, isRemoving: isSelected }, // Track if dragging to remove
+            disabled: false, // Always allow dragging
         });
 
         const imageUrl = item.imageUrl && item.imageUrl.startsWith('/')
@@ -284,11 +295,10 @@ const TradeDesk: React.FC = () => {
                 style={style}
                 {...listeners}
                 {...attributes}
-                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden ${isDragging ? 'opacity-50 scale-95 z-50 shadow-2xl cursor-grabbing' :
-                    isSelected
-                        ? accentColor === 'orange'
-                            ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg cursor-pointer'
-                            : 'border-green-400 ring-2 ring-green-200 shadow-lg cursor-pointer'
+                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden ${isDragging
+                    ? 'opacity-50 scale-95 z-50 shadow-2xl cursor-grabbing'
+                    : isSelected
+                        ? 'opacity-50 grayscale border-slate-300 cursor-grab' // Grayed out when in offer
                         : 'border-slate-200 hover:border-slate-300 hover:shadow-md cursor-grab'
                     }`}
                 onClick={(e) => {
@@ -314,8 +324,8 @@ const TradeDesk: React.FC = () => {
 
                 {/* Info */}
                 <div className="p-3 pointer-events-none">
-                    <h4 className="font-semibold text-sm text-slate-800 line-clamp-2 leading-tight mb-1">{item.name}</h4>
-                    <p className="text-sm font-medium text-slate-600">{formatCurrency(item.estimatedMarketValue || 0)}</p>
+                    <h4 className={`font-semibold text-sm line-clamp-2 leading-tight mb-1 ${isSelected ? 'text-slate-500' : 'text-slate-800'}`}>{item.name}</h4>
+                    <p className={`text-sm font-medium ${isSelected ? 'text-slate-400' : 'text-slate-600'}`}>{formatCurrency(item.estimatedMarketValue || 0)}</p>
                 </div>
 
                 {/* Quick-add button - visible on hover, always visible if selected */}
@@ -348,14 +358,15 @@ const TradeDesk: React.FC = () => {
         );
     };
 
-    // Collection Grid Component - now with larger cards
+    // Collection Grid Component - droppable zone for returning items from offer
     const CollectionGrid = ({
         title,
         user,
         selectedItems,
         onSelect,
         onPreview,
-        isYours
+        isYours,
+        dropId
     }: {
         title: string;
         user: User;
@@ -363,36 +374,60 @@ const TradeDesk: React.FC = () => {
         onSelect: (item: Item) => void;
         onPreview: (item: Item) => void;
         isYours: boolean;
-    }) => (
-        <div>
-            <div className="flex items-center justify-between mb-3">
-                <h3 className={`text-base font-semibold ${isYours ? 'text-orange-700' : 'text-green-700'}`}>
-                    {title}
-                </h3>
-                <span className="text-xs text-slate-500">{user.inventory.length} items</span>
+        dropId: string;
+    }) => {
+        const { isOver, setNodeRef } = useDroppable({
+            id: dropId,
+        });
+
+        // Can receive items being removed (dragged from offer back to collection)
+        const canReceive = activeDragData?.isRemoving && (
+            (isYours && activeDragData.owner === 'current') ||
+            (!isYours && activeDragData.owner === 'other')
+        );
+
+        const isValidDropTarget = isOver && canReceive;
+
+        return (
+            <div
+                ref={setNodeRef}
+                className={`transition-all rounded-xl p-1 -m-1 ${isValidDropTarget
+                    ? isYours
+                        ? 'ring-2 ring-orange-400 bg-orange-50'
+                        : 'ring-2 ring-green-400 bg-green-50'
+                    : ''
+                    }`}
+            >
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className={`text-base font-semibold ${isYours ? 'text-orange-700' : 'text-green-700'}`}>
+                        {title}
+                        {isValidDropTarget && <span className="ml-2 text-xs font-normal">← Drop to remove</span>}
+                    </h3>
+                    <span className="text-xs text-slate-500">{user.inventory.length} items</span>
+                </div>
+                {user.inventory.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {user.inventory.map(item => (
+                            <TradeItemCard
+                                key={item.id}
+                                item={item}
+                                isSelected={!!selectedItems.find(i => i.id === item.id)}
+                                onPreview={() => onPreview(item)}
+                                onToggle={() => onSelect(item)}
+                                accentColor={isYours ? 'orange' : 'green'}
+                                owner={isYours ? 'current' : 'other'}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-8 text-slate-400">
+                        <div className="text-4xl mb-2">📦</div>
+                        <p className="text-sm">No items available</p>
+                    </div>
+                )}
             </div>
-            {user.inventory.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {user.inventory.map(item => (
-                        <TradeItemCard
-                            key={item.id}
-                            item={item}
-                            isSelected={!!selectedItems.find(i => i.id === item.id)}
-                            onPreview={() => onPreview(item)}
-                            onToggle={() => onSelect(item)}
-                            accentColor={isYours ? 'orange' : 'green'}
-                            owner={isYours ? 'current' : 'other'}
-                        />
-                    ))}
-                </div>
-            ) : (
-                <div className="text-center py-8 text-slate-400">
-                    <div className="text-4xl mb-2">📦</div>
-                    <p className="text-sm">No items available</p>
-                </div>
-            )}
-        </div>
-    );
+        );
+    };
 
     if (isLoading) return <div className="p-8 text-center">Loading...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
@@ -473,6 +508,7 @@ const TradeDesk: React.FC = () => {
                                 onSelect={(item) => toggleItemSelection(item, 'current')}
                                 onPreview={(item) => { setPreviewItem(item); setPreviewOwner('current'); }}
                                 isYours={true}
+                                dropId="yours-collection"
                             />
                         </div>
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
@@ -483,6 +519,7 @@ const TradeDesk: React.FC = () => {
                                 onSelect={(item) => toggleItemSelection(item, 'other')}
                                 onPreview={(item) => { setPreviewItem(item); setPreviewOwner('other'); }}
                                 isYours={false}
+                                dropId="theirs-collection"
                             />
                         </div>
                     </div>
