@@ -370,20 +370,56 @@ app.post('/api/wishlist/toggle', (req, res) => {
   });
 });
 
-app.get('/api/dashboard', (req, res) => {
-  // For now, return a simplified set of data.
-  // A full implementation would require more complex queries.
-  db.all('SELECT * FROM Item LIMIT 10', [], (err: Error | null, rows: any[]) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({
-      nearbyItems: rows,
-      recommendedItems: rows,
-      topTraderItems: rows,
+app.get('/api/dashboard', async (req, res) => {
+  const { city, state, distance } = req.query as { city?: string; state?: string; distance?: string };
+  const distanceMiles = distance ? parseInt(distance, 10) : 50;
+
+  try {
+    // Get all items with their owner info
+    const allItems: any[] = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT i.*, u.city as ownerCity, u.state as ownerState, u.name as ownerName, u.rating as ownerRating
+        FROM Item i
+        JOIN User u ON i.owner_id = u.id
+        ORDER BY i.estimatedMarketValue DESC
+      `, [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+      });
     });
-  });
+
+    // If location is specified, filter nearby items
+    let nearbyItems = allItems;
+    let searchLocation = { city: city || null, state: state || null };
+
+    if (city && state) {
+      // Filter by matching city/state or same state (simple proximity)
+      nearbyItems = allItems.filter(item => {
+        if (distanceMiles >= 250) return true; // "Any" distance
+        if (item.ownerCity === city && item.ownerState === state) return true; // Same city
+        if (distanceMiles >= 100 && item.ownerState === state) return true; // Same state for 100+ miles
+        if (distanceMiles >= 50 && item.ownerState === state) return true; // Same state for 50+ miles
+        return false;
+      });
+    }
+
+    // Recommended: Just get varied items not filtered by location
+    const recommendedItems = allItems.slice(0, 10);
+
+    // Top rated: Filter by owner rating
+    const topTraderItems = [...allItems]
+      .filter(item => item.ownerRating >= 4)
+      .slice(0, 10);
+
+    res.json({
+      nearbyItems: nearbyItems.slice(0, 12),
+      recommendedItems,
+      topTraderItems,
+      searchLocation,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get a single user by id

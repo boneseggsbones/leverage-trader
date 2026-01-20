@@ -55,8 +55,16 @@ export const fetchAllUsers = async (): Promise<User[]> => {
     return raw.map(normalizeUser);
 };
 
-export const fetchDashboardData = async (): Promise<any> => {
-    const response = await fetch(`${API_URL}/dashboard`);
+export const fetchDashboardData = async (params?: { city?: string; state?: string; distance?: number }): Promise<any> => {
+    const queryParams = new URLSearchParams();
+    if (params?.city) queryParams.append('city', params.city);
+    if (params?.state) queryParams.append('state', params.state);
+    if (params?.distance) queryParams.append('distance', String(params.distance));
+
+    const queryString = queryParams.toString();
+    const url = queryString ? `${API_URL}/dashboard?${queryString}` : `${API_URL}/dashboard`;
+
+    const response = await fetch(url);
     if (!response.ok) {
         throw new Error('Failed to fetch dashboard data');
     }
@@ -65,6 +73,7 @@ export const fetchDashboardData = async (): Promise<any> => {
         nearbyItems: (raw.nearbyItems || []).map(normalizeItem),
         recommendedItems: (raw.recommendedItems || []).map(normalizeItem),
         topTraderItems: (raw.topTraderItems || []).map(normalizeItem),
+        searchLocation: raw.searchLocation || null,
     };
 };
 
