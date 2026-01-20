@@ -70,10 +70,13 @@ const TradeDesk: React.FC = () => {
             const { item, owner, isRemoving } = activeDragData;
 
             if (isRemoving) {
-                // Dragging a selected item - dropping on collection zone removes it
+                // Dragging a selected item - dropping on collection zone OR offer zone removes it
+                // (dropping anywhere in the user's own area should work)
                 const isValidRemove =
                     (dropZoneId === 'yours-collection' && owner === 'current') ||
-                    (dropZoneId === 'theirs-collection' && owner === 'other');
+                    (dropZoneId === 'yours-drop' && owner === 'current') ||
+                    (dropZoneId === 'theirs-collection' && owner === 'other') ||
+                    (dropZoneId === 'theirs-drop' && owner === 'other');
 
                 if (isValidRemove) {
                     toggleItemSelection(item, owner); // Remove from offer
@@ -304,7 +307,13 @@ const TradeDesk: React.FC = () => {
                 onClick={(e) => {
                     // Only trigger preview if not dragging
                     if (!isDragging) {
-                        onPreview();
+                        if (isSelected) {
+                            // For selected items, click to remove from offer
+                            onToggle();
+                        } else {
+                            // For unselected items, click to preview
+                            onPreview();
+                        }
                     }
                 }}
             >
@@ -352,7 +361,7 @@ const TradeDesk: React.FC = () => {
 
                 {/* Hover hint */}
                 <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    {isSelected ? '✓ Added' : isDragging ? 'Dragging...' : 'Drag or click'}
+                    {isDragging ? 'Dragging...' : isSelected ? 'Click to remove' : 'Drag or click'}
                 </div>
             </div>
         );
