@@ -131,40 +131,65 @@ const TradeDesk: React.FC = () => {
 
     // Offer Zone Component with drop target
     const OfferZone = ({ title, items, isYours, dropZoneId }: { title: string; items: Item[]; isYours: boolean; dropZoneId: 'yours' | 'theirs' }) => {
-        const isValidDropTarget = draggedItem && (
+        // Check if current dragged item can be dropped here
+        const canReceiveDrop = draggedItem && (
             (dropZoneId === 'yours' && draggedItem.owner === 'current') ||
             (dropZoneId === 'theirs' && draggedItem.owner === 'other')
         );
-        const isActiveDropTarget = dropTargetActive === dropZoneId && isValidDropTarget;
+        const isActiveDropTarget = dropTargetActive === dropZoneId;
 
-        const handleDragOver = (e: React.DragEvent) => {
-            if (isValidDropTarget) {
-                e.preventDefault();
-                setDropTargetActive(dropZoneId);
+        const handleDragEnter = (e: React.DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Only highlight if we have a valid dragged item for this zone
+            if (draggedItem) {
+                const isValid = (dropZoneId === 'yours' && draggedItem.owner === 'current') ||
+                    (dropZoneId === 'theirs' && draggedItem.owner === 'other');
+                if (isValid) {
+                    setDropTargetActive(dropZoneId);
+                }
             }
         };
 
-        const handleDragLeave = () => {
-            setDropTargetActive(null);
+        const handleDragOver = (e: React.DragEvent) => {
+            // Must preventDefault to allow dropping
+            e.preventDefault();
+            e.dataTransfer.dropEffect = canReceiveDrop ? 'move' : 'none';
+        };
+
+        const handleDragLeave = (e: React.DragEvent) => {
+            e.preventDefault();
+            // Only clear if we're actually leaving this element (not entering a child)
+            const relatedTarget = e.relatedTarget as HTMLElement;
+            if (!e.currentTarget.contains(relatedTarget)) {
+                setDropTargetActive(null);
+            }
         };
 
         const handleDrop = (e: React.DragEvent) => {
             e.preventDefault();
+            e.stopPropagation();
             setDropTargetActive(null);
-            if (draggedItem && isValidDropTarget) {
-                toggleItemSelection(draggedItem.item, draggedItem.owner);
+
+            // Only add if we have a valid dragged item for this zone
+            if (draggedItem) {
+                const isValid = (dropZoneId === 'yours' && draggedItem.owner === 'current') ||
+                    (dropZoneId === 'theirs' && draggedItem.owner === 'other');
+                if (isValid) {
+                    toggleItemSelection(draggedItem.item, draggedItem.owner);
+                }
             }
-            setDraggedItem(null);
         };
 
         return (
             <div
-                className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${isActiveDropTarget
+                className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${isActiveDropTarget && canReceiveDrop
                     ? isYours ? 'border-orange-500 bg-orange-100 scale-[1.02] shadow-lg' : 'border-green-500 bg-green-100 scale-[1.02] shadow-lg'
                     : items.length > 0
                         ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
                         : 'border-slate-200 bg-slate-50 hover:border-slate-300'
                     }`}
+                onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -237,29 +262,34 @@ const TradeDesk: React.FC = () => {
             : item.imageUrl;
 
         const handleDragStart = (e: React.DragEvent) => {
-            setDraggedItem({ item, owner });
+            // Set drag data - required for drag to work
             e.dataTransfer.effectAllowed = 'move';
-            // Create a ghost image
-            const ghost = e.currentTarget.cloneNode(true) as HTMLElement;
-            ghost.style.opacity = '0.8';
-            ghost.style.transform = 'rotate(5deg) scale(0.9)';
-            document.body.appendChild(ghost);
-            e.dataTransfer.setDragImage(ghost, 60, 60);
-            setTimeout(() => document.body.removeChild(ghost), 0);
+            e.dataTransfer.setData('application/json', JSON.stringify({ itemId: item.id, owner }));
+
+            // Update state to track dragged item
+            setDraggedItem({ item, owner });
+
+            // Optional: Set opacity on target element during drag
+            (e.target as HTMLElement).style.opacity = '0.4';
         };
 
-        const handleDragEnd = () => {
+        const handleDragEnd = (e: React.DragEvent) => {
+            // Restore opacity
+            (e.target as HTMLElement).style.opacity = '1';
             setDraggedItem(null);
             setDropTargetActive(null);
         };
 
+        const isDragging = draggedItem?.item.id === item.id;
+
         return (
             <div
-                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-grab active:cursor-grabbing ${isSelected
-                    ? accentColor === 'orange'
-                        ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg'
-                        : 'border-green-400 ring-2 ring-green-200 shadow-lg'
-                    : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-50 scale-95 ring-2 ring-blue-300' :
+                    isSelected
+                        ? accentColor === 'orange'
+                            ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg'
+                            : 'border-green-400 ring-2 ring-green-200 shadow-lg'
+                        : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
                     }`}
                 onClick={onPreview}
                 draggable={!isSelected}
