@@ -196,4 +196,64 @@ describe('Admin API', () => {
             expect(res.status).toBe(403);
         });
     });
+
+    describe('POST /api/admin/users/:id/toggle-admin', () => {
+        it('should toggle admin status for a user', async () => {
+            const res = await request(app)
+                .post(`/api/admin/users/${regularUserId}/toggle-admin?userId=${adminUserId}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+            expect(res.body.user.isAdmin).toBe(1);
+            expect(res.body.message).toContain('now an admin');
+
+            // Toggle back
+            const res2 = await request(app)
+                .post(`/api/admin/users/${regularUserId}/toggle-admin?userId=${adminUserId}`);
+            expect(res2.body.user.isAdmin).toBe(0);
+        });
+
+        it('should return 404 for non-existent user', async () => {
+            const res = await request(app)
+                .post(`/api/admin/users/99999/toggle-admin?userId=${adminUserId}`);
+
+            expect(res.status).toBe(404);
+        });
+
+        it('should return 403 for non-admin users', async () => {
+            const res = await request(app)
+                .post(`/api/admin/users/1/toggle-admin?userId=${regularUserId}`);
+
+            expect(res.status).toBe(403);
+        });
+    });
+
+    describe('GET /api/admin/analytics', () => {
+        it('should return trade analytics data', async () => {
+            const res = await request(app)
+                .get(`/api/admin/analytics?userId=${adminUserId}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('tradesByDay');
+            expect(res.body).toHaveProperty('disputesByDay');
+            expect(res.body).toHaveProperty('usersByDay');
+            expect(res.body).toHaveProperty('periodDays');
+            expect(Array.isArray(res.body.tradesByDay)).toBe(true);
+        });
+
+        it('should support custom days parameter', async () => {
+            const res = await request(app)
+                .get(`/api/admin/analytics?userId=${adminUserId}&days=7`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.periodDays).toBe(7);
+        });
+
+        it('should return 403 for non-admin users', async () => {
+            const res = await request(app)
+                .get(`/api/admin/analytics?userId=${regularUserId}`);
+
+            expect(res.status).toBe(403);
+        });
+    });
 });

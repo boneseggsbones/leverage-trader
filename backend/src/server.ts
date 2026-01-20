@@ -2290,6 +2290,151 @@ app.get('/api/admin/users', async (req, res) => {
   });
 });
 
+// Toggle user admin status
+app.post('/api/admin/users/:id/toggle-admin', async (req, res) => {
+  const { userId } = req.query;
+  const targetUserId = req.params.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  // Get current admin status
+  db.get('SELECT id, name, isAdmin FROM User WHERE id = ?', [targetUserId], (err: Error | null, user: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const newAdminStatus = user.isAdmin === 1 ? 0 : 1;
+
+    db.run('UPDATE User SET isAdmin = ? WHERE id = ?', [newAdminStatus, targetUserId], function (err2: Error | null) {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      res.json({
+        success: true,
+        user: { ...user, isAdmin: newAdminStatus },
+        message: `${user.name} is ${newAdminStatus === 1 ? 'now an admin' : 'no longer an admin'}`
+      });
+    });
+  });
+});
+
+// Quick resolve dispute from admin panel
+app.post('/api/admin/disputes/:id/resolve', async (req, res) => {
+  const { userId } = req.query;
+  const disputeId = req.params.id;
+  const { resolution, refundToInitiator } = req.body;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  // Get dispute details
+  db.get('SELECT * FROM disputes WHERE id = ?', [disputeId], (err: Error | null, dispute: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+    if (dispute.status === 'RESOLVED') return res.status(400).json({ error: 'Dispute already resolved' });
+
+    const now = new Date().toISOString();
+
+    // Update dispute status
+    db.run(
+      'UPDATE disputes SET status = ?, resolution = ?, resolved_at = ? WHERE id = ?',
+      ['RESOLVED', resolution || 'Resolved by admin', now, disputeId],
+      function (err2: Error | null) {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        // Update trade status
+        db.run(
+          'UPDATE trades SET status = ? WHERE id = ?',
+          ['DISPUTE_RESOLVED', dispute.trade_id],
+          (err3: Error | null) => {
+            if (err3) console.error('Failed to update trade status:', err3);
+
+            res.json({
+              success: true,
+              message: 'Dispute resolved successfully',
+              dispute: { ...dispute, status: 'RESOLVED', resolution: resolution || 'Resolved by admin' }
+            });
+          }
+        );
+      }
+    );
+  });
+});
+
+// Get trade analytics for charts
+app.get('/api/admin/analytics', async (req, res) => {
+  const { userId, days = '30' } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const daysNum = parseInt(days as string, 10);
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - daysNum);
+  const startDateStr = startDate.toISOString().split('T')[0];
+
+  // Get trades grouped by day
+  const query = `
+    SELECT 
+      date(createdAt) as date,
+      COUNT(*) as tradeCount,
+      SUM(proposerCash + receiverCash) as totalValue,
+      SUM(CASE WHEN status = 'COMPLETED' OR status = 'DISPUTE_RESOLVED' THEN 1 ELSE 0 END) as completedCount
+    FROM trades 
+    WHERE date(createdAt) >= ?
+    GROUP BY date(createdAt)
+    ORDER BY date(createdAt) ASC
+  `;
+
+  db.all(query, [startDateStr], (err: Error | null, tradesByDay: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    // Get disputes grouped by day
+    db.all(`
+      SELECT date(created_at) as date, COUNT(*) as disputeCount
+      FROM disputes
+      WHERE date(created_at) >= ?
+      GROUP BY date(created_at)
+    `, [startDateStr], (err2: Error | null, disputesByDay: any[]) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      // Get user signups grouped by day
+      db.all(`
+        SELECT date(createdAt) as date, COUNT(*) as userCount
+        FROM User
+        WHERE date(createdAt) >= ?
+        GROUP BY date(createdAt)
+      `, [startDateStr], (err3: Error | null, usersByDay: any[]) => {
+        if (err3) return res.status(500).json({ error: err3.message });
+
+        res.json({
+          tradesByDay: tradesByDay || [],
+          disputesByDay: disputesByDay || [],
+          usersByDay: usersByDay || [],
+          periodDays: daysNum
+        });
+      });
+    });
+  });
+});
+
 if (require.main === module) {
   // Run non-destructive migrations, then initialize (if needed), seed data, then start server
   migrate()

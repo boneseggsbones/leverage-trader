@@ -1141,6 +1141,34 @@ const adminTests: BackendTest[] = [
             assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
         }
     },
+    {
+        id: 'ADMIN-08', name: 'POST /api/admin/users/:id/toggle-admin',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('POST', '/api/admin/users/1/toggle-admin?userId=1');
+            assert([200, 401, 403, 404].includes(status), `Expected valid response, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-09', name: 'GET /api/admin/analytics returns chart data',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status, data } = await apiCall('GET', '/api/admin/analytics?userId=1&days=7');
+            assert([200, 401, 403].includes(status), `Expected valid response, got ${status}`);
+            if (status === 200) {
+                assert(data.hasOwnProperty('tradesByDay'), 'Expected tradesByDay');
+                assert(data.hasOwnProperty('periodDays'), 'Expected periodDays');
+            }
+        }
+    },
+    {
+        id: 'ADMIN-10', name: 'Admin analytics requires auth',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/analytics');
+            assert(status === 401, `Expected 401 without userId, got ${status}`);
+        }
+    },
 ];
 
 // ============================================
