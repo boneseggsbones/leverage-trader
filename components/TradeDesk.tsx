@@ -31,6 +31,10 @@ const TradeDesk: React.FC = () => {
     const [previewItem, setPreviewItem] = useState<Item | null>(null);
     const [previewOwner, setPreviewOwner] = useState<'current' | 'other'>('current');
 
+    // Drag and drop state
+    const [draggedItem, setDraggedItem] = useState<{ item: Item; owner: 'current' | 'other' } | null>(null);
+    const [dropTargetActive, setDropTargetActive] = useState<'yours' | 'theirs' | null>(null);
+
     useEffect(() => {
         if (!otherUserId) {
             setError("No user selected for trade.");
@@ -125,82 +129,151 @@ const TradeDesk: React.FC = () => {
         return item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
     };
 
-    // Offer Zone Component
-    const OfferZone = ({ title, items, isYours }: { title: string; items: Item[]; isYours: boolean }) => (
-        <div className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${items.length > 0
-            ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
-            : 'border-slate-200 bg-slate-50 hover:border-slate-300'
-            }`}>
-            <h3 className={`text-sm font-semibold mb-3 ${isYours ? 'text-orange-700' : 'text-green-700'
-                }`}>{title}</h3>
+    // Offer Zone Component with drop target
+    const OfferZone = ({ title, items, isYours, dropZoneId }: { title: string; items: Item[]; isYours: boolean; dropZoneId: 'yours' | 'theirs' }) => {
+        const isValidDropTarget = draggedItem && (
+            (dropZoneId === 'yours' && draggedItem.owner === 'current') ||
+            (dropZoneId === 'theirs' && draggedItem.owner === 'other')
+        );
+        const isActiveDropTarget = dropTargetActive === dropZoneId && isValidDropTarget;
 
-            {items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-[120px] text-slate-400">
-                    <div className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center mb-2">
-                        <span className="text-2xl text-slate-300">+</span>
+        const handleDragOver = (e: React.DragEvent) => {
+            if (isValidDropTarget) {
+                e.preventDefault();
+                setDropTargetActive(dropZoneId);
+            }
+        };
+
+        const handleDragLeave = () => {
+            setDropTargetActive(null);
+        };
+
+        const handleDrop = (e: React.DragEvent) => {
+            e.preventDefault();
+            setDropTargetActive(null);
+            if (draggedItem && isValidDropTarget) {
+                toggleItemSelection(draggedItem.item, draggedItem.owner);
+            }
+            setDraggedItem(null);
+        };
+
+        return (
+            <div
+                className={`flex-1 rounded-2xl border-2 border-dashed p-4 min-h-[180px] transition-all ${isActiveDropTarget
+                    ? isYours ? 'border-orange-500 bg-orange-100 scale-[1.02] shadow-lg' : 'border-green-500 bg-green-100 scale-[1.02] shadow-lg'
+                    : items.length > 0
+                        ? isYours ? 'border-orange-300 bg-orange-50' : 'border-green-300 bg-green-50'
+                        : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                    }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                <h3 className={`text-sm font-semibold mb-3 ${isYours ? 'text-orange-700' : 'text-green-700'
+                    }`}>{title}</h3>
+
+                {items.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-[120px] text-slate-400">
+                        <div className={`w-12 h-12 rounded-full border-2 border-dashed flex items-center justify-center mb-2 transition-all ${isActiveDropTarget ? 'border-current scale-110' : 'border-slate-300'
+                            }`}>
+                            <span className={`text-2xl ${isActiveDropTarget ? 'text-current' : 'text-slate-300'}`}>
+                                {isActiveDropTarget ? '↓' : '+'}
+                            </span>
+                        </div>
+                        <p className="text-xs text-center">
+                            {isActiveDropTarget ? 'Drop here!' : 'Drag items here or click to add'}
+                        </p>
                     </div>
-                    <p className="text-xs text-center">Click items below to add</p>
-                </div>
-            ) : (
-                <div className="flex flex-wrap gap-2">
-                    {items.map(item => (
-                        <div key={item.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-slate-200">
-                            <img src={getItemImageUrl(item)} alt={item.name} className="w-8 h-8 rounded object-cover" />
-                            <div>
-                                <p className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{item.name}</p>
-                                <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue || 0)}</p>
+                ) : (
+                    <div className="flex flex-wrap gap-2">
+                        {items.map(item => (
+                            <div
+                                key={item.id}
+                                className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-slate-200 cursor-pointer hover:border-red-300 hover:bg-red-50 transition-colors"
+                                onClick={() => toggleItemSelection(item, isYours ? 'current' : 'other')}
+                                title="Click to remove"
+                            >
+                                <img src={getItemImageUrl(item)} alt={item.name} className="w-8 h-8 rounded object-cover" />
+                                <div>
+                                    <p className="text-sm font-medium text-slate-700 truncate max-w-[100px]">{item.name}</p>
+                                    <p className="text-xs text-slate-500">{formatCurrency(item.estimatedMarketValue || 0)}</p>
+                                </div>
+                                <span className="text-red-400 text-xs ml-1">✕</span>
                             </div>
-                        </div>
-                    ))}
-                    {isYours && currentUserCash > 0 && (
-                        <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-green-200">
-                            <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center font-bold text-green-700">$</div>
-                            <div>
-                                <p className="text-sm font-medium text-slate-700">Cash</p>
-                                <p className="text-xs text-green-600">{formatCurrency(dollarsToCents(currentUserCash))}</p>
+                        ))}
+                        {isYours && currentUserCash > 0 && (
+                            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-green-200">
+                                <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center font-bold text-green-700">$</div>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-700">Cash</p>
+                                    <p className="text-xs text-green-600">{formatCurrency(dollarsToCents(currentUserCash))}</p>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
-    // Custom Trade Item Card with preview and quick-add
+    // Custom Trade Item Card with preview, quick-add, and drag support
     const TradeItemCard = ({
         item,
         isSelected,
         onPreview,
         onToggle,
-        accentColor
+        accentColor,
+        owner
     }: {
         item: Item;
         isSelected: boolean;
         onPreview: () => void;
         onToggle: () => void;
         accentColor: 'orange' | 'green';
+        owner: 'current' | 'other';
     }) => {
         const imageUrl = item.imageUrl && item.imageUrl.startsWith('/')
             ? `http://localhost:4000${item.imageUrl}`
             : item.imageUrl;
 
+        const handleDragStart = (e: React.DragEvent) => {
+            setDraggedItem({ item, owner });
+            e.dataTransfer.effectAllowed = 'move';
+            // Create a ghost image
+            const ghost = e.currentTarget.cloneNode(true) as HTMLElement;
+            ghost.style.opacity = '0.8';
+            ghost.style.transform = 'rotate(5deg) scale(0.9)';
+            document.body.appendChild(ghost);
+            e.dataTransfer.setDragImage(ghost, 60, 60);
+            setTimeout(() => document.body.removeChild(ghost), 0);
+        };
+
+        const handleDragEnd = () => {
+            setDraggedItem(null);
+            setDropTargetActive(null);
+        };
+
         return (
             <div
-                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-pointer ${isSelected
+                className={`relative group bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden cursor-grab active:cursor-grabbing ${isSelected
                     ? accentColor === 'orange'
                         ? 'border-orange-400 ring-2 ring-orange-200 shadow-lg'
                         : 'border-green-400 ring-2 ring-green-200 shadow-lg'
                     : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
                     }`}
                 onClick={onPreview}
+                draggable={!isSelected}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
             >
                 {/* Image - larger and more prominent */}
-                <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
+                <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden pointer-events-none">
                     {imageUrl ? (
                         <img
                             src={imageUrl}
                             alt={item.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            draggable={false}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">📦</div>
@@ -208,7 +281,7 @@ const TradeDesk: React.FC = () => {
                 </div>
 
                 {/* Info */}
-                <div className="p-3">
+                <div className="p-3 pointer-events-none">
                     <h4 className="font-semibold text-sm text-slate-800 line-clamp-2 leading-tight mb-1">{item.name}</h4>
                     <p className="text-sm font-medium text-slate-600">{formatCurrency(item.estimatedMarketValue || 0)}</p>
                 </div>
@@ -217,10 +290,10 @@ const TradeDesk: React.FC = () => {
                 <button
                     onClick={(e) => { e.stopPropagation(); onToggle(); }}
                     className={`absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg transition-all ${isSelected
-                            ? 'bg-red-500 hover:bg-red-600 opacity-100'
-                            : accentColor === 'orange'
-                                ? 'bg-orange-500 hover:bg-orange-600 opacity-0 group-hover:opacity-100'
-                                : 'bg-green-500 hover:bg-green-600 opacity-0 group-hover:opacity-100'
+                        ? 'bg-red-500 hover:bg-red-600 opacity-100'
+                        : accentColor === 'orange'
+                            ? 'bg-orange-500 hover:bg-orange-600 opacity-0 group-hover:opacity-100'
+                            : 'bg-green-500 hover:bg-green-600 opacity-0 group-hover:opacity-100'
                         }`}
                     title={isSelected ? 'Remove from trade' : 'Add to trade'}
                 >
@@ -235,9 +308,9 @@ const TradeDesk: React.FC = () => {
                     </div>
                 )}
 
-                {/* "Tap for details" hint on hover */}
+                {/* Drag hint or "View details" hint on hover */}
                 <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    View details
+                    {isSelected ? '✓ Added' : 'Drag or click'}
                 </div>
             </div>
         );
@@ -276,6 +349,7 @@ const TradeDesk: React.FC = () => {
                             onPreview={() => onPreview(item)}
                             onToggle={() => onSelect(item)}
                             accentColor={isYours ? 'orange' : 'green'}
+                            owner={isYours ? 'current' : 'other'}
                         />
                     ))}
                 </div>
@@ -320,7 +394,7 @@ const TradeDesk: React.FC = () => {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
                     <div className="flex flex-col md:flex-row gap-4 items-stretch">
                         {/* Your Offer */}
-                        <OfferZone title="You're Offering" items={currentUserItems} isYours={true} />
+                        <OfferZone title="You're Offering" items={currentUserItems} isYours={true} dropZoneId="yours" />
 
                         {/* Balance Scale Center */}
                         <div className="flex flex-col items-center justify-center px-4 py-2">
@@ -348,7 +422,7 @@ const TradeDesk: React.FC = () => {
                         </div>
 
                         {/* Their Offer */}
-                        <OfferZone title={`${otherUser.name}'s Offer`} items={otherUserItems} isYours={false} />
+                        <OfferZone title={`${otherUser.name}'s Offer`} items={otherUserItems} isYours={false} dropZoneId="theirs" />
                     </div>
                 </div>
 
