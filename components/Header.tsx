@@ -33,6 +33,7 @@ const Header: React.FC = () => {
         { path: '/inventory', label: 'Inventory' },
         { path: '/trades', label: 'Trades' },
         { path: '/analytics', label: 'Analytics' },
+        ...(currentUser?.isAdmin ? [{ path: '/admin', label: '🛡️ Admin' }] : []),
     ];
 
     return (

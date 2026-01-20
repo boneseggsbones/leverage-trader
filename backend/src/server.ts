@@ -2094,6 +2094,202 @@ app.get('/api/analytics/item/:itemId/history', (req, res) => {
   });
 });
 
+// =====================================================
+// ADMIN DASHBOARD ENDPOINTS
+// =====================================================
+
+// Admin authorization middleware helper
+const checkAdminAuth = (userId: string | number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    db.get('SELECT isAdmin FROM User WHERE id = ?', [userId], (err: Error | null, row: any) => {
+      if (err || !row) return resolve(false);
+      resolve(row.isAdmin === 1);
+    });
+  });
+};
+
+// Get platform-wide statistics
+app.get('/api/admin/stats', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const stats = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT COUNT(*) as totalUsers FROM User', [], (err: Error | null, userCount: any) => {
+        if (err) return reject(err);
+
+        db.get('SELECT COUNT(*) as totalItems FROM Item', [], (err2: Error | null, itemCount: any) => {
+          if (err2) return reject(err2);
+
+          db.all('SELECT status, COUNT(*) as count FROM trades GROUP BY status', [], (err3: Error | null, tradesByStatus: any[]) => {
+            if (err3) return reject(err3);
+
+            db.get('SELECT COUNT(*) as totalDisputes, SUM(CASE WHEN status != \'RESOLVED\' THEN 1 ELSE 0 END) as openDisputes FROM disputes', [], (err4: Error | null, disputeStats: any) => {
+              if (err4) return reject(err4);
+
+              db.get('SELECT SUM(amount) as totalEscrow FROM escrow_holds WHERE status = \'FUNDED\'', [], (err5: Error | null, escrowStats: any) => {
+                if (err5) return reject(err5);
+
+                db.get('SELECT SUM(proposerCash + receiverCash) as totalTradeValue FROM trades WHERE status IN (\'COMPLETED\', \'DISPUTE_RESOLVED\')', [], (err6: Error | null, valueStats: any) => {
+                  if (err6) return reject(err6);
+
+                  const totalTrades = (tradesByStatus || []).reduce((sum, s) => sum + s.count, 0);
+                  const statusBreakdown: Record<string, number> = {};
+                  (tradesByStatus || []).forEach(s => { statusBreakdown[s.status] = s.count; });
+
+                  resolve({
+                    totalUsers: userCount?.totalUsers || 0,
+                    totalItems: itemCount?.totalItems || 0,
+                    totalTrades,
+                    tradesByStatus: statusBreakdown,
+                    totalDisputes: disputeStats?.totalDisputes || 0,
+                    openDisputes: disputeStats?.openDisputes || 0,
+                    escrowHeldCents: escrowStats?.totalEscrow || 0,
+                    totalTradeValueCents: valueStats?.totalTradeValue || 0
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+
+    res.json(stats);
+  } catch (err: any) {
+    console.error('Admin stats error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all trades with optional filters
+app.get('/api/admin/trades', async (req, res) => {
+  const { userId, status, limit = '50', offset = '0' } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  let query = `
+    SELECT t.*, 
+           p.name as proposerName, 
+           r.name as receiverName
+    FROM trades t
+    LEFT JOIN User p ON t.proposerId = p.id
+    LEFT JOIN User r ON t.receiverId = r.id
+  `;
+  const params: any[] = [];
+
+  if (status) {
+    query += ' WHERE t.status = ?';
+    params.push(status);
+  }
+
+  query += ' ORDER BY t.createdAt DESC LIMIT ? OFFSET ?';
+  params.push(parseInt(limit as string, 10), parseInt(offset as string, 10));
+
+  db.all(query, params, (err: Error | null, trades: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    // Get total count for pagination
+    let countQuery = 'SELECT COUNT(*) as total FROM trades';
+    const countParams: any[] = [];
+    if (status) {
+      countQuery += ' WHERE status = ?';
+      countParams.push(status);
+    }
+
+    db.get(countQuery, countParams, (err2: Error | null, countResult: any) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+
+      res.json({
+        trades: trades || [],
+        total: countResult?.total || 0,
+        limit: parseInt(limit as string, 10),
+        offset: parseInt(offset as string, 10)
+      });
+    });
+  });
+});
+
+// Get all disputes with optional filters
+app.get('/api/admin/disputes', async (req, res) => {
+  const { userId, status } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  let query = `
+    SELECT d.*, 
+           i.name as initiatorName, 
+           r.name as respondentName,
+           t.proposerItemIds, t.receiverItemIds
+    FROM disputes d
+    LEFT JOIN User i ON d.initiator_id = i.id
+    LEFT JOIN User r ON d.respondent_id = r.id
+    LEFT JOIN trades t ON d.trade_id = t.id
+  `;
+  const params: any[] = [];
+
+  if (status) {
+    query += ' WHERE d.status = ?';
+    params.push(status);
+  }
+
+  query += ' ORDER BY d.created_at DESC';
+
+  db.all(query, params, (err: Error | null, disputes: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ disputes: disputes || [] });
+  });
+});
+
+// Get all users with stats
+app.get('/api/admin/users', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const query = `
+    SELECT u.id, u.name, u.email, u.rating, u.balance, u.createdAt, u.isAdmin,
+           (SELECT COUNT(*) FROM trades WHERE proposerId = u.id OR receiverId = u.id) as tradeCount,
+           (SELECT COUNT(*) FROM Item WHERE owner_id = u.id) as itemCount
+    FROM User u
+    ORDER BY u.id ASC
+  `;
+
+  db.all(query, [], (err: Error | null, users: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ users: users || [] });
+  });
+});
+
 if (require.main === module) {
   // Run non-destructive migrations, then initialize (if needed), seed data, then start server
   migrate()

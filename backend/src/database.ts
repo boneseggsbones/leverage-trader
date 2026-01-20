@@ -460,6 +460,9 @@ const migrate = () => {
         if (!userColumns.includes('createdAt')) {
           tasks.push(addColumnIfMissing('User', 'createdAt', 'TEXT'));
         }
+        if (!userColumns.includes('isAdmin')) {
+          tasks.push(addColumnIfMissing('User', 'isAdmin', 'INTEGER DEFAULT 0'));
+        }
 
         Promise.all(tasks).then(() => resolve()).catch(reject);
       });

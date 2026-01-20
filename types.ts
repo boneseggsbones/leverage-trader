@@ -14,6 +14,7 @@ export interface User {
     aboutMe: string;
     accountCreatedAt: string;
     wishlist: string[]; // Array of Item IDs
+    isAdmin?: boolean;
 }
 
 export interface Item {

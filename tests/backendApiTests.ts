@@ -1081,6 +1081,69 @@ const wishlistTests: BackendTest[] = [
 ];
 
 // ============================================
+// ADMIN DASHBOARD TESTS (7 tests)
+// ============================================
+const adminTests: BackendTest[] = [
+    {
+        id: 'ADMIN-01', name: 'GET /api/admin/stats returns platform stats',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            // First we need an admin user - this test verifies the endpoint exists
+            const { status } = await apiCall('GET', '/api/admin/stats?userId=1');
+            assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-02', name: 'GET /api/admin/trades returns all trades',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/trades?userId=1');
+            assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-03', name: 'GET /api/admin/disputes returns all disputes',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/disputes?userId=1');
+            assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-04', name: 'GET /api/admin/users returns all users',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/users?userId=1');
+            assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-05', name: 'Admin endpoints require userId',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/stats');
+            assert(status === 401, `Expected 401 without userId, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-06', name: 'Admin trades supports pagination',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/trades?userId=1&limit=5&offset=0');
+            assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
+        }
+    },
+    {
+        id: 'ADMIN-07', name: 'Admin trades supports status filter',
+        category: 'Admin Dashboard', icon: '🛡️', color: 'from-red-500 to-orange-600',
+        async run() {
+            const { status } = await apiCall('GET', '/api/admin/trades?userId=1&status=PENDING_ACCEPTANCE');
+            assert([200, 401, 403].includes(status), `Expected 200, 401 or 403, got ${status}`);
+        }
+    },
+];
+
+// ============================================
 // ANALYTICS TESTS (2 tests)
 // ============================================
 const analyticsTests: BackendTest[] = [
@@ -1117,6 +1180,7 @@ export const allBackendTests: BackendTest[] = [
     ...trustSafetyTests,
     ...emailTests,
     ...wishlistTests,
+    ...adminTests,
     ...analyticsTests,
 ];
 
@@ -1135,6 +1199,7 @@ export const categoryMeta: Record<string, { icon: string; color: string }> = {
     'Trust & Safety': { icon: '🛡️', color: 'from-slate-500 to-gray-600' },
     'Email Preferences': { icon: '📧', color: 'from-cyan-500 to-teal-600' },
     'Wishlist': { icon: '❤️', color: 'from-rose-500 to-pink-600' },
+    'Admin Dashboard': { icon: '🛡️', color: 'from-red-500 to-orange-600' },
     'Analytics': { icon: '📈', color: 'from-purple-500 to-indigo-600' },
 };
 

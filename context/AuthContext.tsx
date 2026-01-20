@@ -40,6 +40,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                             }))
                             : [],
                         balance: Number(parsed.balance ?? parsed.cash ?? 0),
+                        isAdmin: Boolean(parsed.isAdmin),
                     } as User;
                     setCurrentUser(normalized);
 
@@ -74,6 +75,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                                 ownerId: String(it.owner_id ?? it.ownerId)
                             }))
                             : [],
+                        isAdmin: Boolean(data.user.isAdmin),
                     } as User;
                     setCurrentUser(user);
                     setOauthProfile(data.oauthUser || null);
@@ -103,7 +105,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     id: String(i.id),
                     ownerId: String((i as any).owner_id ?? i.ownerId ?? i.ownerId)
                 }))
-                : []
+                : [],
+            isAdmin: Boolean((user as any).isAdmin),
         };
         setCurrentUser(toStore as User);
         try { localStorage.setItem('leverage_currentUser', JSON.stringify(toStore)); } catch (e) { }
@@ -138,7 +141,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     id: String(i.id),
                     ownerId: String((i as any).owner_id ?? i.ownerId ?? i.ownerId)
                 }))
-                : []
+                : [],
+            isAdmin: Boolean((user as any).isAdmin),
         };
         setCurrentUser(toStore as User);
         try { localStorage.setItem('leverage_currentUser', JSON.stringify(toStore)); } catch (e) { }
