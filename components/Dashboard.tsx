@@ -30,6 +30,8 @@ const Dashboard: React.FC = () => {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [userSearch, setUserSearch] = useState('');
+    const [showUserDropdown, setShowUserDropdown] = useState(false);
 
     useEffect(() => {
         const loadDashboardData = async () => {
@@ -70,6 +72,16 @@ const Dashboard: React.FC = () => {
     const handleItemClick = (itemOwnerId: string) => {
         navigate(`/trade-desk/${itemOwnerId}`);
     };
+
+    // Filter users based on search (excluding current user)
+    const filteredUsers = useMemo(() => {
+        if (!userSearch.trim()) return [];
+        const search = userSearch.toLowerCase();
+        return users
+            .filter(u => u.id !== currentUser?.id)
+            .filter(u => u.name.toLowerCase().includes(search) || (u as any).email?.toLowerCase().includes(search))
+            .slice(0, 5);
+    }, [users, userSearch, currentUser?.id]);
 
     if (isLoading) {
         return (
@@ -137,15 +149,62 @@ const Dashboard: React.FC = () => {
                         <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
                             🔍
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
                                 Discover
                             </h1>
                             <p className="mt-2 text-slate-600 dark:text-gray-300 leading-relaxed max-w-2xl">
                                 Browse items from traders in your area and find pieces that match your interests.
-                                Click any item to visit their trade desk and propose a swap.
                             </p>
                         </div>
+                    </div>
+
+                    {/* User Search */}
+                    <div className="mt-4 relative">
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 relative">
+                                <input
+                                    type="text"
+                                    value={userSearch}
+                                    onChange={e => { setUserSearch(e.target.value); setShowUserDropdown(true); }}
+                                    onFocus={() => setShowUserDropdown(true)}
+                                    placeholder="Search traders by name or email..."
+                                    className="w-full px-4 py-3 pl-11 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+                                />
+                                <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">👤</span>
+
+                                {/* Dropdown */}
+                                {showUserDropdown && filteredUsers.length > 0 && (
+                                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
+                                        {filteredUsers.map(user => (
+                                            <button
+                                                key={user.id}
+                                                onClick={() => {
+                                                    navigate(`/trade-desk/${user.id}`);
+                                                    setUserSearch('');
+                                                    setShowUserDropdown(false);
+                                                }}
+                                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
+                                            >
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
+                                                    {user.name.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {(user as any).rating ? `★ ${(user as any).rating.toFixed(1)}` : 'No ratings'} • {(user.inventory || []).length} items
+                                                    </p>
+                                                </div>
+                                                <span className="text-blue-500 text-sm font-medium">Trade →</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        {userSearch && filteredUsers.length === 0 && (
+                            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No traders found matching "{userSearch}"</p>
+                        )}
                     </div>
                 </div>
                 <div className="space-y-12">
