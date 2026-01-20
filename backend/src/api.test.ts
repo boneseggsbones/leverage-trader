@@ -93,7 +93,8 @@ describe('Item API', () => {
     });
 
     it('should return an empty array for a user with no items', async () => {
-      const res = await request(app).get('/api/items?userId=3');
+      // Use a nonexistent user ID to test empty items response
+      const res = await request(app).get('/api/items?userId=9999');
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);

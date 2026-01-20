@@ -30,6 +30,16 @@ describe('Trust & Safety: Ratings', () => {
         await request(app)
             .post(`/api/trades/${tradeId}/respond`)
             .send({ response: 'accept' });
+
+        // Set trade to COMPLETED_AWAITING_RATING status so rating tests can proceed
+        // (In real flow, this happens after escrow/verification steps)
+        await new Promise<void>((resolve, reject) => {
+            db.run(
+                `UPDATE trades SET status = 'COMPLETED_AWAITING_RATING' WHERE id = ?`,
+                [tradeId],
+                (err) => err ? reject(err) : resolve()
+            );
+        });
     });
 
     describe('POST /api/trades/:id/rate', () => {

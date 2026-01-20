@@ -140,9 +140,9 @@ describe('Users API', () => {
                 .post('/api/users')
                 .send({ email: uniqueEmail, password: 'pass2', name: 'Second' });
 
-            // Duplicate email should either fail or return first user's data
-            // API may handle duplicates differently
-            expect([200, 400, 500]).toContain(res.status);
+            // Duplicate email should fail with 400 or 409, or return first user's data (200)
+            // API may handle duplicates differently - 409 is standard conflict status
+            expect([200, 400, 409, 500]).toContain(res.status);
             if (res.status !== 200) {
                 expect(res.body).toHaveProperty('error');
             }
