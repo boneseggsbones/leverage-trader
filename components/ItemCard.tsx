@@ -26,10 +26,20 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
         ${isCompact ? 'p-1' : 'p-2'}
     `;
 
+    // Get PSA grade early for compact view
+    const psaGrade = (item as any).psa_grade;
+
     if (isCompact) {
         return (
             <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-2 rounded-md shadow-sm border border-gray-200 dark:border-gray-700">
-                <img src={imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
+                <div className="relative">
+                    <img src={imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover" />
+                    {psaGrade && (
+                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold px-1 rounded">
+                            {psaGrade}
+                        </div>
+                    )}
+                </div>
                 <div>
                     <p className="font-semibold text-sm text-gray-800 dark:text-white">{item.name}</p>
                     <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
@@ -40,8 +50,14 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
 
     return (
         <div className={cardClasses} onClick={onViewValuation || onSelect}>
-            <div className="w-full h-24 bg-gray-100 dark:bg-gray-700 rounded-md mb-2 overflow-hidden">
+            <div className="relative w-full h-24 bg-gray-100 dark:bg-gray-700 rounded-md mb-2 overflow-hidden">
                 <img src={imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                {/* PSA Grade Badge - positioned on image */}
+                {psaGrade && (
+                    <div className="absolute top-1 right-1 bg-gradient-to-br from-red-500 to-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                        PSA {psaGrade}
+                    </div>
+                )}
             </div>
             <h4 className="font-bold text-sm text-gray-800 dark:text-white truncate w-full">{item.name}</h4>
             <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
