@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
-import { fetchAllItems, fetchAllUsers, toggleWishlistItem } from '../api/mockApi.ts';
+import { fetchAllItems, fetchAllUsers, toggleWishlistItem } from '../api/api.ts';
 import { Item, User } from '../types.ts';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 
