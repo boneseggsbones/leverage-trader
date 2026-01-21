@@ -8,7 +8,8 @@ import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
-import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured } from './pricingService';
+import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured, getConsolidatedValuation } from './pricingService';
+import { isEbayConfigured } from './ebayService';
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
 import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
 import { authHandler, authDb } from './auth';
@@ -18,6 +19,8 @@ import { initWebSocket } from './websocket';
 import emailPreferencesRoutes from './emailPreferencesRoutes';
 import { handleStripeWebhook } from './webhooks';
 import { findTopMatches } from './matchingService';
+import { logItemView, logSearch, logProfileView, getRecentViews, getRecentSearches } from './activityService';
+import { watchItem, unwatchItem, getWatchlist, isWatching, removeWatch, findMatchingWatchers, getWatchCount } from './watchlistService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -1988,11 +1991,32 @@ app.post('/api/items/:id/link-product', async (req, res) => {
 // Check if pricing API is configured
 app.get('/api/pricing/status', (req, res) => {
   res.json({
-    configured: isApiConfigured(),
+    configured: isApiConfigured() || isEbayConfigured(),
     providers: [
-      { name: 'pricecharting', configured: isApiConfigured(), description: 'Video Games, TCG, Comics' }
+      { name: 'pricecharting', configured: isApiConfigured(), description: 'Video Games, TCG, Comics' },
+      { name: 'ebay', configured: isEbayConfigured(), description: 'eBay Sold Listings (Market Data)' }
     ]
   });
+});
+
+// Get consolidated valuation from multiple sources
+app.get('/api/items/:id/consolidated-valuation', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+
+  if (isNaN(itemId)) {
+    return res.status(400).json({ success: false, message: 'Invalid item ID' });
+  }
+
+  try {
+    const result = await getConsolidatedValuation(itemId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      consolidated: null,
+      message: error.message || 'Failed to get consolidated valuation'
+    });
+  }
 });
 
 // =====================================================
@@ -2549,6 +2573,141 @@ app.get('/api/admin/analytics', async (req, res) => {
       });
     });
   });
+});
+
+// =========================================================
+// TRADE GRAPH FOUNDATION ROUTES (Phase 0+1)
+// =========================================================
+
+// Activity Events (Phase 0)
+
+// Log item view
+app.post('/api/events/item-view', async (req, res) => {
+  const { userId, itemId } = req.body;
+  if (!userId || !itemId) {
+    return res.status(400).json({ error: 'userId and itemId are required' });
+  }
+  try {
+    await logItemView(Number(userId), Number(itemId));
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error logging item view:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Log search event
+app.post('/api/events/search', async (req, res) => {
+  const { userId, query, categoryId } = req.body;
+  if (!userId || !query) {
+    return res.status(400).json({ error: 'userId and query are required' });
+  }
+  try {
+    await logSearch(Number(userId), query, categoryId ? Number(categoryId) : undefined);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error logging search:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get recent activity for a user
+app.get('/api/users/:id/activity', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+  try {
+    const [recentViews, recentSearches] = await Promise.all([
+      getRecentViews(userId, 10),
+      getRecentSearches(userId, 10)
+    ]);
+    res.json({ recentViews, recentSearches });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Watchlist Routes (Phase 1)
+
+// Get user's watchlist
+app.get('/api/users/:id/watchlist', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+  try {
+    const watchlist = await getWatchlist(userId);
+    res.json({ watchlist });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remove from watchlist by watch ID
+app.delete('/api/users/:id/watchlist/:watchId', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  const watchId = parseInt(req.params.watchId, 10);
+  if (isNaN(userId) || isNaN(watchId)) {
+    return res.status(400).json({ error: 'Invalid IDs' });
+  }
+  try {
+    const removed = await removeWatch(userId, watchId);
+    res.json({ success: removed });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Watch a specific item
+app.post('/api/items/:id/watch', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const { userId } = req.body;
+  if (isNaN(itemId) || !userId) {
+    return res.status(400).json({ error: 'Invalid item ID or missing userId' });
+  }
+  try {
+    const watch = await watchItem(Number(userId), itemId);
+    res.json({ watch });
+  } catch (err: any) {
+    if (err.message === 'Cannot watch your own item') {
+      return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Unwatch a specific item
+app.delete('/api/items/:id/watch', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const { userId } = req.body;
+  if (isNaN(itemId) || !userId) {
+    return res.status(400).json({ error: 'Invalid item ID or missing userId' });
+  }
+  try {
+    const removed = await unwatchItem(Number(userId), itemId);
+    res.json({ success: removed });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check if user is watching an item
+app.get('/api/items/:id/watching', async (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const userId = req.query.userId ? parseInt(req.query.userId as string, 10) : null;
+  if (isNaN(itemId)) {
+    return res.status(400).json({ error: 'Invalid item ID' });
+  }
+  try {
+    const [watchCountResult, isUserWatching] = await Promise.all([
+      getWatchCount(itemId),
+      userId ? isWatching(userId, itemId) : Promise.resolve(false)
+    ]);
+    res.json({ watchCount: watchCountResult, isWatching: isUserWatching });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 if (require.main === module) {

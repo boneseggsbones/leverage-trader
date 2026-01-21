@@ -339,6 +339,45 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_price_signals_product ON trade_price_signals(product_id);
       CREATE INDEX IF NOT EXISTS idx_price_signals_category ON trade_price_signals(category_id);
       CREATE INDEX IF NOT EXISTS idx_product_catalog_category ON product_catalog(category_id);
+
+      -- =====================================================
+      -- TRADE GRAPH FOUNDATION TABLES (Phase 0+1)
+      -- =====================================================
+
+      -- Activity events for behavioral signals (Phase 0)
+      CREATE TABLE IF NOT EXISTS user_activity_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        event_type TEXT NOT NULL,
+        target_item_id INTEGER REFERENCES Item(id),
+        target_user_id INTEGER REFERENCES User(id),
+        search_query TEXT,
+        category_id INTEGER REFERENCES item_categories(id),
+        metadata TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_activity_user ON user_activity_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_activity_type ON user_activity_events(event_type);
+      CREATE INDEX IF NOT EXISTS idx_activity_item ON user_activity_events(target_item_id);
+
+      -- Explicit watch requests (Phase 1)
+      CREATE TABLE IF NOT EXISTS user_wants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        want_type TEXT NOT NULL,
+        item_id INTEGER REFERENCES Item(id),
+        search_term TEXT,
+        category_id INTEGER REFERENCES item_categories(id),
+        min_price_cents INTEGER,
+        max_price_cents INTEGER,
+        notify_on_match INTEGER DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        matched_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_wants_user ON user_wants(user_id);
+      CREATE INDEX IF NOT EXISTS idx_wants_active ON user_wants(is_active, notify_on_match);
+      CREATE INDEX IF NOT EXISTS idx_wants_category ON user_wants(category_id);
     `, (err) => {
       if (err) {
         reject(err);
