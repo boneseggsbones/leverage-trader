@@ -1826,6 +1826,9 @@ app.get('/api/items/:id/valuations', (req, res) => {
                     emv_source: item.emv_source,
                     emv_confidence: item.emv_confidence,
                     condition: item.condition,
+                    category_id: item.category_id,
+                    psa_cert_number: item.psa_cert_number,
+                    psa_grade: item.psa_grade,
                   },
                   apiValuations: apiValuations || [],
                   userOverrides: userOverrides || [],
@@ -1846,15 +1849,43 @@ app.post('/api/items/:id/valuations/override', (req, res) => {
     return res.status(400).json({ error: 'userId and overrideValueCents are required' });
   }
 
-  db.run(`INSERT INTO user_value_overrides (item_id, user_id, override_value_cents, reason, justification, status)
-          VALUES (?, ?, ?, ?, ?, 'pending')`,
-    [itemId, userId, overrideValueCents, reason || null, justification || null],
-    function (this: sqlite3.RunResult, err: Error | null) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ id: this.lastID, status: 'pending' });
-    });
+  // First get current item value to store as original
+  db.get('SELECT estimatedMarketValue FROM Item WHERE id = ?', [itemId], (err: Error | null, item: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const originalValue = item.estimatedMarketValue;
+
+    // Insert the override record
+    db.run(`INSERT INTO user_value_overrides (item_id, user_id, override_value_cents, original_api_value_cents, reason, justification, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'approved')`,
+      [itemId, userId, overrideValueCents, originalValue, reason || null, justification || null],
+      function (this: sqlite3.RunResult, err2: Error | null) {
+        if (err2) {
+          return res.status(500).json({ error: err2.message });
+        }
+
+        // Also update the Item's actual EMV and store original value
+        db.run(`UPDATE Item SET 
+                estimatedMarketValue = ?, 
+                emv_source = 'user_override',
+                emv_confidence = 100,
+                original_api_value_cents = COALESCE(original_api_value_cents, ?)
+                WHERE id = ?`,
+          [overrideValueCents, originalValue, itemId],
+          (err3: Error | null) => {
+            if (err3) {
+              return res.status(500).json({ error: err3.message });
+            }
+            res.json({
+              id: this.lastID,
+              status: 'approved',
+              originalValue,
+              newValue: overrideValueCents
+            });
+          });
+      });
+  });
 });
 
 // Get historical trade prices for similar items
@@ -2876,6 +2907,94 @@ app.post('/api/ebay/import', async (req, res) => {
 
   console.log(`[eBay] User ${userId} imported ${results.imported} items, skipped ${results.skipped}`);
   res.json(results);
+});
+
+// =============================================================================
+// PSA GRADING API ENDPOINTS
+// =============================================================================
+
+import { isPsaConfigured, verifyCertification, linkItemToPSA, getItemPSAData, getRemainingCalls } from './psaService';
+
+// Get PSA API status
+app.get('/api/psa/status', (req, res) => {
+  res.json({
+    configured: isPsaConfigured(),
+    remainingCalls: getRemainingCalls(),
+    dailyLimit: 100
+  });
+});
+
+// Verify a PSA certification by cert number
+app.get('/api/psa/verify/:certNumber', async (req, res) => {
+  const { certNumber } = req.params;
+
+  if (!certNumber || certNumber.length < 5) {
+    return res.status(400).json({ error: 'Valid cert number required' });
+  }
+
+  try {
+    const certData = await verifyCertification(certNumber);
+
+    if (!certData) {
+      return res.status(404).json({
+        error: 'Certification not found',
+        configured: isPsaConfigured(),
+        remainingCalls: getRemainingCalls()
+      });
+    }
+
+    res.json({
+      ...certData,
+      remainingCalls: getRemainingCalls()
+    });
+  } catch (err: any) {
+    console.error('[PSA] Verification error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Link an item to a PSA certification
+app.post('/api/items/:itemId/link-psa', async (req, res) => {
+  const itemId = parseInt(req.params.itemId, 10);
+  const { certNumber } = req.body;
+
+  if (isNaN(itemId)) {
+    return res.status(400).json({ error: 'Invalid item ID' });
+  }
+
+  if (!certNumber || certNumber.length < 5) {
+    return res.status(400).json({ error: 'Valid cert number required' });
+  }
+
+  try {
+    const result = await linkItemToPSA(itemId, certNumber);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PSA] Link error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get PSA data for an item
+app.get('/api/items/:itemId/psa', async (req, res) => {
+  const itemId = parseInt(req.params.itemId, 10);
+
+  if (isNaN(itemId)) {
+    return res.status(400).json({ error: 'Invalid item ID' });
+  }
+
+  try {
+    const psaData = await getItemPSAData(itemId);
+
+    if (!psaData) {
+      return res.status(404).json({ error: 'No PSA data linked to this item' });
+    }
+
+    res.json(psaData);
+  } catch (err: any) {
+    console.error('[PSA] Get data error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 if (require.main === module) {

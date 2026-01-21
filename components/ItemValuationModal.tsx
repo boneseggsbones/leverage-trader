@@ -11,11 +11,14 @@ interface ItemValuationModalProps {
     onValuationUpdated?: () => void;
 }
 
-type TabType = 'overview' | 'history' | 'override' | 'link';
+type ActivePanel = null | 'history' | 'autoPrice' | 'setPrice' | 'psa';
+
+// TCG category ID from the database
+const TCG_CATEGORY_ID = 2;
 
 const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, item, onValuationUpdated }) => {
     const { currentUser } = useAuth();
-    const [activeTab, setActiveTab] = useState<TabType>('overview');
+    const [activePanel, setActivePanel] = useState<ActivePanel>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -24,58 +27,60 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
 
     // Override form state
     const [overrideValue, setOverrideValue] = useState<string>('');
-    const [overrideReason, setOverrideReason] = useState<string>('');
-    const [overrideJustification, setOverrideJustification] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
 
     // Refresh state
     const [refreshing, setRefreshing] = useState(false);
-    const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
     // Product search/link state
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<ExternalProduct[]>([]);
     const [searching, setSearching] = useState(false);
     const [linking, setLinking] = useState(false);
-    const [linkMessage, setLinkMessage] = useState<string | null>(null);
+    const [linkSuccess, setLinkSuccess] = useState(false);
 
-    // Debounced search effect - triggers 300ms after user stops typing
+    // PSA state
+    const [psaCertNumber, setPsaCertNumber] = useState('');
+    const [psaVerifying, setPsaVerifying] = useState(false);
+    const [psaData, setPsaData] = useState<any>(null);
+    const [psaMessage, setPsaMessage] = useState<string | null>(null);
+    const [psaLinking, setPsaLinking] = useState(false);
+
+    // Debounced search
     useEffect(() => {
         if (searchQuery.length < 2) {
             setSearchResults([]);
             setSearching(false);
             return;
         }
-
         setSearching(true);
         const timeoutId = setTimeout(async () => {
             try {
                 const result = await searchExternalProducts(searchQuery);
                 setSearchResults(result.products);
             } catch (err) {
-                setLinkMessage('Search failed');
                 setSearchResults([]);
             } finally {
                 setSearching(false);
             }
         }, 300);
-
         return () => clearTimeout(timeoutId);
     }, [searchQuery]);
 
     useEffect(() => {
         if (show && item) {
             loadData();
+            setActivePanel(null);
+            setLinkSuccess(false);
+            setSubmitSuccess(false);
         }
     }, [show, item]);
 
     const loadData = async () => {
         if (!item) return;
-
         setLoading(true);
         setError(null);
-
         try {
             const [valData, pricesData] = await Promise.all([
                 fetchItemValuations(item.id),
@@ -83,534 +88,414 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
             ]);
             setValuationData(valData);
             setSimilarPrices(pricesData);
-
-            // Pre-fill override value with current EMV
             if (valData.item.current_emv_cents) {
                 setOverrideValue((valData.item.current_emv_cents / 100).toFixed(2));
             }
         } catch (err) {
-            setError('Failed to load valuation data');
-            console.error(err);
+            setError('Failed to load data');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSubmitOverride = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!item || !currentUser) return;
+    const formatCurrency = (cents: number | null | undefined) => {
+        if (cents === null || cents === undefined) return '—';
+        return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    };
 
+    const handleSubmitOverride = async () => {
+        if (!item || !currentUser) return;
         const valueCents = Math.round(parseFloat(overrideValue) * 100);
-        if (isNaN(valueCents) || valueCents <= 0) {
-            setError('Please enter a valid value');
-            return;
-        }
+        if (isNaN(valueCents) || valueCents <= 0) return;
 
         setSubmitting(true);
-        setError(null);
-
         try {
-            await submitValueOverride(
-                item.id,
-                currentUser.id,
-                valueCents,
-                overrideReason || undefined,
-                overrideJustification || undefined
-            );
+            await submitValueOverride(item.id, currentUser.id, valueCents);
             setSubmitSuccess(true);
             setTimeout(() => {
-                setSubmitSuccess(false);
-                loadData(); // Reload to show the new override
+                loadData();
                 if (onValuationUpdated) onValuationUpdated();
-            }, 1500);
+                setActivePanel(null);
+            }, 1000);
         } catch (err) {
-            setError('Failed to submit override');
-            console.error(err);
+            setError('Failed to save');
         } finally {
             setSubmitting(false);
         }
     };
 
-    const formatCurrency = (cents: number | null | undefined) => {
-        if (cents === null || cents === undefined) return '—';
-        return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-    };
-
-    const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-        });
-    };
-
     if (!show || !item) return null;
+
+    const isTCG = (valuationData?.item as any)?.category_id === TCG_CATEGORY_ID;
+    const hasPSA = !!(valuationData?.item as any)?.psa_grade || !!psaData;
+    const isLinked = !!(valuationData?.item as any)?.product_id || valuationData?.apiValuations?.length > 0;
+
+    // Action tiles configuration
+    const tiles = [
+        {
+            id: 'history',
+            icon: '📈',
+            label: 'Price History',
+            sublabel: similarPrices?.stats ? `${similarPrices.stats.count} trades` : 'View trends',
+            color: 'from-emerald-500 to-green-600',
+            bgColor: 'bg-emerald-50 hover:bg-emerald-100',
+            show: true,
+        },
+        {
+            id: 'autoPrice',
+            icon: '🔗',
+            label: 'Auto-Price',
+            sublabel: isLinked ? '✓ Connected' : 'Link to catalog',
+            color: 'from-violet-500 to-purple-600',
+            bgColor: isLinked ? 'bg-violet-100' : 'bg-violet-50 hover:bg-violet-100',
+            show: true,
+        },
+        {
+            id: 'setPrice',
+            icon: '✏️',
+            label: 'Set Value',
+            sublabel: 'Manual price',
+            color: 'from-amber-500 to-orange-600',
+            bgColor: 'bg-amber-50 hover:bg-amber-100',
+            show: true,
+        },
+        {
+            id: 'psa',
+            icon: '🏆',
+            label: 'Verify PSA',
+            sublabel: hasPSA ? `PSA ${psaData?.grade || (valuationData?.item as any)?.psa_grade}` : 'Add grade',
+            color: 'from-red-500 to-rose-600',
+            bgColor: hasPSA ? 'bg-red-100' : 'bg-red-50 hover:bg-red-100',
+            show: isTCG,
+        },
+    ].filter(t => t.show);
 
     return (
         <div className="fixed z-50 inset-0 overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={onClose}>
-                    <div className="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
-                </div>
+            <div className="flex items-center justify-center min-h-screen p-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div className="relative bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                    {/* Header - Compact */}
+                    <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 px-6 pt-6 pb-8">
+                        <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                        <p className="text-slate-400 text-sm truncate pr-8">{item.name}</p>
 
-                <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full" onClick={e => e.stopPropagation()}>
-                    {/* Header */}
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h3 className="text-lg font-semibold text-white">Item Valuation</h3>
-                                <p className="text-blue-100 text-sm mt-1">{item.name}</p>
+                        {/* Hero Value */}
+                        {loading ? (
+                            <div className="text-4xl font-bold text-white/50 mt-2">Loading...</div>
+                        ) : (
+                            <div className="mt-2 flex items-baseline gap-3">
+                                <span className="text-5xl font-bold text-white tracking-tight">
+                                    {formatCurrency(valuationData?.item?.current_emv_cents)}
+                                </span>
+                                <ValuationBadge
+                                    source={valuationData?.item?.emv_source}
+                                    confidence={valuationData?.item?.emv_confidence}
+                                    size="sm"
+                                    itemName={item?.name}
+                                />
                             </div>
-                            <button onClick={onClose} className="text-white hover:text-blue-200 text-2xl leading-none">&times;</button>
-                        </div>
+                        )}
+
+                        {/* Quick refresh */}
+                        <button
+                            onClick={async () => {
+                                if (!item) return;
+                                setRefreshing(true);
+                                try {
+                                    await refreshItemValuationApi(item.id);
+                                    loadData();
+                                    if (onValuationUpdated) onValuationUpdated();
+                                } finally {
+                                    setRefreshing(false);
+                                }
+                            }}
+                            disabled={refreshing}
+                            className="mt-3 text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
+                        >
+                            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+                            {refreshing ? 'Updating...' : 'Refresh price'}
+                        </button>
                     </div>
 
-                    {loading ? (
-                        <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading valuation data...</div>
-                    ) : error && !valuationData ? (
-                        <div className="p-8 text-center text-red-500">{error}</div>
-                    ) : valuationData ? (
-                        <>
-                            {/* Current Value Summary */}
-                            <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 border-b dark:border-gray-600">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">Current Estimated Value</p>
-                                        <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                                            {formatCurrency(valuationData.item.current_emv_cents)}
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <ValuationBadge
-                                            source={valuationData.item.emv_source}
-                                            confidence={valuationData.item.emv_confidence}
-                                            size="md"
-                                        />
-                                        {valuationData.item.condition && (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                                                Condition: <span className="font-medium">{valuationData.item.condition}</span>
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
+                    {/* Main Content */}
+                    <div className="p-5">
+                        {!activePanel ? (
+                            /* Action Tiles Grid */
+                            <div className={`grid ${tiles.length === 4 ? 'grid-cols-2' : 'grid-cols-3'} gap-3`}>
+                                {tiles.map(tile => (
+                                    <button
+                                        key={tile.id}
+                                        onClick={() => setActivePanel(tile.id as ActivePanel)}
+                                        className={`${tile.bgColor} rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-[0.98]`}
+                                    >
+                                        <span className="text-2xl">{tile.icon}</span>
+                                        <p className="font-semibold text-slate-800 mt-2 text-sm">{tile.label}</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">{tile.sublabel}</p>
+                                    </button>
+                                ))}
                             </div>
+                        ) : (
+                            /* Expanded Panel */
+                            <div className="animate-in slide-in-from-bottom-2 duration-200">
+                                <button
+                                    onClick={() => setActivePanel(null)}
+                                    className="text-sm text-slate-500 hover:text-slate-700 mb-4 flex items-center gap-1"
+                                >
+                                    ← Back
+                                </button>
 
-                            {/* Tabs */}
-                            <div className="border-b dark:border-gray-600">
-                                <nav className="flex">
-                                    {[
-                                        { key: 'overview', label: '📊 Overview' },
-                                        { key: 'history', label: '📈 Trade History' },
-                                        { key: 'link', label: '🔗 Link Product' },
-                                        { key: 'override', label: '✏️ Set Value' },
-                                    ].map(tab => (
-                                        <button
-                                            key={tab.key}
-                                            onClick={() => setActiveTab(tab.key as TabType)}
-                                            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key
-                                                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                                                }`}
-                                        >
-                                            {tab.label}
-                                        </button>
-                                    ))}
-                                </nav>
-                            </div>
-
-                            {/* Tab Content */}
-                            <div className="p-6 max-h-80 overflow-y-auto">
-                                {activeTab === 'overview' && (
-                                    <div className="space-y-6">
-                                        {/* Tab Description */}
-                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                                            <span className="text-2xl">📊</span>
-                                            <div>
-                                                <h4 className="font-semibold text-gray-800">What's This Worth?</h4>
-                                                <p className="text-sm text-gray-600 mt-1">
-                                                    This shows how much your item is worth. We check online price guides and what
-                                                    other traders think. Click "Refresh from API" to get the latest prices.
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {/* API Valuations */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <h4 className="text-sm font-semibold text-gray-700">API Valuations</h4>
-                                                <button
-                                                    onClick={async () => {
-                                                        if (!item) return;
-                                                        setRefreshing(true);
-                                                        setRefreshMessage(null);
-                                                        try {
-                                                            const result = await refreshItemValuationApi(item.id);
-                                                            setRefreshMessage(result.message);
-                                                            if (result.success) {
-                                                                loadData();
-                                                                if (onValuationUpdated) onValuationUpdated();
-                                                            }
-                                                        } catch (err) {
-                                                            setRefreshMessage('Failed to refresh');
-                                                        } finally {
-                                                            setRefreshing(false);
-                                                        }
-                                                    }}
-                                                    disabled={refreshing}
-                                                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 disabled:opacity-50 transition-colors"
-                                                >
-                                                    {refreshing ? '🔄 Refreshing...' : '🔄 Refresh from API'}
-                                                </button>
-                                            </div>
-                                            {refreshMessage && (
-                                                <p className={`text-xs mb-2 ${refreshMessage.includes('Failed') ? 'text-red-500' : 'text-green-600'}`}>
-                                                    {refreshMessage}
-                                                </p>
-                                            )}
-                                            {valuationData.apiValuations.length > 0 ? (
-                                                <div className="space-y-2">
-                                                    {valuationData.apiValuations.map(av => (
-                                                        <div key={av.id} className="flex justify-between items-center bg-blue-50 rounded-lg p-3">
-                                                            <div>
-                                                                <span className="font-medium text-blue-800">{av.api_provider}</span>
-                                                                <span className="text-xs text-gray-500 ml-2">
-                                                                    {formatDate(av.fetched_at)}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="font-bold text-blue-900">{formatCurrency(av.value_cents)}</span>
-                                                                {av.confidence_score && (
-                                                                    <span className="text-xs text-gray-500 ml-2">
-                                                                        ({av.confidence_score}% confidence)
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <p className="text-sm text-gray-500 italic">No API valuations available</p>
-                                            )}
-                                        </div>
-
-                                        {/* User Overrides */}
-                                        <div>
-                                            <h4 className="text-sm font-semibold text-gray-700 mb-2">User Valuations</h4>
-                                            {valuationData.userOverrides.length > 0 ? (
-                                                <div className="space-y-2">
-                                                    {valuationData.userOverrides.map(ov => (
-                                                        <div key={ov.id} className="flex justify-between items-center bg-yellow-50 rounded-lg p-3">
-                                                            <div>
-                                                                <span className={`text-xs px-2 py-0.5 rounded-full ${ov.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                                                    ov.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                                        'bg-red-100 text-red-800'
-                                                                    }`}>
-                                                                    {ov.status}
-                                                                </span>
-                                                                <span className="text-xs text-gray-500 ml-2">
-                                                                    {formatDate(ov.created_at)}
-                                                                </span>
-                                                            </div>
-                                                            <span className="font-bold text-yellow-900">{formatCurrency(ov.override_value_cents)}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <p className="text-sm text-gray-500 italic">No user valuations submitted</p>
-                                            )}
-                                        </div>
-
-                                        {/* Condition Assessment */}
-                                        {valuationData.conditionAssessment && (
-                                            <div>
-                                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Condition Assessment</h4>
-                                                <div className="bg-gray-50 rounded-lg p-3">
-                                                    <div className="flex justify-between">
-                                                        <span>Grade: <strong>{valuationData.conditionAssessment.grade}</strong></span>
-                                                        <span>Value Modifier: <strong>{valuationData.conditionAssessment.value_modifier_percent > 0 ? '+' : ''}{valuationData.conditionAssessment.value_modifier_percent}%</strong></span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {activeTab === 'history' && similarPrices && (
+                                {/* Price History Panel */}
+                                {activePanel === 'history' && (
                                     <div className="space-y-4">
-                                        {/* Tab Description */}
-                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
-                                            <span className="text-2xl">📈</span>
-                                            <div>
-                                                <h4 className="font-semibold text-gray-800">What Did Others Pay?</h4>
-                                                <p className="text-sm text-gray-600 mt-1">
-                                                    See what people actually paid for items like this one. This helps you know
-                                                    if a price is fair. More trades = more reliable pricing.
-                                                </p>
-                                            </div>
-                                        </div>
-                                        {similarPrices.stats ? (
-                                            <div className="bg-green-50 rounded-lg p-4">
-                                                <h4 className="text-sm font-semibold text-green-800 mb-2">Similar Items Traded</h4>
-                                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                            📈 Price History
+                                        </h3>
+                                        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+                                            See what similar items sold for on Leverage. More trades = more accurate pricing.
+                                        </p>
+                                        {similarPrices?.stats ? (
+                                            <div className="bg-emerald-50 rounded-xl p-4 space-y-3">
+                                                <div className="grid grid-cols-2 gap-3 text-sm">
                                                     <div>
-                                                        <span className="text-green-700">Trades:</span>
-                                                        <span className="font-bold ml-2">{similarPrices.stats.count}</span>
+                                                        <span className="text-emerald-600">Trades</span>
+                                                        <p className="font-bold text-lg">{similarPrices.stats.count}</p>
                                                     </div>
                                                     <div>
-                                                        <span className="text-green-700">Average:</span>
-                                                        <span className="font-bold ml-2">{formatCurrency(similarPrices.stats.avgPriceCents)}</span>
+                                                        <span className="text-emerald-600">Average</span>
+                                                        <p className="font-bold text-lg">{formatCurrency(similarPrices.stats.avgPriceCents)}</p>
                                                     </div>
                                                     <div>
-                                                        <span className="text-green-700">Low:</span>
-                                                        <span className="font-bold ml-2">{formatCurrency(similarPrices.stats.minPriceCents)}</span>
+                                                        <span className="text-emerald-600">Low</span>
+                                                        <p className="font-medium">{formatCurrency(similarPrices.stats.minPriceCents)}</p>
                                                     </div>
                                                     <div>
-                                                        <span className="text-green-700">High:</span>
-                                                        <span className="font-bold ml-2">{formatCurrency(similarPrices.stats.maxPriceCents)}</span>
+                                                        <span className="text-emerald-600">High</span>
+                                                        <p className="font-medium">{formatCurrency(similarPrices.stats.maxPriceCents)}</p>
                                                     </div>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="text-center py-8 text-gray-500">
-                                                <p className="text-4xl mb-2">📈</p>
-                                                <p>No similar items have been traded yet.</p>
-                                                <p className="text-sm mt-1">Trade history will appear here as more trades complete.</p>
-                                            </div>
-                                        )}
-
-                                        {similarPrices.signals.length > 0 && (
-                                            <div className="space-y-2">
-                                                <h4 className="text-sm font-semibold text-gray-700">Recent Trades</h4>
-                                                {similarPrices.signals.slice(0, 5).map(signal => (
-                                                    <div key={signal.id} className="flex justify-between items-center bg-gray-50 rounded-lg p-3 text-sm">
-                                                        <div>
-                                                            <span className="font-medium">{signal.item_name}</span>
-                                                            {signal.condition && (
-                                                                <span className="text-gray-500 ml-2">({signal.condition})</span>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="font-bold">{formatCurrency(signal.implied_value_cents)}</span>
-                                                            <span className="text-xs text-gray-500 block">{formatDate(signal.trade_completed_at)}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                            <div className="text-center py-8 text-slate-400">
+                                                <p className="text-3xl mb-2">📊</p>
+                                                <p className="text-sm">No trade history yet</p>
                                             </div>
                                         )}
                                     </div>
                                 )}
 
-                                {activeTab === 'link' && (
+                                {/* Auto-Price Panel */}
+                                {activePanel === 'autoPrice' && (
                                     <div className="space-y-4">
-                                        {/* Tab Description */}
-                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-purple-50 to-violet-50 rounded-xl border border-purple-100">
-                                            <span className="text-2xl">🔗</span>
-                                            <div>
-                                                <h4 className="font-semibold text-gray-800">Get Auto-Updated Prices</h4>
-                                                <p className="text-sm text-gray-600 mt-1">
-                                                    <strong>How it works:</strong> Type the name of your item below. When you see a match,
-                                                    click "Link" and we'll automatically keep the price up-to-date for you!
-                                                </p>
+                                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                            🔗 Auto-Price
+                                        </h3>
+                                        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+                                            Search for your item below. Once linked, we'll automatically keep the price up-to-date from price guides.
+                                        </p>
+                                        {linkSuccess ? (
+                                            <div className="text-center py-6">
+                                                <p className="text-4xl mb-2">✓</p>
+                                                <p className="text-green-600 font-medium">Connected!</p>
                                             </div>
-                                        </div>
-
-                                        <div className="relative">
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Search PriceCharting Catalog
-                                            </label>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={searchQuery}
-                                                    onChange={async (e) => {
-                                                        const query = e.target.value;
-                                                        setSearchQuery(query);
-                                                        setLinkMessage(null);
-                                                    }}
-                                                    placeholder="Start typing to search (e.g. EarthBound, Pokemon Red...)"
-                                                    className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
-                                                />
-                                                {/* Search status indicator */}
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                    {searching ? (
-                                                        // Animated spinner
-                                                        <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                        </svg>
-                                                    ) : searchQuery.length >= 2 ? (
-                                                        <span className="text-green-500 text-xl">✓</span>
-                                                    ) : (
-                                                        <span className="text-gray-400 text-xl">🔍</span>
+                                        ) : (
+                                            <>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={searchQuery}
+                                                        onChange={e => setSearchQuery(e.target.value)}
+                                                        placeholder="Search product catalog..."
+                                                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                                    />
+                                                    {searching && (
+                                                        <div className="absolute right-3 top-3 animate-spin">⏳</div>
                                                     )}
                                                 </div>
-                                            </div>
-
-                                            {/* Autocomplete dropdown */}
-                                            {searchResults.length > 0 && (
-                                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                                                    <div className="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium">
-                                                        Found {searchResults.length} products
-                                                    </div>
-                                                    {searchResults.slice(0, 8).map(product => (
-                                                        <button
-                                                            key={product.id}
-                                                            type="button"
-                                                            disabled={linking}
-                                                            onClick={async () => {
-                                                                if (!item) return;
-                                                                setLinking(true);
-                                                                setLinkMessage(null);
-                                                                try {
-                                                                    const result = await linkItemToProductApi(
-                                                                        item.id,
-                                                                        product.id,
-                                                                        product.name,
-                                                                        product.platform
-                                                                    );
-                                                                    if (result.success) {
-                                                                        setLinkMessage(`✓ Linked to ${product.name}!`);
-                                                                        setSearchResults([]);
+                                                {searchResults.length > 0 && (
+                                                    <div className="max-h-48 overflow-y-auto space-y-1">
+                                                        {searchResults.slice(0, 5).map(product => (
+                                                            <button
+                                                                key={product.id}
+                                                                onClick={async () => {
+                                                                    if (!item) return;
+                                                                    setLinking(true);
+                                                                    try {
+                                                                        await linkItemToProductApi(item.id, product.id, product.name, product.platform);
+                                                                        setLinkSuccess(true);
                                                                         setSearchQuery('');
+                                                                        setSearchResults([]);
                                                                         loadData();
                                                                         if (onValuationUpdated) onValuationUpdated();
-                                                                    } else {
-                                                                        setLinkMessage(result.message);
+                                                                    } finally {
+                                                                        setLinking(false);
                                                                     }
-                                                                } catch (err) {
-                                                                    setLinkMessage('Failed to link product');
-                                                                } finally {
-                                                                    setLinking(false);
-                                                                }
-                                                            }}
-                                                            className="w-full flex justify-between items-center px-4 py-3 hover:bg-blue-50 transition-colors text-left border-b border-gray-100 last:border-0 disabled:opacity-50"
-                                                        >
-                                                            <div className="flex-1">
-                                                                <span className="font-medium text-gray-800">{product.name}</span>
-                                                                <span className="text-xs text-gray-500 block">{product.platform}</span>
-                                                            </div>
-                                                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-full font-medium">
-                                                                {linking ? '...' : 'Link'}
-                                                            </span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {linkMessage && (
-                                            <p className={`text-sm ${linkMessage.includes('✓') ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
-                                                {linkMessage}
-                                            </p>
-                                        )}
-
-                                        {!searching && searchQuery.length < 2 && searchResults.length === 0 && (
-                                            <div className="text-center py-8 text-gray-500">
-                                                <p className="text-4xl mb-2">🔗</p>
-                                                <p className="font-medium">Link this item to a PriceCharting product</p>
-                                                <p className="text-sm mt-1">for automated price updates</p>
-                                            </div>
-                                        )}
-
-                                        {!searching && searchQuery.length >= 2 && searchResults.length === 0 && !linkMessage && (
-                                            <div className="text-center py-8 text-gray-500">
-                                                <p className="text-4xl mb-2">🤔</p>
-                                                <p className="font-medium">No products found for "{searchQuery}"</p>
-                                                <p className="text-sm mt-1">Try a different search term</p>
-                                            </div>
+                                                                }}
+                                                                disabled={linking}
+                                                                className="w-full flex justify-between items-center p-3 bg-slate-50 hover:bg-violet-50 rounded-lg text-left text-sm disabled:opacity-50"
+                                                            >
+                                                                <div>
+                                                                    <p className="font-medium text-slate-800">{product.name}</p>
+                                                                    <p className="text-xs text-slate-500">{product.platform}</p>
+                                                                </div>
+                                                                <span className="text-violet-600 text-xs font-medium">
+                                                                    {linking ? '...' : 'Link'}
+                                                                </span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {!searching && searchQuery.length < 2 && searchResults.length === 0 && (
+                                                    <p className="text-center text-slate-400 text-sm py-4">
+                                                        Type to search the price catalog
+                                                    </p>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 )}
 
-                                {activeTab === 'override' && (
-                                    <form onSubmit={handleSubmitOverride} className="space-y-4">
-                                        {/* Tab Description */}
-                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-100">
-                                            <span className="text-2xl">✏️</span>
-                                            <div>
-                                                <h4 className="font-semibold text-gray-800">Think It's Worth More (or Less)?</h4>
-                                                <p className="text-sm text-gray-600 mt-1">
-                                                    <strong>How it works:</strong> Enter what you think this item is worth, pick a reason,
-                                                    and click Submit. Great for rare items or when the automatic price seems off.
-                                                </p>
+                                {/* Set Value Panel */}
+                                {activePanel === 'setPrice' && (
+                                    <div className="space-y-4">
+                                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                            ✏️ Set Value
+                                        </h3>
+                                        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+                                            Think it's worth more or less? Enter your price below. Great for rare items.
+                                        </p>
+                                        {submitSuccess ? (
+                                            <div className="text-center py-6">
+                                                <p className="text-4xl mb-2">✓</p>
+                                                <p className="text-green-600 font-medium">Saved!</p>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            <>
+                                                <div className="relative">
+                                                    <span className="absolute left-4 top-3 text-slate-400 text-lg">$</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0.01"
+                                                        value={overrideValue}
+                                                        onChange={e => setOverrideValue(e.target.value)}
+                                                        className="w-full pl-8 border border-slate-200 rounded-xl px-4 py-3 text-lg font-medium focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                                {/* Show comparison to auto-price */}
+                                                {valuationData?.item?.current_emv_cents && overrideValue && (
+                                                    (() => {
+                                                        const currentCents = valuationData.item.current_emv_cents;
+                                                        const overrideCents = Math.round(parseFloat(overrideValue) * 100);
+                                                        const diff = overrideCents - currentCents;
+                                                        const pctChange = Math.round((diff / currentCents) * 100);
+                                                        if (isNaN(pctChange) || Math.abs(pctChange) < 1) return null;
+                                                        return (
+                                                            <div className={`text-sm p-2 rounded-lg ${pctChange > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                                                {pctChange > 0 ? '📈' : '📉'} {pctChange > 0 ? '+' : ''}{pctChange}% vs auto-price (${(currentCents / 100).toFixed(0)})
+                                                            </div>
+                                                        );
+                                                    })()
+                                                )}
+                                                <button
+                                                    onClick={handleSubmitOverride}
+                                                    disabled={submitting}
+                                                    className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg disabled:opacity-50 transition-all"
+                                                >
+                                                    {submitting ? 'Saving...' : 'Save Value'}
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
 
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Your Valuation (USD)
-                                            </label>
-                                            <div className="relative">
-                                                <span className="absolute left-3 top-2 text-gray-500">$</span>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0.01"
-                                                    value={overrideValue}
-                                                    onChange={e => setOverrideValue(e.target.value)}
-                                                    className="pl-8 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    placeholder="0.00"
-                                                    required
-                                                />
+                                {/* PSA Panel */}
+                                {activePanel === 'psa' && (
+                                    <div className="space-y-4">
+                                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                            🏆 Verify PSA
+                                        </h3>
+                                        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+                                            Enter the cert number from your PSA label. We'll verify the grade and show how rare it is.
+                                        </p>
+                                        {hasPSA ? (
+                                            <div className="bg-green-50 rounded-xl p-4 text-center">
+                                                <div className="inline-block bg-gradient-to-br from-red-500 to-red-600 text-white px-6 py-3 rounded-xl">
+                                                    <span className="text-3xl font-bold">PSA {psaData?.grade || (valuationData?.item as any)?.psa_grade}</span>
+                                                </div>
+                                                {psaData?.gradeDescription && (
+                                                    <p className="text-sm text-green-700 mt-2">{psaData.gradeDescription}</p>
+                                                )}
                                             </div>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Reason
-                                            </label>
-                                            <select
-                                                value={overrideReason}
-                                                onChange={e => setOverrideReason(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            >
-                                                <option value="">Select a reason (optional)</option>
-                                                <option value="unique_item">Unique/Rare Item</option>
-                                                <option value="rare_variant">Rare Variant</option>
-                                                <option value="disagree_with_api">Disagree with API Value</option>
-                                                <option value="sentimental">Sentimental Value</option>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Justification
-                                            </label>
-                                            <textarea
-                                                value={overrideJustification}
-                                                onChange={e => setOverrideJustification(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                rows={3}
-                                                placeholder="Explain why this item is worth this amount (optional)"
-                                            />
-                                        </div>
-
-                                        {error && <p className="text-sm text-red-500">{error}</p>}
-                                        {submitSuccess && <p className="text-sm text-green-600">✓ Valuation submitted successfully!</p>}
-
-                                        <button
-                                            type="submit"
-                                            disabled={submitting}
-                                            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            {submitting ? 'Submitting...' : 'Submit Valuation'}
-                                        </button>
-                                    </form>
+                                        ) : (
+                                            <>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={psaCertNumber}
+                                                        onChange={e => setPsaCertNumber(e.target.value.replace(/\D/g, ''))}
+                                                        placeholder="Cert #"
+                                                        className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                                        maxLength={12}
+                                                    />
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (psaCertNumber.length < 5) return;
+                                                            setPsaVerifying(true);
+                                                            setPsaMessage(null);
+                                                            try {
+                                                                const response = await fetch(`http://localhost:4000/api/psa/verify/${psaCertNumber}`);
+                                                                const data = await response.json();
+                                                                if (!response.ok) {
+                                                                    setPsaMessage(data.error || 'Not found');
+                                                                } else {
+                                                                    setPsaData(data);
+                                                                }
+                                                            } catch {
+                                                                setPsaMessage('Verification failed');
+                                                            } finally {
+                                                                setPsaVerifying(false);
+                                                            }
+                                                        }}
+                                                        disabled={psaVerifying || psaCertNumber.length < 5}
+                                                        className="px-5 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 disabled:opacity-50"
+                                                    >
+                                                        {psaVerifying ? '...' : 'Verify'}
+                                                    </button>
+                                                </div>
+                                                {psaMessage && (
+                                                    <p className="text-sm text-red-500">{psaMessage}</p>
+                                                )}
+                                                {psaData && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (!item) return;
+                                                            setPsaLinking(true);
+                                                            try {
+                                                                await fetch(`http://localhost:4000/api/items/${item.id}/link-psa`, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ certNumber: psaCertNumber }),
+                                                                });
+                                                                loadData();
+                                                                if (onValuationUpdated) onValuationUpdated();
+                                                            } finally {
+                                                                setPsaLinking(false);
+                                                            }
+                                                        }}
+                                                        disabled={psaLinking}
+                                                        className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-xl font-semibold disabled:opacity-50"
+                                                    >
+                                                        {psaLinking ? 'Saving...' : `✓ Link PSA ${psaData.grade}`}
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        </>
-                    ) : null}
-
-                    {/* Footer */}
-                    <div className="bg-gray-50 px-6 py-3 flex justify-end">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                        >
-                            Close
-                        </button>
+                        )}
                     </div>
                 </div>
             </div>

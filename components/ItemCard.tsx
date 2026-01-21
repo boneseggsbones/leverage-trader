@@ -46,6 +46,22 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
             <h4 className="font-bold text-sm text-gray-800 dark:text-white truncate w-full">{item.name}</h4>
             <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</p>
 
+            {/* Price difference indicator for user overrides */}
+            {emvSource === 'user_override' && (item as any).original_api_value_cents && (
+                (() => {
+                    const original = (item as any).original_api_value_cents;
+                    const current = item.estimatedMarketValue || 0;
+                    const diff = current - original;
+                    const pct = Math.round((diff / original) * 100);
+                    if (Math.abs(pct) < 1) return null;
+                    return (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${pct > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {pct > 0 ? '↑' : '↓'} {pct > 0 ? '+' : ''}{pct}% vs API
+                        </span>
+                    );
+                })()
+            )}
+
             {/* Valuation Badge */}
             <div className="mt-1">
                 <ValuationBadge source={emvSource} size="sm" />

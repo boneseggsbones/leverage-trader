@@ -406,6 +406,29 @@ const init = () => {
         UNIQUE(user_id, ebay_item_id)
       );
       CREATE INDEX IF NOT EXISTS idx_ebay_imported_user ON ebay_imported_items(user_id);
+
+      -- =====================================================
+      -- PSA CERTIFICATION CACHE TABLE
+      -- =====================================================
+      
+      -- Cache PSA certification verifications (7-day cache)
+      CREATE TABLE IF NOT EXISTS psa_certifications (
+        cert_number TEXT PRIMARY KEY,
+        grade TEXT NOT NULL,
+        grade_description TEXT,
+        qualifier TEXT,
+        label_type TEXT,
+        year TEXT,
+        brand TEXT,
+        set_name TEXT,
+        card_number TEXT,
+        subject TEXT,
+        variety TEXT,
+        population INTEGER DEFAULT 0,
+        population_higher INTEGER DEFAULT 0,
+        last_checked TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_psa_cert_grade ON psa_certifications(grade);
     `, (err) => {
       if (err) {
         reject(err);
@@ -500,6 +523,17 @@ const migrate = () => {
       if (!itemColumns.includes('status')) {
         tasks.push(addColumnIfMissing('Item', 'status', "TEXT DEFAULT 'active'"));
       }
+      // PSA certification columns
+      if (!itemColumns.includes('psa_cert_number')) {
+        tasks.push(addColumnIfMissing('Item', 'psa_cert_number', 'TEXT'));
+      }
+      if (!itemColumns.includes('psa_grade')) {
+        tasks.push(addColumnIfMissing('Item', 'psa_grade', 'TEXT'));
+      }
+      // Store original API value when user overrides
+      if (!itemColumns.includes('original_api_value_cents')) {
+        tasks.push(addColumnIfMissing('Item', 'original_api_value_cents', 'INTEGER'));
+      }
 
       // User table migrations
       db.all("PRAGMA table_info('User')", (err2, userRows: any[]) => {
@@ -530,6 +564,9 @@ const migrate = () => {
         if (!userColumns.includes('isAdmin')) {
           tasks.push(addColumnIfMissing('User', 'isAdmin', 'INTEGER DEFAULT 0'));
         }
+
+        // user_value_overrides migrations
+        tasks.push(addColumnIfMissing('user_value_overrides', 'original_api_value_cents', 'INTEGER'));
 
         Promise.all(tasks).then(() => resolve()).catch(reject);
       });
