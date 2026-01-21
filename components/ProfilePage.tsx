@@ -8,6 +8,7 @@ import ItemValuationModal from './ItemValuationModal.tsx';
 import TradeJourneyTimeline from './visualization/TradeJourneyTimeline.tsx';
 import EmailPreferencesSettings from './EmailPreferencesSettings.tsx';
 import EditProfileModal from './EditProfileModal.tsx';
+import CollectionStats from './CollectionStats.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 const ProfilePage: React.FC = () => {
@@ -173,7 +174,7 @@ const ProfilePage: React.FC = () => {
                     {/* Right: Stats & Journey */}
                     <div className="lg:col-span-2 space-y-6">
                         {/* Stats Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
                                 <p className="text-2xl font-bold text-gray-800 dark:text-white">{completedTrades.length}</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Trades</p>
@@ -183,14 +184,13 @@ const ProfilePage: React.FC = () => {
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Items</p>
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
-                                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalInventoryValue)}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Total Value</p>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
                                 <p className="text-2xl font-bold text-gray-800 dark:text-white">{accountAgeString}</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Member</p>
                             </div>
                         </div>
+
+                        {/* Collection Value Dashboard */}
+                        <CollectionStats items={profileUser.inventory} />
 
                         {/* Trade-Up Journey */}
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
