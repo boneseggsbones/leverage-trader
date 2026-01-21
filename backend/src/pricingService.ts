@@ -1,4 +1,24 @@
 import { db } from './database';
+import { getEbayPricing, isEbayConfigured, EbayPriceData } from './ebayService';
+
+// === Consolidated Pricing Types ===
+
+export interface PriceSource {
+    provider: 'pricecharting' | 'ebay';
+    price: number;          // in cents
+    weight: number;         // 0-1
+    confidence: number;     // 0-100
+    dataPoints: number;     // Number of sales/data points
+    lastUpdated: Date;
+}
+
+export interface ConsolidatedPrice {
+    consolidatedValue: number;      // Weighted average in cents
+    confidence: number;             // 0-100
+    sources: PriceSource[];
+    trend: 'up' | 'down' | 'stable';
+    volatility: 'low' | 'medium' | 'high';
+}
 
 // PriceCharting API configuration
 const PRICECHARTING_BASE_URL = 'https://www.pricecharting.com';
@@ -257,6 +277,151 @@ export const linkItemToProduct = async (
                                 });
                         });
                 }
+            });
+    });
+};
+
+/**
+ * Get consolidated valuation from multiple sources (PriceCharting + eBay)
+ * Returns a weighted average with confidence score and trend analysis
+ */
+export const getConsolidatedValuation = async (itemId: number): Promise<{
+    success: boolean;
+    consolidated: ConsolidatedPrice | null;
+    message: string;
+}> => {
+    return new Promise((resolve) => {
+        // Get item with product info
+        db.get(`SELECT i.*, pc.pricecharting_id, pc.name as product_name 
+                FROM Item i 
+                LEFT JOIN product_catalog pc ON i.product_id = pc.id 
+                WHERE i.id = ?`,
+            [itemId], async (err: Error | null, item: any) => {
+                if (err || !item) {
+                    return resolve({
+                        success: false,
+                        consolidated: null,
+                        message: err?.message || 'Item not found'
+                    });
+                }
+
+                const sources: PriceSource[] = [];
+                const now = new Date();
+                const searchQuery = item.product_name || item.name;
+                const condition = item.condition || 'GOOD';
+
+                // Fetch from PriceCharting if configured and linked
+                if (item.pricecharting_id && isApiConfigured()) {
+                    try {
+                        const product = await getPriceChartingProduct(item.pricecharting_id);
+                        if (product) {
+                            const priceField = CONDITION_TO_PRICE_FIELD[condition] || 'loose-price';
+                            const valueCents = (product[priceField] as number) || (product['loose-price'] as number) || 0;
+
+                            if (valueCents > 0) {
+                                sources.push({
+                                    provider: 'pricecharting',
+                                    price: valueCents,
+                                    weight: 0.4,  // Base weight
+                                    confidence: 85, // Curated database = high base confidence
+                                    dataPoints: 1,
+                                    lastUpdated: now
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.error('PriceCharting fetch error:', e);
+                    }
+                }
+
+                // Fetch from eBay if configured
+                if (isEbayConfigured() && searchQuery) {
+                    try {
+                        const ebayData = await getEbayPricing(searchQuery, { condition });
+                        if (ebayData && ebayData.sampleSize > 0) {
+                            // Higher weight if more data points
+                            const ebayWeight = ebayData.sampleSize >= 5 ? 0.6 : 0.4;
+                            // Higher confidence with more sales
+                            const ebayConfidence = Math.min(95, 60 + (ebayData.sampleSize * 3));
+
+                            sources.push({
+                                provider: 'ebay',
+                                price: ebayData.averagePrice,
+                                weight: ebayWeight,
+                                confidence: ebayConfidence,
+                                dataPoints: ebayData.sampleSize,
+                                lastUpdated: ebayData.lastUpdated
+                            });
+                        }
+                    } catch (e) {
+                        console.error('eBay fetch error:', e);
+                    }
+                }
+
+                // If no sources, return current item value
+                if (sources.length === 0) {
+                    return resolve({
+                        success: false,
+                        consolidated: null,
+                        message: 'No pricing sources available'
+                    });
+                }
+
+                // Normalize weights to sum to 1
+                const totalWeight = sources.reduce((sum, s) => sum + s.weight, 0);
+                sources.forEach(s => s.weight = s.weight / totalWeight);
+
+                // Calculate weighted average
+                const consolidatedValue = Math.round(
+                    sources.reduce((sum, s) => sum + (s.price * s.weight), 0)
+                );
+
+                // Calculate overall confidence (weighted average of source confidences)
+                const confidence = Math.round(
+                    sources.reduce((sum, s) => sum + (s.confidence * s.weight), 0)
+                );
+
+                // Determine trend from eBay data if available
+                const ebaySource = sources.find(s => s.provider === 'ebay');
+                let trend: 'up' | 'down' | 'stable' = 'stable';
+                let volatility: 'low' | 'medium' | 'high' = 'low';
+
+                if (ebaySource) {
+                    // Re-fetch eBay data for trend/volatility (they're in the original data)
+                    const ebayData = await getEbayPricing(searchQuery, { condition });
+                    if (ebayData) {
+                        trend = ebayData.trend;
+                        volatility = ebayData.volatility;
+                    }
+                }
+
+                // Cache the consolidated result
+                const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+                db.run(`INSERT INTO api_valuations 
+                        (item_id, api_provider, value_cents, confidence_score, sample_size, 
+                         raw_response, fetched_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [itemId, 'consolidated', consolidatedValue, confidence,
+                        sources.reduce((sum, s) => sum + s.dataPoints, 0),
+                        JSON.stringify({ sources, trend, volatility }),
+                        now.toISOString(), expiresAt]);
+
+                // Update item EMV with consolidated value
+                db.run(`UPDATE Item SET estimatedMarketValue = ?, emv_source = 'consolidated', 
+                        emv_confidence = ?, emv_updated_at = ? WHERE id = ?`,
+                    [consolidatedValue, confidence, now.toISOString(), itemId]);
+
+                resolve({
+                    success: true,
+                    consolidated: {
+                        consolidatedValue,
+                        confidence,
+                        sources,
+                        trend,
+                        volatility
+                    },
+                    message: `Consolidated from ${sources.length} source(s)`
+                });
             });
     });
 };
