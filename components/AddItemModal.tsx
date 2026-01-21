@@ -3,14 +3,26 @@ import React, { useState } from 'react';
 interface AddItemModalProps {
     show: boolean;
     onClose: () => void;
-    onAddItem: (item: { name: string; description: string; image: File | null, estimatedMarketValueDollars: number }) => void;
+    onAddItem: (item: { name: string; description: string; image: File | null, estimatedMarketValueDollars: number, condition: string }) => void;
 }
+
+const CONDITION_GRADES = [
+    { value: 'MINT', label: 'Mint (M)', description: 'Perfect, like new' },
+    { value: 'NEAR_MINT', label: 'Near Mint (NM)', description: 'Almost perfect, minor wear' },
+    { value: 'EXCELLENT', label: 'Excellent (EX)', description: 'Light wear, fully functional' },
+    { value: 'VERY_GOOD', label: 'Very Good (VG)', description: 'Moderate wear, complete' },
+    { value: 'GOOD', label: 'Good (G)', description: 'Notable wear, plays/works fine' },
+    { value: 'FAIR', label: 'Fair (F)', description: 'Heavy wear, still functional' },
+    { value: 'POOR', label: 'Poor (P)', description: 'Major issues, for parts/repair' },
+    { value: 'GRADED', label: 'Professionally Graded', description: 'PSA/CGC/BGS etc.' },
+];
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ show, onClose, onAddItem }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [image, setImage] = useState<File | null>(null);
     const [estimatedMarketValue, setEstimatedMarketValue] = useState<number>(0);
+    const [condition, setCondition] = useState<string>('GOOD');
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -27,7 +39,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ show, onClose, onAddItem })
             setError('Estimated value must be 0 or greater');
             return;
         }
-        onAddItem({ name, description, image, estimatedMarketValueDollars: estimatedMarketValue });
+        onAddItem({ name, description, image, estimatedMarketValueDollars: estimatedMarketValue, condition });
     };
 
     if (!show) {
@@ -57,6 +69,22 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ show, onClose, onAddItem })
                                 <div className="mt-4">
                                     <label htmlFor="image" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Image</label>
                                     <input type="file" name="image" id="image" onChange={handleImageChange} className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 dark:border-gray-600 dark:text-gray-300 rounded-md" />
+                                </div>
+                                <div className="mt-4">
+                                    <label htmlFor="condition" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Condition</label>
+                                    <select
+                                        name="condition"
+                                        id="condition"
+                                        value={condition}
+                                        onChange={(e) => setCondition(e.target.value)}
+                                        className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md"
+                                    >
+                                        {CONDITION_GRADES.map((grade) => (
+                                            <option key={grade.value} value={grade.value}>
+                                                {grade.label} — {grade.description}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="mt-4">
                                     <label htmlFor="estimatedMarketValue" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Estimated Value (USD)</label>
