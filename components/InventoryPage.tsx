@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ItemCard from './ItemCard.tsx';
 import AddItemModal from './AddItemModal.tsx';
@@ -156,9 +157,20 @@ const InventoryPage: React.FC = () => {
                             </p>
                         </div>
                     </div>
-                    <button onClick={() => setShowAddItemModal(true)} className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow-md transition-all duration-200 transform hover:scale-105">
-                        + Add Item
-                    </button>
+                    <div className="flex gap-3">
+                        <Link
+                            to="/import/ebay"
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow-md transition-all duration-200 transform hover:scale-105 flex items-center gap-2"
+                        >
+                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                            </svg>
+                            Import from eBay
+                        </Link>
+                        <button onClick={() => setShowAddItemModal(true)} className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow-md transition-all duration-200 transform hover:scale-105">
+                            + Add Item
+                        </button>
+                    </div>
                 </div>
             </div>
             <AddItemModal

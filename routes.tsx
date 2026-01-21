@@ -13,6 +13,7 @@ import ProfilePage from './components/ProfilePage';
 import WishlistPage from './components/WishlistPage';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import EbayImport from './components/EbayImport';
 import ProtectedRoute from './components/ProtectedRoute';
 import DatabaseVisualizer from './src/components/DatabaseVisualizer';
 
@@ -34,6 +35,7 @@ const AppRoutes = () => {
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/analytics" element={<AnalyticsDashboard />} />
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/import/ebay" element={<EbayImport />} />
             </Route>
         </Routes>
     );

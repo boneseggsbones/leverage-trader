@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured, getConsolidatedValuation } from './pricingService';
-import { isEbayConfigured } from './ebayService';
+import { isEbayConfigured, getEbayAuthUrl, exchangeCodeForToken, storeUserToken, hasEbayConnection, disconnectEbay, fetchUserListings, markItemImported, isItemImported, EbayListing } from './ebayService';
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
 import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
 import { authHandler, authDb } from './auth';
@@ -2708,6 +2708,174 @@ app.get('/api/items/:id/watching', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// =============================================================================
+// EBAY IMPORT ENDPOINTS
+// =============================================================================
+
+// Get eBay authorization URL for user consent
+app.get('/api/ebay/auth/url', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  // Create a state token that includes user ID for security
+  const state = Buffer.from(JSON.stringify({ userId, timestamp: Date.now() })).toString('base64');
+  const authUrl = getEbayAuthUrl(state);
+
+  res.json({ authUrl, state });
+});
+
+// eBay OAuth callback - exchanges code for tokens
+app.get('/api/ebay/auth/callback', async (req, res) => {
+  const { code, state } = req.query;
+
+  if (!code || !state) {
+    return res.status(400).json({ error: 'Missing code or state parameter' });
+  }
+
+  try {
+    // Decode state to get userId
+    const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    const userId = parseInt(stateData.userId, 10);
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid state parameter' });
+    }
+
+    // Exchange code for tokens
+    const token = await exchangeCodeForToken(code as string);
+    if (!token) {
+      return res.status(400).json({ error: 'Failed to exchange code for token' });
+    }
+
+    // Store tokens in database
+    await storeUserToken(userId, token);
+
+    console.log(`[eBay] User ${userId} connected their eBay account`);
+
+    // Redirect to frontend import page
+    res.redirect(`http://localhost:3000/import/ebay?success=true`);
+  } catch (err: any) {
+    console.error('[eBay] OAuth callback error:', err);
+    res.redirect(`http://localhost:3000/import/ebay?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// Check if user has connected eBay account
+app.get('/api/ebay/status', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const connected = await hasEbayConnection(parseInt(userId as string, 10));
+    res.json({ connected, configured: isEbayConfigured() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnect eBay account
+app.delete('/api/ebay/disconnect', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    await disconnectEbay(parseInt(userId, 10));
+    console.log(`[eBay] User ${userId} disconnected their eBay account`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fetch user's eBay listings for import preview
+app.get('/api/ebay/listings', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const listings = await fetchUserListings(parseInt(userId as string, 10));
+
+    // Check which items have already been imported
+    const listingsWithStatus = await Promise.all(
+      listings.map(async (listing) => ({
+        ...listing,
+        alreadyImported: await isItemImported(parseInt(userId as string, 10), listing.itemId)
+      }))
+    );
+
+    res.json({ listings: listingsWithStatus });
+  } catch (err: any) {
+    console.error('[eBay] Error fetching listings:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Import selected eBay listings as Leverage items
+app.post('/api/ebay/import', async (req, res) => {
+  const { userId, listings } = req.body;
+
+  if (!userId || !listings || !Array.isArray(listings)) {
+    return res.status(400).json({ error: 'userId and listings array are required' });
+  }
+
+  const results = {
+    imported: 0,
+    skipped: 0,
+    errors: [] as string[]
+  };
+
+  for (const listing of listings as EbayListing[]) {
+    try {
+      // Check if already imported
+      if (await isItemImported(userId, listing.itemId)) {
+        results.skipped++;
+        continue;
+      }
+
+      // Create new item in Leverage
+      const imageUrl = listing.imageUrls && listing.imageUrls.length > 0 ? listing.imageUrls[0] : null;
+
+      const newItemId = await new Promise<number>((resolve, reject) => {
+        db.run(
+          `INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl, condition, emv_source, status)
+           VALUES (?, ?, ?, ?, ?, ?, 'ebay_import', 'active')`,
+          [
+            listing.title,
+            listing.description || '',
+            userId,
+            listing.price, // Already in cents
+            imageUrl,
+            listing.condition
+          ],
+          function (err) {
+            if (err) reject(err);
+            else resolve(this.lastID);
+          }
+        );
+      });
+
+      // Mark as imported to prevent duplicates
+      await markItemImported(userId, listing.itemId, newItemId);
+      results.imported++;
+
+    } catch (err: any) {
+      console.error(`[eBay] Error importing listing ${listing.itemId}:`, err);
+      results.errors.push(`Failed to import "${listing.title}": ${err.message}`);
+    }
+  }
+
+  console.log(`[eBay] User ${userId} imported ${results.imported} items, skipped ${results.skipped}`);
+  res.json(results);
 });
 
 if (require.main === module) {

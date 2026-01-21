@@ -378,6 +378,34 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_wants_user ON user_wants(user_id);
       CREATE INDEX IF NOT EXISTS idx_wants_active ON user_wants(is_active, notify_on_match);
       CREATE INDEX IF NOT EXISTS idx_wants_category ON user_wants(category_id);
+
+      -- =====================================================
+      -- EBAY IMPORT TABLES
+      -- =====================================================
+
+      -- User eBay OAuth tokens
+      CREATE TABLE IF NOT EXISTS ebay_user_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES User(id),
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        token_expires_at TEXT NOT NULL,
+        ebay_user_id TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_ebay_tokens_user ON ebay_user_tokens(user_id);
+
+      -- Track imported eBay items to prevent duplicates
+      CREATE TABLE IF NOT EXISTS ebay_imported_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        ebay_item_id TEXT NOT NULL,
+        leverage_item_id INTEGER REFERENCES Item(id),
+        imported_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(user_id, ebay_item_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_ebay_imported_user ON ebay_imported_items(user_id);
     `, (err) => {
       if (err) {
         reject(err);
