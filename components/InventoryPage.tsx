@@ -20,6 +20,11 @@ const InventoryPage: React.FC = () => {
     const [showValuationModal, setShowValuationModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
+    // Search and filter state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'name' | 'value-high' | 'value-low' | 'newest'>('value-high');
+    const [conditionFilter, setConditionFilter] = useState<string>('all');
+
     const fetchItems = () => {
         if (currentUser) {
             setLoading(true);
@@ -113,6 +118,36 @@ const InventoryPage: React.FC = () => {
         }
     };
 
+    // Filter and sort items
+    const filteredItems = items
+        .filter(item => {
+            // Search filter
+            if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+                return false;
+            }
+            // Condition filter
+            if (conditionFilter !== 'all') {
+                const itemCondition = (item as any).condition || 'GOOD';
+                if (conditionFilter === 'graded' && itemCondition !== 'GRADED') return false;
+                if (conditionFilter === 'ungraded' && itemCondition === 'GRADED') return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            switch (sortBy) {
+                case 'name':
+                    return a.name.localeCompare(b.name);
+                case 'value-high':
+                    return (b.estimatedMarketValue || 0) - (a.estimatedMarketValue || 0);
+                case 'value-low':
+                    return (a.estimatedMarketValue || 0) - (b.estimatedMarketValue || 0);
+                case 'newest':
+                    return new Date((b as any).createdAt || 0).getTime() - new Date((a as any).createdAt || 0).getTime();
+                default:
+                    return 0;
+            }
+        });
+
     if (!currentUser) return null;
 
     if (loading) {
@@ -173,6 +208,44 @@ const InventoryPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Search and Filter Bar */}
+            {items.length > 0 && (
+                <div className="mb-6 flex flex-col sm:flex-row gap-3">
+                    {/* Search Input */}
+                    <div className="flex-1 relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Search items..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                        />
+                    </div>
+                    {/* Sort Dropdown */}
+                    <select
+                        value={sortBy}
+                        onChange={e => setSortBy(e.target.value as any)}
+                        className="px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                    >
+                        <option value="value-high">💰 Highest Value</option>
+                        <option value="value-low">💰 Lowest Value</option>
+                        <option value="name">🔤 Name A-Z</option>
+                        <option value="newest">📅 Newest</option>
+                    </select>
+                    {/* Condition Filter */}
+                    <select
+                        value={conditionFilter}
+                        onChange={e => setConditionFilter(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                    >
+                        <option value="all">All Conditions</option>
+                        <option value="graded">🏆 Graded Only</option>
+                        <option value="ungraded">📦 Ungraded Only</option>
+                    </select>
+                </div>
+            )}
             <AddItemModal
                 show={showAddItemModal}
                 onClose={() => setShowAddItemModal(false)}
@@ -196,20 +269,38 @@ const InventoryPage: React.FC = () => {
                 item={selectedItem}
                 onValuationUpdated={fetchItems}
             />
-            {items.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {items.map(item => (
-                        <ItemCard
-                            key={item.id}
-                            item={item}
-                            onEdit={() => openEditModal(item)}
-                            onDelete={() => handleDeleteItem(item.id)}
-                            onViewValuation={() => {
-                                setSelectedItem(item);
-                                setShowValuationModal(true);
-                            }}
-                        />
-                    ))}
+            {filteredItems.length > 0 ? (
+                <>
+                    {searchQuery && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                            Showing {filteredItems.length} of {items.length} items
+                        </p>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                        {filteredItems.map(item => (
+                            <ItemCard
+                                key={item.id}
+                                item={item}
+                                onEdit={() => openEditModal(item)}
+                                onDelete={() => handleDeleteItem(item.id)}
+                                onViewValuation={() => {
+                                    setSelectedItem(item);
+                                    setShowValuationModal(true);
+                                }}
+                            />
+                        ))}
+                    </div>
+                </>
+            ) : items.length > 0 ? (
+                <div className="text-center py-12">
+                    <p className="text-4xl mb-3">🔍</p>
+                    <p className="text-gray-500 dark:text-gray-400">No items match your search</p>
+                    <button
+                        onClick={() => { setSearchQuery(''); setConditionFilter('all'); }}
+                        className="mt-3 text-emerald-600 hover:underline"
+                    >
+                        Clear filters
+                    </button>
                 </div>
             ) : (
                 <EmptyInventory onAddItem={() => setShowAddItemModal(true)} />
