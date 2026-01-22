@@ -119,11 +119,36 @@ const LandingPage: React.FC = () => {
                         </p>
                     </div>
 
-                    <img
-                        src="/how-it-works.png"
-                        alt="How Leverage works"
-                        className="w-full max-w-4xl mx-auto rounded-2xl shadow-lg mb-16"
-                    />
+                    {/* Trade Types Grid */}
+                    <div className="grid md:grid-cols-3 gap-6 mb-16">
+                        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
+                            <img
+                                src="/trade-direct.png"
+                                alt="Direct 1:1 Swap"
+                                className="w-full rounded-xl mb-4"
+                            />
+                            <h3 className="font-bold text-gray-900 mb-2">Direct Swap</h3>
+                            <p className="text-sm text-gray-600">Simple 1:1 trade — your item for theirs</p>
+                        </div>
+                        <div className="bg-white rounded-2xl p-6 shadow-lg border border-orange-200 text-center ring-2 ring-orange-500/20">
+                            <img
+                                src="/trade-chain.png"
+                                alt="Multi-party Chain Trade"
+                                className="w-full rounded-xl mb-4"
+                            />
+                            <h3 className="font-bold text-gray-900 mb-2">Chain Trade</h3>
+                            <p className="text-sm text-gray-600">3+ traders linked together — everyone wins</p>
+                        </div>
+                        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
+                            <img
+                                src="/trade-bundle.png"
+                                alt="Bundle Trade with items and cash"
+                                className="w-full rounded-xl mb-4"
+                            />
+                            <h3 className="font-bold text-gray-900 mb-2">Bundle Trade</h3>
+                            <p className="text-sm text-gray-600">Combine items + cash to trade up</p>
+                        </div>
+                    </div>
 
                     <div className="grid md:grid-cols-3 gap-8">
                         <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 text-center">
