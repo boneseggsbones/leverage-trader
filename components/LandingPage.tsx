@@ -51,8 +51,9 @@ const LandingPage: React.FC = () => {
                                 <p className="text-gray-700 leading-relaxed">
                                     <span className="text-2xl mr-2">🎮</span>
                                     <strong>Think of it like this:</strong> You have a Game Boy you don't play anymore.
-                                    Someone else has a Pokémon card you've always wanted.
-                                    We help you find each other and make the swap happen — safely and fairly.
+                                    Someone has the Pokémon card you want — but they don't want your Game Boy. No problem!
+                                    We find a third person who does, and link everyone together so you all get what you want.
+                                    Need to sweeten the deal? Add a few bucks or bundle extra items. We make it happen — safely.
                                 </p>
                             </div>
 
