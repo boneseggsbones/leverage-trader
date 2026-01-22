@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +7,6 @@ import { User, Item } from '../types.ts';
 import ItemCarousel from './ItemCarousel.tsx';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 import { DiscoveryCardSkeleton } from './Skeleton.tsx';
-import OnboardingModal, { useOnboarding } from './OnboardingModal.tsx';
 import WishlistMatches from './WishlistMatches.tsx';
 import OnboardingWalkthrough from './OnboardingWalkthrough.tsx';
 
@@ -16,7 +14,6 @@ const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
     const { addNotification } = useNotification();
-    const { showOnboarding, closeOnboarding } = useOnboarding();
 
     const [users, setUsers] = useState<User[]>([]);
     interface DashboardData {
@@ -565,7 +562,6 @@ const Dashboard: React.FC = () => {
                     </ItemCarousel>
                 </div>
             </div>
-            <OnboardingModal show={showOnboarding} onClose={closeOnboarding} />
             <OnboardingWalkthrough />
         </div>
     );
