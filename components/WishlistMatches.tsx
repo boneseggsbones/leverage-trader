@@ -65,7 +65,15 @@ const WishlistMatches: React.FC<WishlistMatchesProps> = ({ userId }) => {
                     <div
                         key={match.userId}
                         className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-orange-100 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => navigate(`/trade-desk/${match.userId}`)}
+                        onClick={() => {
+                            // Build URL with pre-selected items
+                            const offerIds = match.theirWishlistItems.map(i => i.id).join(',');
+                            const requestIds = match.yourWishlistItems.map(i => i.id).join(',');
+                            const params = new URLSearchParams();
+                            if (offerIds) params.set('offer', offerIds);
+                            if (requestIds) params.set('request', requestIds);
+                            navigate(`/trade-desk/${match.userId}?${params.toString()}`);
+                        }}
                     >
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">

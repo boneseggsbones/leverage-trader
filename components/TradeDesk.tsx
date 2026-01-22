@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { fetchUser, proposeTrade } from '../api/api';
 import { User, Item } from '../types.ts';
@@ -24,6 +24,7 @@ const TradeDesk: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
     const { otherUserId } = useParams<{ otherUserId: string }>();
+    const [searchParams] = useSearchParams();
     const { addNotification } = useNotification();
 
     const [otherUser, setOtherUser] = useState<User | null>(null);
@@ -126,6 +127,30 @@ const TradeDesk: React.FC = () => {
 
         loadOtherUser();
     }, [otherUserId]);
+
+    // Pre-populate trade from URL params (e.g., from wishlist match)
+    useEffect(() => {
+        if (!currentUser || !otherUser) return;
+
+        const offerParam = searchParams.get('offer');
+        const requestParam = searchParams.get('request');
+
+        if (offerParam) {
+            const offerIds = offerParam.split(',').map(id => String(id));
+            const itemsToOffer = currentUser.inventory.filter(item => offerIds.includes(String(item.id)));
+            if (itemsToOffer.length > 0) {
+                setCurrentUserItems(itemsToOffer);
+            }
+        }
+
+        if (requestParam) {
+            const requestIds = requestParam.split(',').map(id => String(id));
+            const itemsToRequest = otherUser.inventory.filter(item => requestIds.includes(String(item.id)));
+            if (itemsToRequest.length > 0) {
+                setOtherUserItems(itemsToRequest);
+            }
+        }
+    }, [currentUser, otherUser, searchParams]);
 
     if (!currentUser) {
         navigate('/');
@@ -688,8 +713,8 @@ const TradeDesk: React.FC = () => {
                         {/* Value Difference */}
                         {valueDifference !== 0 && (
                             <div className={`text-center py-2 px-3 rounded-lg text-sm ${valueDifference > 0
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : 'bg-green-100 text-green-700'
+                                ? 'bg-orange-100 text-orange-700'
+                                : 'bg-green-100 text-green-700'
                                 }`}>
                                 {valueDifference > 0
                                     ? `⚠️ You're offering ${formatCurrency(Math.abs(valueDifference))} more in value`
