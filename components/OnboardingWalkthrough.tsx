@@ -10,21 +10,39 @@ interface WalkthroughStep {
 
 const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     {
-        targetId: 'header-nav',
-        title: '🧭 Navigation',
-        description: 'These tabs take you to Discover, Inventory, Trades, and Analytics. The bell shows notifications and the button starts a new trade!',
+        targetId: 'nav-discover',
+        title: '🔍 Discover',
+        description: 'Browse items from traders near you. This is your home base for finding new collectibles!',
+        position: 'bottom'
+    },
+    {
+        targetId: 'nav-inventory',
+        title: '📦 Inventory',
+        description: 'Manage your own collection here. Add items, set values, and mark what you\'re willing to trade.',
+        position: 'bottom'
+    },
+    {
+        targetId: 'nav-trades',
+        title: '🤝 Trades',
+        description: 'Track all your active and past trades. Accept offers, negotiate, and complete deals.',
+        position: 'bottom'
+    },
+    {
+        targetId: 'nav-analytics',
+        title: '📊 Analytics',
+        description: 'See insights about your trading activity, collection value, and market trends.',
         position: 'bottom'
     },
     {
         targetId: 'discover-section',
-        title: '🔍 Discover Items',
-        description: 'Browse items from traders in your area. Search by name or category to find exactly what you want!',
+        title: '🏠 Discover Page',
+        description: 'Search for traders by name or item. The smart search helps you find exactly what you want!',
         position: 'bottom'
     },
     {
         targetId: 'nearby-finds',
         title: '📍 Nearby Finds',
-        description: 'These are items close to you! We show items from collectors in your city first.',
+        description: 'Items from collectors in your area. You can filter by distance and change your location.',
         position: 'bottom'
     },
     {
@@ -113,8 +131,10 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
         setTooltipPosition({ top, left });
         setArrowPosition(arrow);
 
-        // Scroll target into view if needed
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Scroll target into view if needed (but not for nav items in the sticky header)
+        if (!step.targetId.startsWith('nav-')) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
 
         // Highlight the target
         target.classList.add('walkthrough-highlight');
@@ -190,9 +210,9 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
                 {/* When position is 'top', tooltip is above target, so arrow goes at BOTTOM pointing down */}
                 <div
                     className={`absolute w-4 h-4 bg-white dark:bg-gray-800 transform rotate-45 ${arrowPosition === 'bottom' ? '-top-2 left-1/2 -translate-x-1/2' :
-                            arrowPosition === 'top' ? '-bottom-2 left-1/2 -translate-x-1/2' :
-                                arrowPosition === 'right' ? 'top-1/2 -left-2 -translate-y-1/2' :
-                                    'top-1/2 -right-2 -translate-y-1/2'
+                        arrowPosition === 'top' ? '-bottom-2 left-1/2 -translate-x-1/2' :
+                            arrowPosition === 'right' ? 'top-1/2 -left-2 -translate-y-1/2' :
+                                'top-1/2 -right-2 -translate-y-1/2'
                         }`}
                 />
 

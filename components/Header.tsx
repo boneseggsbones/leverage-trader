@@ -49,6 +49,7 @@ const Header: React.FC = () => {
                             {navItems.map(item => (
                                 <NavLink
                                     key={item.path}
+                                    id={`nav-${item.label.toLowerCase().replace(/[^a-z]/g, '')}`}
                                     to={item.path}
                                     className={({ isActive }) =>
                                         `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
