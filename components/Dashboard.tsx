@@ -15,7 +15,7 @@ const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
     const { addNotification } = useNotification();
-    const { showSetup, checkSetupNeeded, completeSetup } = useNewUserSetup();
+    const { showSetup, setupComplete, completeSetup } = useNewUserSetup();
 
     const [users, setUsers] = useState<User[]>([]);
     interface DashboardData {
@@ -564,8 +564,8 @@ const Dashboard: React.FC = () => {
                     </ItemCarousel>
                 </div>
             </div>
-            <OnboardingWalkthrough onComplete={checkSetupNeeded} />
             <NewUserSetupModal show={showSetup} onComplete={completeSetup} />
+            {setupComplete && <OnboardingWalkthrough />}
         </div>
     );
 };

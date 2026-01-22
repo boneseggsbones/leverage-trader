@@ -239,24 +239,31 @@ const NewUserSetupModal: React.FC<NewUserSetupModalProps> = ({ show, onComplete 
     return createPortal(modal, document.body);
 };
 
-// Hook to check if setup is needed
+// Hook to check if setup is needed - shows on mount, triggers walkthrough after
 export const useNewUserSetup = () => {
     const { currentUser } = useAuth();
     const [showSetup, setShowSetup] = useState(false);
+    const [setupComplete, setSetupComplete] = useState(false);
 
-    const checkSetupNeeded = () => {
-        const setupComplete = localStorage.getItem(SETUP_COMPLETE_KEY);
-        // Show setup if not complete AND user doesn't have a city set
-        if (!setupComplete && currentUser && !currentUser.city) {
+    // Check on mount if setup is needed
+    useEffect(() => {
+        const isComplete = localStorage.getItem(SETUP_COMPLETE_KEY);
+        if (isComplete) {
+            setSetupComplete(true);
+        } else if (currentUser) {
+            // Show setup modal for new users
             setShowSetup(true);
         }
-    };
+    }, [currentUser]);
 
     const completeSetup = () => {
         setShowSetup(false);
+        setSetupComplete(true);
+        // Clear walkthrough so it shows after setup
+        localStorage.removeItem('leverage_walkthrough_completed');
     };
 
-    return { showSetup, checkSetupNeeded, completeSetup };
+    return { showSetup, setupComplete, completeSetup };
 };
 
 export default NewUserSetupModal;
