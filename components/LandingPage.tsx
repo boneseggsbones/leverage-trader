@@ -108,7 +108,7 @@ const LandingPage: React.FC = () => {
                 </div>
             </section>
 
-            {/* How It Works */}
+            {/* How It Works - Steps */}
             <section id="how-it-works" className="py-24 px-6 bg-gray-50">
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-16">
@@ -118,37 +118,6 @@ const LandingPage: React.FC = () => {
                         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
                             Three simple steps to turn what you have into what you want
                         </p>
-                    </div>
-
-                    {/* Trade Types Grid */}
-                    <div className="grid md:grid-cols-3 gap-6 mb-16">
-                        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-                            <img
-                                src="/trade-direct.png"
-                                alt="Direct 1:1 Swap"
-                                className="w-full rounded-xl mb-4"
-                            />
-                            <h3 className="font-bold text-gray-900 mb-2">Direct Swap</h3>
-                            <p className="text-sm text-gray-600">Simple 1:1 trade — your item for theirs</p>
-                        </div>
-                        <div className="bg-white rounded-2xl p-6 shadow-lg border border-orange-200 text-center ring-2 ring-orange-500/20">
-                            <img
-                                src="/trade-chain.png"
-                                alt="Multi-party Chain Trade"
-                                className="w-full rounded-xl mb-4"
-                            />
-                            <h3 className="font-bold text-gray-900 mb-2">Chain Trade</h3>
-                            <p className="text-sm text-gray-600">3+ traders linked together — everyone wins</p>
-                        </div>
-                        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-                            <img
-                                src="/trade-bundle.png"
-                                alt="Bundle Trade with items and cash"
-                                className="w-full rounded-xl mb-4"
-                            />
-                            <h3 className="font-bold text-gray-900 mb-2">Bundle Trade</h3>
-                            <p className="text-sm text-gray-600">Combine items + cash to trade up</p>
-                        </div>
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-8">
@@ -168,8 +137,7 @@ const LandingPage: React.FC = () => {
                             </div>
                             <h3 className="text-xl font-bold text-gray-900 mb-3">2. Get Matched</h3>
                             <p className="text-gray-600 leading-relaxed">
-                                Our engine finds 1:1 swaps <strong>and</strong> multi-party trade chains.
-                                Can't find a direct match? We'll link you through 3, 4, or more traders so everyone gets what they want.
+                                Our engine finds compatible traders — whether it's a direct swap or a multi-party chain.
                             </p>
                         </div>
 
@@ -181,6 +149,50 @@ const LandingPage: React.FC = () => {
                             <p className="text-gray-600 leading-relaxed">
                                 Our escrow system protects both sides. Money is only released when everyone's happy.
                             </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Ways to Trade */}
+            <section className="py-24 px-6">
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-4xl font-bold text-gray-900 mb-4">
+                            Ways to Trade
+                        </h2>
+                        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                            Flexibility to make any deal work
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-6">
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
+                            <img
+                                src="/trade-direct.png"
+                                alt="Direct 1:1 Swap"
+                                className="w-full rounded-xl mb-4"
+                            />
+                            <h3 className="font-bold text-gray-900 mb-2">Direct Swap</h3>
+                            <p className="text-sm text-gray-600">Simple 1:1 trade — your item for theirs</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-6 shadow-lg border border-orange-200 text-center ring-2 ring-orange-500/20">
+                            <img
+                                src="/trade-chain.png"
+                                alt="Multi-party Chain Trade"
+                                className="w-full rounded-xl mb-4"
+                            />
+                            <h3 className="font-bold text-gray-900 mb-2">Chain Trade</h3>
+                            <p className="text-sm text-gray-600">3+ traders linked together — everyone wins</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 shadow-lg border border-gray-200 text-center">
+                            <img
+                                src="/trade-bundle.png"
+                                alt="Bundle Trade with items and cash"
+                                className="w-full rounded-xl mb-4"
+                            />
+                            <h3 className="font-bold text-gray-900 mb-2">Bundle Trade</h3>
+                            <p className="text-sm text-gray-600">Combine items + cash to trade up</p>
                         </div>
                     </div>
                 </div>
