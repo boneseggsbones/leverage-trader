@@ -334,3 +334,28 @@ textarea {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ================================================
+   ONBOARDING WALKTHROUGH STYLES
+   ================================================ */
+
+/* Highlight effect for walkthrough targets */
+.walkthrough-highlight {
+  position: relative;
+  z-index: 9997 !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.6), 0 0 20px rgba(99, 102, 241, 0.4) !important;
+  border-radius: 12px;
+  animation: walkthrough-pulse 2s ease-in-out infinite;
+}
+
+@keyframes walkthrough-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.6), 0 0 20px rgba(99, 102, 241, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.4), 0 0 30px rgba(99, 102, 241, 0.3);
+  }
+}

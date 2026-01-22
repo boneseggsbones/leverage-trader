@@ -10,6 +10,7 @@ import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 import { DiscoveryCardSkeleton } from './Skeleton.tsx';
 import OnboardingModal, { useOnboarding } from './OnboardingModal.tsx';
 import WishlistMatches from './WishlistMatches.tsx';
+import OnboardingWalkthrough from './OnboardingWalkthrough.tsx';
 
 const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -262,7 +263,7 @@ const Dashboard: React.FC = () => {
     return (
         <div className="bg-white dark:bg-gray-900 transition-colors">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm transition-colors">
+                <div id="discover-section" className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-slate-200 dark:border-gray-600 shadow-sm transition-colors">
                     <div className="flex items-start gap-4">
                         <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
                             🔍
@@ -334,7 +335,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="space-y-12">
                     {/* Nearby Finds with Location Controls */}
-                    <section>
+                    <section id="nearby-finds">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
                             <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                                 📍 Nearby Finds
@@ -483,11 +484,13 @@ const Dashboard: React.FC = () => {
                     </section>
 
                     {/* Wishlist Matches - Hot Trade Opportunities */}
-                    <WishlistMatches userId={currentUser.id} />
+                    <div id="wishlist-matches">
+                        <WishlistMatches userId={currentUser.id} />
+                    </div>
 
                     {/* Trade Matches Section */}
                     {tradeMatches.length > 0 && (
-                        <section>
+                        <section id="trade-matches">
                             <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2 mb-4">
                                 🎯 Trade Matches
                                 <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
@@ -563,6 +566,7 @@ const Dashboard: React.FC = () => {
                 </div>
             </div>
             <OnboardingModal show={showOnboarding} onClose={closeOnboarding} />
+            <OnboardingWalkthrough />
         </div>
     );
 };
