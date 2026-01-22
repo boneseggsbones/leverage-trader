@@ -42,20 +42,8 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     {
         targetId: 'nearby-finds',
         title: '📍 Nearby Finds',
-        description: 'Items from collectors in your area. You can filter by distance and change your location.',
+        description: 'Items from collectors in your area. You can filter by distance and change your location. Happy trading!',
         position: 'bottom'
-    },
-    {
-        targetId: 'wishlist-matches',
-        title: '🔥 Hot Trade Matches',
-        description: 'When someone wants YOUR items AND has items YOU want — you\'ll see them here. It\'s the double coincidence of wants, solved!',
-        position: 'top'
-    },
-    {
-        targetId: 'trade-matches',
-        title: '🤝 Trade Matches',
-        description: 'These traders have items that complement your collection. Click "Explore" to see what they\'ve got.',
-        position: 'top'
     }
 ];
 
