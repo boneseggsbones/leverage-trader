@@ -138,11 +138,12 @@ const LandingPage: React.FC = () => {
 
                         <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 text-center">
                             <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center text-white text-2xl mx-auto mb-6 shadow-lg shadow-orange-500/30">
-                                🔥
+                                🔗
                             </div>
                             <h3 className="text-xl font-bold text-gray-900 mb-3">2. Get Matched</h3>
                             <p className="text-gray-600 leading-relaxed">
-                                Our smart matching finds traders who want what you have AND have what you want. Win-win!
+                                Our engine finds 1:1 swaps <strong>and</strong> multi-party trade chains.
+                                Can't find a direct match? We'll link you through 3, 4, or more traders so everyone gets what they want.
                             </p>
                         </div>
 
