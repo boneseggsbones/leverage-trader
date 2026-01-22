@@ -149,30 +149,67 @@ export async function scanAndNotifyMutualMatches(userId: number): Promise<void> 
     try {
         const matches = await findMutualMatches(userId);
 
+        // Import email service dynamically to avoid circular dependencies
+        const { sendWishlistMatchEmail } = await import('./notifications/emailService');
+
         for (const match of matches) {
             // Only notify for strong matches (2+ mutual items)
             if (match.matchScore >= 2) {
-                // Notify the current user
-                await createNotification(
-                    userId,
-                    NotificationType.WISHLIST_MATCH_FOUND,
-                    '🔥 Perfect Trade Match!',
-                    `${match.userName} wants your items and has items you want!`,
-                    null
-                );
-
-                // Notify the other user
-                db.get('SELECT name FROM User WHERE id = ?', [userId], async (err: Error | null, row: any) => {
-                    if (!err && row) {
-                        await createNotification(
-                            match.userId,
-                            NotificationType.WISHLIST_MATCH_FOUND,
-                            '🔥 Perfect Trade Match!',
-                            `${row.name} wants your items and has items you want!`,
-                            null
-                        );
-                    }
+                // Get current user info
+                const currentUserData: any = await new Promise((resolve, reject) => {
+                    db.get('SELECT id, name, email FROM User WHERE id = ?', [userId], (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    });
                 });
+
+                // Get match user info
+                const matchUserData: any = await new Promise((resolve, reject) => {
+                    db.get('SELECT id, name, email FROM User WHERE id = ?', [match.userId], (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    });
+                });
+
+                if (currentUserData && matchUserData) {
+                    // Notify the current user (in-app)
+                    await createNotification(
+                        userId,
+                        NotificationType.WISHLIST_MATCH_FOUND,
+                        '🔥 Perfect Trade Match!',
+                        `${match.userName} wants your items and has items you want!`,
+                        null
+                    );
+
+                    // Email the current user
+                    sendWishlistMatchEmail(
+                        currentUserData.email,
+                        currentUserData.name,
+                        match.userName,
+                        match.theirWishlistItems.map(i => i.name),
+                        match.yourWishlistItems.map(i => i.name),
+                        match.userId
+                    ).catch(e => console.error('Email failed for user:', userId, e));
+
+                    // Notify the other user (in-app)
+                    await createNotification(
+                        match.userId,
+                        NotificationType.WISHLIST_MATCH_FOUND,
+                        '🔥 Perfect Trade Match!',
+                        `${currentUserData.name} wants your items and has items you want!`,
+                        null
+                    );
+
+                    // Email the other user (swap perspective)
+                    sendWishlistMatchEmail(
+                        matchUserData.email,
+                        matchUserData.name,
+                        currentUserData.name,
+                        match.yourWishlistItems.map(i => i.name),  // What current user wants = what match has
+                        match.theirWishlistItems.map(i => i.name), // What current user offers = what match wants
+                        userId
+                    ).catch(e => console.error('Email failed for match user:', match.userId, e));
+                }
             }
         }
     } catch (e) {

@@ -298,3 +298,68 @@ export async function verifyEmailConnection(): Promise<boolean> {
         return false;
     }
 }
+
+/**
+ * Send email notification for wishlist matches
+ */
+export async function sendWishlistMatchEmail(
+    recipientEmail: string | null,
+    recipientName: string,
+    matchUserName: string,
+    theirWantedItems: string[],
+    yourWantedItems: string[],
+    matchUserId: number
+): Promise<boolean> {
+    if (!recipientEmail) {
+        console.log('[Email] Skipping wishlist match - no recipient email');
+        return false;
+    }
+
+    const subject = `🔥 Perfect Trade Match Found: ${matchUserName}`;
+
+    const theirWantList = theirWantedItems.length > 0
+        ? theirWantedItems.slice(0, 3).map(name => `<li style="color: #166534; margin: 4px 0;">${name}</li>`).join('') + (theirWantedItems.length > 3 ? `<li style="color: #64748b;">+${theirWantedItems.length - 3} more</li>` : '')
+        : '<li style="color: #64748b;">None yet</li>';
+
+    const yourWantList = yourWantedItems.length > 0
+        ? yourWantedItems.slice(0, 3).map(name => `<li style="color: #1e40af; margin: 4px 0;">${name}</li>`).join('') + (yourWantedItems.length > 3 ? `<li style="color: #64748b;">+${yourWantedItems.length - 3} more</li>` : '')
+        : '<li style="color: #64748b;">None yet</li>';
+
+    const bodyContent = `
+        <h2 style="color: #1e293b; margin: 0 0 16px 0; font-size: 22px;">🔥 Hot Trade Match Found!</h2>
+        <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            Hey ${recipientName}! We found a <strong style="color: #f97316;">perfect trade opportunity</strong> for you.
+        </p>
+        
+        <div style="background: linear-gradient(135deg, #fef3c7, #fed7aa); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+            <p style="color: #9a3412; font-size: 16px; margin: 0; font-weight: 600;">
+                ${matchUserName} wants your items AND has items you want!
+            </p>
+        </div>
+        
+        <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+            <div style="flex: 1; background: #dcfce7; padding: 12px; border-radius: 8px;">
+                <p style="color: #166534; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">THEY WANT FROM YOU:</p>
+                <ul style="margin: 0; padding-left: 16px; font-size: 14px;">${theirWantList}</ul>
+            </div>
+            <div style="flex: 1; background: #dbeafe; padding: 12px; border-radius: 8px;">
+                <p style="color: #1e40af; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">YOU WANT FROM THEM:</p>
+                <ul style="margin: 0; padding-left: 16px; font-size: 14px;">${yourWantList}</ul>
+            </div>
+        </div>
+        
+        <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
+            This is a mutual match — both of you have what the other wants. Don't miss this opportunity!
+        </p>
+        
+        <a href="${appUrl}/trade-desk/${matchUserId}" 
+           style="display: inline-block; background: linear-gradient(135deg, #f97316, #ea580c); 
+                  color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; 
+                  font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgba(249, 115, 22, 0.4);">
+            Start Trading with ${matchUserName} →
+        </a>
+    `;
+
+    const html = wrapEmailTemplate(bodyContent);
+    return sendEmail(recipientEmail, subject, html);
+}
