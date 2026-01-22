@@ -20,7 +20,19 @@ import LandingPage from './components/LandingPage';
 import { useAuth } from './context/AuthContext';
 
 const AppRoutes = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, isLoading } = useAuth();
+
+    // Show loading while checking auth status
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-900">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-400">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <Routes>
