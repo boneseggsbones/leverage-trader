@@ -163,6 +163,29 @@ app.get('/api/session', async (req, res) => {
   }
 });
 
+// Sign out - delete session and clear cookie
+app.post('/api/auth/signout', (req, res) => {
+  try {
+    const sessionToken = req.cookies?.['authjs.session-token'] || req.cookies?.['__Secure-authjs.session-token'];
+
+    if (sessionToken) {
+      // Delete session from database
+      authDb.prepare('DELETE FROM sessions WHERE sessionToken = ?').run(sessionToken);
+    }
+
+    // Clear cookies
+    res.clearCookie('authjs.session-token', { path: '/' });
+    res.clearCookie('__Secure-authjs.session-token', { path: '/' });
+    res.clearCookie('authjs.callback-url', { path: '/' });
+    res.clearCookie('authjs.csrf-token', { path: '/' });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error signing out:', err);
+    res.status(500).json({ error: 'Failed to sign out' });
+  }
+});
+
 // Example route
 app.get('/api/hello', (req, res) => {
   res.json({ message: 'Hello from the backend!' });

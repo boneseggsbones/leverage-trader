@@ -113,22 +113,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const logout = async () => {
-        setCurrentUser(null);
-        setOauthProfile(null);
-        try {
-            localStorage.removeItem('leverage_currentUser');
-            localStorage.removeItem('leverage_oauthProfile');
-        } catch (e) { }
-
-        // Also sign out from Auth.js
+        // First sign out from backend to clear session cookie
         try {
             await fetch(`${API_URL}/api/auth/signout`, {
                 method: 'POST',
                 credentials: 'include'
             });
         } catch (e) {
-            // Ignore errors
+            console.error('Error signing out:', e);
         }
+
+        // Then clear local state
+        setCurrentUser(null);
+        setOauthProfile(null);
+        try {
+            localStorage.removeItem('leverage_currentUser');
+            localStorage.removeItem('leverage_oauthProfile');
+        } catch (e) { }
     };
 
     const updateUser = (user: User) => {

@@ -1,5 +1,5 @@
 
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import LoginScreen from './components/LoginScreen';
 import Dashboard from './components/Dashboard';
 import TradeDesk from './components/TradeDesk';
@@ -36,8 +36,8 @@ const AppRoutes = () => {
 
     return (
         <Routes>
-            {/* Landing page for logged-out users at root */}
-            <Route path="/" element={currentUser ? <Dashboard /> : <LandingPage />} />
+            {/* Root: Landing page for logged-out, redirect to /dashboard for logged-in */}
+            <Route path="/" element={currentUser ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
 
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/about" element={<AboutPage />} />
