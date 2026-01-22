@@ -12,7 +12,7 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     {
         targetId: 'header-nav',
         title: '🧭 Navigation',
-        description: 'Use the menu to access your Inventory, Trades, and Analytics. The notification bell shows new activity!',
+        description: 'These tabs take you to Discover, Inventory, Trades, and Analytics. The bell shows notifications and the button starts a new trade!',
         position: 'bottom'
     },
     {
