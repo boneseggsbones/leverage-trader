@@ -64,12 +64,12 @@ const LandingPage: React.FC = () => {
                                 >
                                     Start Trading Free →
                                 </Link>
-                                <a
-                                    href="#how-it-works"
+                                <button
+                                    onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
                                     className="px-8 py-4 bg-white text-gray-700 font-semibold text-lg rounded-full border-2 border-gray-200 hover:border-indigo-300 hover:text-indigo-600 transition-all"
                                 >
                                     See How It Works
-                                </a>
+                                </button>
                             </div>
                         </div>
 
