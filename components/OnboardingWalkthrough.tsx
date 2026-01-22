@@ -185,12 +185,14 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
                 className="fixed z-[9999] w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 transition-all duration-300 animate-fade-in"
                 style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
             >
-                {/* Arrow */}
+                {/* Arrow - points toward the target */}
+                {/* When position is 'bottom', tooltip is below target, so arrow goes at TOP pointing up */}
+                {/* When position is 'top', tooltip is above target, so arrow goes at BOTTOM pointing down */}
                 <div
-                    className={`absolute w-4 h-4 bg-white dark:bg-gray-800 transform rotate-45 ${arrowPosition === 'top' ? '-top-2 left-1/2 -translate-x-1/2' :
-                        arrowPosition === 'bottom' ? '-bottom-2 left-1/2 -translate-x-1/2' :
-                            arrowPosition === 'left' ? 'top-1/2 -left-2 -translate-y-1/2' :
-                                'top-1/2 -right-2 -translate-y-1/2'
+                    className={`absolute w-4 h-4 bg-white dark:bg-gray-800 transform rotate-45 ${arrowPosition === 'bottom' ? '-top-2 left-1/2 -translate-x-1/2' :
+                            arrowPosition === 'top' ? '-bottom-2 left-1/2 -translate-x-1/2' :
+                                arrowPosition === 'right' ? 'top-1/2 -left-2 -translate-y-1/2' :
+                                    'top-1/2 -right-2 -translate-y-1/2'
                         }`}
                 />
 

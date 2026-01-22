@@ -343,19 +343,27 @@ textarea {
 .walkthrough-highlight {
   position: relative;
   z-index: 9997 !important;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.6), 0 0 20px rgba(99, 102, 241, 0.4) !important;
+  outline: 4px solid rgba(99, 102, 241, 0.8) !important;
+  outline-offset: 4px;
   border-radius: 12px;
   animation: walkthrough-pulse 2s ease-in-out infinite;
+}
+
+/* Special handling for sticky header */
+header.walkthrough-highlight {
+  z-index: 9997 !important;
 }
 
 @keyframes walkthrough-pulse {
 
   0%,
   100% {
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.6), 0 0 20px rgba(99, 102, 241, 0.4);
+    outline-color: rgba(99, 102, 241, 0.8);
+    outline-offset: 4px;
   }
 
   50% {
-    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.4), 0 0 30px rgba(99, 102, 241, 0.3);
+    outline-color: rgba(139, 92, 246, 0.9);
+    outline-offset: 8px;
   }
 }
