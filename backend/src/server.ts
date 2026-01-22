@@ -21,6 +21,8 @@ import { handleStripeWebhook } from './webhooks';
 import { findTopMatches } from './matchingService';
 import { logItemView, logSearch, logProfileView, getRecentViews, getRecentSearches } from './activityService';
 import { watchItem, unwatchItem, getWatchlist, isWatching, removeWatch, findMatchingWatchers, getWatchCount } from './watchlistService';
+import { normalizeLocation, normalizeCity, normalizeState } from './locationUtils';
+import { calculateDistance, getCoordinates, getZipCodeData } from './distanceService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -463,10 +465,11 @@ app.get('/api/dashboard', async (req, res) => {
   const distanceMiles = distance ? parseInt(distance, 10) : 50;
 
   try {
-    // Get all items with their owner info
+    // Get all items with their owner info including coordinates
     const allItems: any[] = await new Promise((resolve, reject) => {
       db.all(`
-        SELECT i.*, u.city as ownerCity, u.state as ownerState, u.name as ownerName, u.rating as ownerRating
+        SELECT i.*, u.city as ownerCity, u.state as ownerState, u.name as ownerName, 
+               u.rating as ownerRating, u.lat as ownerLat, u.lng as ownerLng
         FROM Item i
         JOIN User u ON i.owner_id = u.id
         ORDER BY i.estimatedMarketValue DESC
@@ -476,19 +479,58 @@ app.get('/api/dashboard', async (req, res) => {
       });
     });
 
-    // If location is specified, filter nearby items
+    // If location is specified, filter nearby items using real distance calculation
     let nearbyItems = allItems;
     let searchLocation = { city: city || null, state: state || null };
 
     if (city && state) {
-      // Filter by matching city/state or same state (simple proximity)
-      nearbyItems = allItems.filter(item => {
-        if (distanceMiles >= 250) return true; // "Any" distance
-        if (item.ownerCity === city && item.ownerState === state) return true; // Same city
-        if (distanceMiles >= 100 && item.ownerState === state) return true; // Same state for 100+ miles
-        if (distanceMiles >= 50 && item.ownerState === state) return true; // Same state for 50+ miles
-        return false;
-      });
+      // Get coordinates for the search location
+      const searchCoords = getCoordinates(null, city, state);
+
+      if (searchCoords) {
+        // Use real Haversine distance calculation
+        nearbyItems = allItems.filter(item => {
+          // If "Any" distance, include everything
+          if (distanceMiles >= 250) return true;
+
+          // If owner has coordinates, calculate actual distance
+          if (item.ownerLat != null && item.ownerLng != null) {
+            const actualDistance = calculateDistance(
+              searchCoords.lat, searchCoords.lng,
+              item.ownerLat, item.ownerLng
+            );
+            return actualDistance <= distanceMiles;
+          }
+
+          // Fallback for users without coordinates: match by city/state
+          const itemCity = item.ownerCity?.toLowerCase() || '';
+          const itemState = item.ownerState?.toUpperCase() || '';
+          const searchCity = city.toLowerCase();
+          const searchState = state.toUpperCase();
+
+          // Same city is ~0 miles, always include
+          if (itemCity === searchCity && itemState === searchState) return true;
+
+          // Same state but different city - estimate ~100 miles (conservative)
+          if (distanceMiles >= 100 && itemState === searchState) return true;
+
+          return false;
+        });
+      } else {
+        // No coordinates for search location - fall back to city/state matching
+        const searchCity = city.toLowerCase();
+        const searchState = state.toUpperCase();
+
+        nearbyItems = allItems.filter(item => {
+          const itemCity = item.ownerCity?.toLowerCase() || '';
+          const itemState = item.ownerState?.toUpperCase() || '';
+
+          if (distanceMiles >= 250) return true;
+          if (itemCity === searchCity && itemState === searchState) return true;
+          if (distanceMiles >= 100 && itemState === searchState) return true;
+          return false;
+        });
+      }
     }
 
     // Recommended: Just get varied items not filtered by location
@@ -562,20 +604,44 @@ app.put('/api/users/:id', (req, res) => {
   }
 
   // Handle location field - parse "City, State" or just store as city
+  // Always normalize: city to Title Case, state to 2-letter abbreviation
+  // Also look up and store lat/lng coordinates for distance calculation
   if (location !== undefined) {
     const parts = location.split(',').map((p: string) => p.trim());
+    const normalized = normalizeLocation(parts[0], parts[1]);
     updates.push('city = ?');
-    values.push(parts[0] || '');
+    values.push(normalized.city);
     updates.push('state = ?');
-    values.push(parts[1] || '');
-  } else {
-    if (city !== undefined) {
-      updates.push('city = ?');
-      values.push(city);
+    values.push(normalized.state);
+
+    // Look up coordinates for the city/state
+    const coords = getCoordinates(null, normalized.city, normalized.state);
+    if (coords) {
+      updates.push('lat = ?');
+      values.push(coords.lat);
+      updates.push('lng = ?');
+      values.push(coords.lng);
     }
-    if (state !== undefined) {
-      updates.push('state = ?');
-      values.push(state);
+  } else {
+    if (city !== undefined || state !== undefined) {
+      const normalized = normalizeLocation(city, state);
+      if (city !== undefined) {
+        updates.push('city = ?');
+        values.push(normalized.city);
+      }
+      if (state !== undefined) {
+        updates.push('state = ?');
+        values.push(normalized.state);
+      }
+
+      // Look up coordinates for the city/state
+      const coords = getCoordinates(null, normalized.city, normalized.state);
+      if (coords) {
+        updates.push('lat = ?');
+        values.push(coords.lat);
+        updates.push('lng = ?');
+        values.push(coords.lng);
+      }
     }
   }
 

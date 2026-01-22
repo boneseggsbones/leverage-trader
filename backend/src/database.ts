@@ -564,6 +564,16 @@ const migrate = () => {
         if (!userColumns.includes('isAdmin')) {
           tasks.push(addColumnIfMissing('User', 'isAdmin', 'INTEGER DEFAULT 0'));
         }
+        // Coordinates for distance calculation
+        if (!userColumns.includes('lat')) {
+          tasks.push(addColumnIfMissing('User', 'lat', 'REAL'));
+        }
+        if (!userColumns.includes('lng')) {
+          tasks.push(addColumnIfMissing('User', 'lng', 'REAL'));
+        }
+        if (!userColumns.includes('zipCode')) {
+          tasks.push(addColumnIfMissing('User', 'zipCode', 'TEXT'));
+        }
 
         // user_value_overrides migrations
         tasks.push(addColumnIfMissing('user_value_overrides', 'original_api_value_cents', 'INTEGER'));
