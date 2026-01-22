@@ -10,6 +10,12 @@ interface WalkthroughStep {
 
 const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     {
+        targetId: 'header-nav',
+        title: '🧭 Navigation',
+        description: 'Use the menu to access your Inventory, Trades, and Analytics. The notification bell shows new activity!',
+        position: 'bottom'
+    },
+    {
         targetId: 'discover-section',
         title: '🔍 Discover Items',
         description: 'Browse items from traders in your area. Search by name or category to find exactly what you want!',
@@ -32,12 +38,6 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
         title: '🤝 Trade Matches',
         description: 'These traders have items that complement your collection. Click "Explore" to see what they\'ve got.',
         position: 'top'
-    },
-    {
-        targetId: 'header-nav',
-        title: '🧭 Navigation',
-        description: 'Use the menu to access your Inventory, Trades, and more. The notification bell shows new activity!',
-        position: 'bottom'
     }
 ];
 
@@ -188,9 +188,9 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
                 {/* Arrow */}
                 <div
                     className={`absolute w-4 h-4 bg-white dark:bg-gray-800 transform rotate-45 ${arrowPosition === 'top' ? '-top-2 left-1/2 -translate-x-1/2' :
-                            arrowPosition === 'bottom' ? '-bottom-2 left-1/2 -translate-x-1/2' :
-                                arrowPosition === 'left' ? 'top-1/2 -left-2 -translate-y-1/2' :
-                                    'top-1/2 -right-2 -translate-y-1/2'
+                        arrowPosition === 'bottom' ? '-bottom-2 left-1/2 -translate-x-1/2' :
+                            arrowPosition === 'left' ? 'top-1/2 -left-2 -translate-y-1/2' :
+                                'top-1/2 -right-2 -translate-y-1/2'
                         }`}
                 />
 
@@ -209,10 +209,10 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
                             <div
                                 key={index}
                                 className={`w-2 h-2 rounded-full transition-colors ${index === currentStep
-                                        ? 'bg-indigo-500'
-                                        : index < currentStep
-                                            ? 'bg-indigo-300'
-                                            : 'bg-gray-300 dark:bg-gray-600'
+                                    ? 'bg-indigo-500'
+                                    : index < currentStep
+                                        ? 'bg-indigo-300'
+                                        : 'bg-gray-300 dark:bg-gray-600'
                                     }`}
                             />
                         ))}
