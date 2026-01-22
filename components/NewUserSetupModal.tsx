@@ -39,8 +39,11 @@ const NewUserSetupModal: React.FC<NewUserSetupModalProps> = ({ show, onComplete 
     // Look up city/state from zip code
     useEffect(() => {
         if (zipCode.length === 5) {
-            fetch(`${API_URL}/api/zip/${zipCode}`)
-                .then(res => res.json())
+            fetch(`${API_URL}/api/zipcode/${zipCode}`)
+                .then(res => {
+                    if (!res.ok) throw new Error('Not found');
+                    return res.json();
+                })
                 .then(data => {
                     if (data.city && data.state) {
                         setCity(data.city);
