@@ -839,3 +839,24 @@ export const markAllNotificationsRead = async (userId: string | number): Promise
     }
     return response.json();
 };
+
+// =====================================================
+// WISHLIST MATCH API
+// =====================================================
+
+export interface WishlistMatch {
+    userId: number;
+    userName: string;
+    matchScore: number;
+    theirWishlistItems: { id: number; name: string }[];
+    yourWishlistItems: { id: number; name: string }[];
+    reason: string;
+}
+
+export const fetchWishlistMatches = async (userId: string | number): Promise<WishlistMatch[]> => {
+    const response = await fetch(`${API_URL}/users/${userId}/wishlist-matches`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch wishlist matches');
+    }
+    return response.json();
+};

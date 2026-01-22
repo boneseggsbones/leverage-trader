@@ -15,6 +15,8 @@ export enum NotificationType {
     TRADE_COMPLETED = 'TRADE_COMPLETED',
     DISPUTE_OPENED = 'DISPUTE_OPENED',
     COUNTER_OFFER = 'COUNTER_OFFER',
+    WISHLIST_ITEM_AVAILABLE = 'WISHLIST_ITEM_AVAILABLE',
+    WISHLIST_MATCH_FOUND = 'WISHLIST_MATCH_FOUND',
 }
 
 export interface Notification {
@@ -53,6 +55,10 @@ export function getNotificationIcon(type: NotificationType): string {
             return '⚠️';
         case NotificationType.COUNTER_OFFER:
             return '🔄';
+        case NotificationType.WISHLIST_ITEM_AVAILABLE:
+            return '💫';
+        case NotificationType.WISHLIST_MATCH_FOUND:
+            return '🔥';
         default:
             return '🔔';
     }

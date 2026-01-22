@@ -9,6 +9,7 @@ import ItemCarousel from './ItemCarousel.tsx';
 import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 import { DiscoveryCardSkeleton } from './Skeleton.tsx';
 import OnboardingModal, { useOnboarding } from './OnboardingModal.tsx';
+import WishlistMatches from './WishlistMatches.tsx';
 
 const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
@@ -480,6 +481,9 @@ const Dashboard: React.FC = () => {
                             )}
                         </div>
                     </section>
+
+                    {/* Wishlist Matches - Hot Trade Opportunities */}
+                    <WishlistMatches userId={currentUser.id} />
 
                     {/* Trade Matches Section */}
                     {tradeMatches.length > 0 && (

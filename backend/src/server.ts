@@ -403,14 +403,36 @@ app.post('/api/wishlist/toggle', (req, res) => {
       });
     } else {
       // Item is not in wishlist, so add it
-      db.run('INSERT INTO Wishlist (userId, itemId) VALUES (?, ?)', [userId, itemId], (err: Error | null) => {
+      db.run('INSERT INTO Wishlist (userId, itemId) VALUES (?, ?)', [userId, itemId], async (err: Error | null) => {
         if (err) {
           return res.status(500).json({ error: err.message });
         }
+
+        // Trigger match scan for mutual opportunities
+        try {
+          const { scanAndNotifyMutualMatches } = await import('./wishlistMatchService');
+          scanAndNotifyMutualMatches(Number(userId)).catch(e => console.error('Match scan error:', e));
+        } catch (e) {
+          console.error('Failed to import wishlistMatchService:', e);
+        }
+
         res.json({ message: 'Item added to wishlist' });
       });
     }
   });
+});
+
+// Get mutual wishlist matches for a user
+app.get('/api/users/:userId/wishlist-matches', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const { findMutualMatches } = await import('./wishlistMatchService');
+    const matches = await findMutualMatches(Number(userId));
+    res.json(matches);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/dashboard', async (req, res) => {
