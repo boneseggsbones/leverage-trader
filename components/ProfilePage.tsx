@@ -9,7 +9,11 @@ import TradeJourneyTimeline from './visualization/TradeJourneyTimeline.tsx';
 import EmailPreferencesSettings from './EmailPreferencesSettings.tsx';
 import EditProfileModal from './EditProfileModal.tsx';
 import CollectionStats from './CollectionStats.tsx';
+import AccountSection from './AccountSection.tsx';
+import PaymentMethodsSection from './PaymentMethodsSection.tsx';
 import { formatCurrency } from '../utils/currency.ts';
+
+type ProfileTab = 'overview' | 'account' | 'payments' | 'notifications';
 
 const ProfilePage: React.FC = () => {
     const { currentUser, oauthProfile } = useAuth();
@@ -25,6 +29,7 @@ const ProfilePage: React.FC = () => {
     const [showAllItems, setShowAllItems] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [tradesWith, setTradesWith] = useState<Trade[]>([]);
+    const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
 
     const isCurrentUserProfile = currentUser?.id?.toString() === userId;
 
@@ -71,6 +76,23 @@ const ProfilePage: React.FC = () => {
         loadProfileData();
     }, [userId, currentUser, isCurrentUserProfile]);
 
+    const handleProfileUpdate = async (updates: Partial<User & { location?: string }>) => {
+        if (!profileUser) return;
+
+        const response = await fetch(`http://localhost:4000/api/users/${profileUser.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update profile');
+        }
+
+        const updated = await response.json();
+        setProfileUser({ ...profileUser, ...updated });
+    };
+
     if (isLoading) {
         return (
             <div className="max-w-5xl mx-auto px-4 py-8">
@@ -97,120 +119,146 @@ const ProfilePage: React.FC = () => {
     const totalInventoryValue = profileUser.inventory.reduce((sum, item) => sum + (item.estimatedMarketValue || 0), 0);
 
     // ===========================================
-    // SELF-VIEW: Your Own Profile
+    // SELF-VIEW: Your Own Profile (Tabbed Layout)
     // ===========================================
     if (isCurrentUserProfile) {
+        const tabs: { id: ProfileTab; label: string; icon: string }[] = [
+            { id: 'overview', label: 'Overview', icon: '📊' },
+            { id: 'account', label: 'Account', icon: '👤' },
+            { id: 'payments', label: 'Payment Methods', icon: '💳' },
+            { id: 'notifications', label: 'Notifications', icon: '🔔' },
+        ];
+
         return (
-            <>
-                {/* Header */}
-                <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 border border-blue-100 dark:border-gray-600 shadow-sm">
-                    <div className="flex items-start gap-4">
-                        <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg text-xl">
-                            👤
-                        </div>
-                        <div className="flex-1">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">
-                                Your Profile
-                            </h1>
-                            <p className="mt-2 text-gray-600 dark:text-gray-300">
-                                This is how other traders see you. Edit your profile to make a great impression!
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => setShowEditModal(true)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                        >
-                            ✏️ Edit Profile
-                        </button>
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Compact Header */}
+                <div className="mb-6 flex items-center gap-4">
+                    <img
+                        src={oauthProfile?.image || (currentUser as any)?.avatar || profileUser.profilePictureUrl || `https://ui-avatars.com/api/?name=${profileUser.name}&background=3B82F6&color=fff`}
+                        alt={profileUser.name}
+                        className="w-16 h-16 rounded-full border-4 border-white dark:border-gray-700 shadow-lg object-cover"
+                    />
+                    <div className="flex-1">
+                        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">{profileUser.name}</h1>
+                        <p className="text-gray-500 dark:text-gray-400">
+                            {profileUser.city && profileUser.state ? `${profileUser.city}, ${profileUser.state}` : 'Location not set'} • Member for {accountAgeString}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-medium">
+                            ⭐ {profileUser.rating || 0}
+                        </span>
+                        <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
+                            🛡️ {profileUser.valuationReputationScore}
+                        </span>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left: Profile Card */}
-                    <div className="lg:col-span-1 space-y-6">
-                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center">
-                            <img
-                                src={oauthProfile?.image || (currentUser as any)?.avatar || profileUser.profilePictureUrl || `https://ui-avatars.com/api/?name=${profileUser.name}&background=3B82F6&color=fff`}
-                                alt={profileUser.name}
-                                className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-blue-100 dark:border-gray-600 object-cover"
-                            />
-                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{profileUser.name}</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {profileUser.city}, {profileUser.state}
-                            </p>
-                            <div className="mt-4 flex justify-center gap-2">
-                                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium">
-                                    ⭐ {profileUser.rating || 0} rating
-                                </span>
-                                <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
-                                    🛡️ {profileUser.valuationReputationScore} rep
-                                </span>
+                {/* Tab Navigation */}
+                <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+                    <nav className="flex gap-1">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
+                                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                                    }`}
+                            >
+                                <span className="mr-2">{tab.icon}</span>
+                                {tab.label}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+
+                {/* Tab Content */}
+                <div className="min-h-[400px]">
+                    {activeTab === 'overview' && (
+                        <div className="space-y-6">
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{completedTrades.length}</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Trades</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{profileUser.inventory.length}</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Items</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(totalInventoryValue)}</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Collection</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+                                    <p className="text-2xl font-bold text-gray-800 dark:text-white">{accountAgeString}</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Member</p>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Quick Links */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                            <h3 className="font-semibold text-gray-800 dark:text-white mb-3">Quick Links</h3>
-                            <div className="space-y-2">
-                                <Link to="/inventory" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                    <span className="text-xl">📦</span>
-                                    <span className="text-gray-700 dark:text-gray-300">Manage Inventory</span>
-                                </Link>
-                                <Link to="/analytics" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                    <span className="text-xl">📊</span>
-                                    <span className="text-gray-700 dark:text-gray-300">View Analytics</span>
-                                </Link>
-                                <Link to="/trades" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                    <span className="text-xl">🔄</span>
-                                    <span className="text-gray-700 dark:text-gray-300">Active Trades</span>
-                                </Link>
-                            </div>
-                        </div>
+                            {/* Collection Stats */}
+                            <CollectionStats items={profileUser.inventory} />
 
-                        {/* Email Notification Preferences */}
-                        <EmailPreferencesSettings />
-                    </div>
-
-                    {/* Right: Stats & Journey */}
-                    <div className="lg:col-span-2 space-y-6">
-                        {/* Stats Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
-                                <p className="text-2xl font-bold text-gray-800 dark:text-white">{completedTrades.length}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Trades</p>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
-                                <p className="text-2xl font-bold text-gray-800 dark:text-white">{profileUser.inventory.length}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Items</p>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
-                                <p className="text-2xl font-bold text-gray-800 dark:text-white">{accountAgeString}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Member</p>
-                            </div>
-                        </div>
-
-                        {/* Collection Value Dashboard */}
-                        <CollectionStats items={profileUser.inventory} />
-
-                        {/* Trade-Up Journey */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">📈 Your Trade-Up Journey</h3>
-                            <TradeJourneyTimeline
-                                trades={completedTrades}
-                                userId={String(profileUser.id)}
-                                allItems={allItems}
-                                onTradeClick={(tradeId) => navigate(`/trades?highlight=${tradeId}`)}
-                            />
-                        </div>
-
-                        {/* About Section */}
-                        {profileUser.aboutMe && (
+                            {/* Trade-Up Journey */}
                             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">About You</h3>
-                                <p className="text-gray-600 dark:text-gray-300">{profileUser.aboutMe}</p>
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">📈 Your Trade-Up Journey</h3>
+                                <TradeJourneyTimeline
+                                    trades={completedTrades}
+                                    userId={String(profileUser.id)}
+                                    allItems={allItems}
+                                    onTradeClick={(tradeId) => navigate(`/trades?highlight=${tradeId}`)}
+                                />
                             </div>
-                        )}
-                    </div>
+
+                            {/* About */}
+                            {profileUser.aboutMe && (
+                                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">About</h3>
+                                    <p className="text-gray-600 dark:text-gray-300">{profileUser.aboutMe}</p>
+                                </div>
+                            )}
+
+                            {/* Quick Links */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <Link
+                                    to="/inventory"
+                                    className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors"
+                                >
+                                    <span className="text-2xl">📦</span>
+                                    <span className="text-gray-700 dark:text-gray-300 font-medium">Manage Inventory</span>
+                                </Link>
+                                <Link
+                                    to="/analytics"
+                                    className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors"
+                                >
+                                    <span className="text-2xl">📊</span>
+                                    <span className="text-gray-700 dark:text-gray-300 font-medium">View Analytics</span>
+                                </Link>
+                                <Link
+                                    to="/trades"
+                                    className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors"
+                                >
+                                    <span className="text-2xl">🔄</span>
+                                    <span className="text-gray-700 dark:text-gray-300 font-medium">Active Trades</span>
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'account' && (
+                        <AccountSection user={profileUser} onUpdate={handleProfileUpdate} />
+                    )}
+
+                    {activeTab === 'payments' && (
+                        <PaymentMethodsSection userId={profileUser.id} />
+                    )}
+
+                    {activeTab === 'notifications' && (
+                        <div className="max-w-2xl">
+                            <EmailPreferencesSettings />
+                        </div>
+                    )}
                 </div>
 
                 {/* Edit Profile Modal */}
@@ -222,12 +270,13 @@ const ProfilePage: React.FC = () => {
                         setProfileUser(updatedUser);
                     }}
                 />
-            </>
+            </div>
         );
     }
 
     // ===========================================
     // EXTERNAL-VIEW: Another Trader's Profile
+    // ===========================================
     return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {/* Trust Header */}

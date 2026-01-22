@@ -860,3 +860,134 @@ export const fetchWishlistMatches = async (userId: string | number): Promise<Wis
     }
     return response.json();
 };
+
+// =====================================================
+// PAYMENT METHODS API
+// =====================================================
+
+export type PaymentProvider = 'stripe_card' | 'stripe_bank' | 'venmo' | 'paypal' | 'coinbase';
+
+export interface PaymentMethod {
+    id: number;
+    provider: PaymentProvider;
+    display_name: string;
+    is_default: number;
+    is_verified: number;
+    connected_at: string;
+    last_used_at: string | null;
+    last_four?: string | null;
+    brand?: string | null;
+}
+
+export const fetchPaymentMethods = async (userId: string | number): Promise<PaymentMethod[]> => {
+    const response = await fetch(`${API_URL}/users/${userId}/payment-methods`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch payment methods');
+    }
+    return response.json();
+};
+
+export const addPaymentMethod = async (
+    userId: string | number,
+    provider: PaymentProvider,
+    displayName: string,
+    providerAccountId?: string,
+    isDefault?: boolean,
+    metadata?: Record<string, any>
+): Promise<PaymentMethod> => {
+    const response = await fetch(`${API_URL}/users/${userId}/payment-methods`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, displayName, providerAccountId, isDefault, metadata }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to add payment method: ${text}`);
+    }
+    return response.json();
+};
+
+export const updatePaymentMethod = async (
+    userId: string | number,
+    methodId: number,
+    updates: { displayName?: string; isDefault?: boolean }
+): Promise<{ success: boolean }> => {
+    const response = await fetch(`${API_URL}/users/${userId}/payment-methods/${methodId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+    });
+    if (!response.ok) {
+        throw new Error('Failed to update payment method');
+    }
+    return response.json();
+};
+
+export const deletePaymentMethod = async (
+    userId: string | number,
+    methodId: number
+): Promise<{ success: boolean }> => {
+    const response = await fetch(`${API_URL}/users/${userId}/payment-methods/${methodId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        throw new Error('Failed to delete payment method');
+    }
+    return response.json();
+};
+
+// Stripe SetupIntent for adding cards
+export const createSetupIntent = async (userId: string | number): Promise<{
+    clientSecret: string;
+    customerId: string;
+}> => {
+    const response = await fetch(`${API_URL}/users/${userId}/payment-methods/setup-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to create setup intent: ${text}`);
+    }
+    return response.json();
+};
+
+// Confirm and save payment method after Stripe setup
+export const confirmPaymentMethod = async (
+    userId: string | number,
+    paymentMethodId: string,
+    customerId: string
+): Promise<{
+    id: number;
+    provider: string;
+    displayName: string;
+    lastFour: string;
+    brand: string;
+}> => {
+    const response = await fetch(`${API_URL}/users/${userId}/payment-methods/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethodId, customerId }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to confirm payment method: ${text}`);
+    }
+    return response.json();
+};
+
+// Get payment providers configuration status
+export interface PaymentProvidersStatus {
+    stripe: { configured: boolean; features: string[] };
+    plaid: { configured: boolean; features: string[] };
+    paypal: { configured: boolean; features: string[] };
+    coinbase: { configured: boolean; features: string[] };
+}
+
+export const getPaymentProvidersStatus = async (): Promise<PaymentProvidersStatus> => {
+    const response = await fetch(`${API_URL}/payment-providers/status`);
+    if (!response.ok) {
+        throw new Error('Failed to get payment providers status');
+    }
+    return response.json();
+};

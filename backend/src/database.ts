@@ -219,6 +219,34 @@ const init = () => {
         updated_at TEXT DEFAULT (datetime('now'))
       );
 
+      -- User payment methods for cash portions of trades
+      CREATE TABLE IF NOT EXISTS payment_methods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        provider TEXT NOT NULL, -- 'stripe_card', 'stripe_bank', 'venmo', 'paypal', 'coinbase'
+        provider_account_id TEXT, -- Stripe payment method ID or external account ID
+        display_name TEXT NOT NULL, -- "Visa ****1234" or "@username"
+        is_default INTEGER DEFAULT 0,
+        is_verified INTEGER DEFAULT 0,
+        metadata TEXT, -- JSON for extra provider-specific data
+        connected_at TEXT DEFAULT (datetime('now')),
+        last_used_at TEXT,
+        -- Stripe-specific fields
+        stripe_payment_method_id TEXT,
+        stripe_customer_id TEXT,
+        last_four TEXT,
+        brand TEXT,
+        -- Plaid-specific fields (encrypted in production)
+        plaid_access_token TEXT,
+        plaid_account_id TEXT,
+        -- OAuth provider fields
+        oauth_access_token TEXT,
+        oauth_refresh_token TEXT,
+        oauth_expires_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_payment_methods_user ON payment_methods(user_id);
+      CREATE INDEX IF NOT EXISTS idx_payment_methods_default ON payment_methods(user_id, is_default);
+
       CREATE TABLE IF NOT EXISTS ApiMetadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         version TEXT
@@ -573,6 +601,10 @@ const migrate = () => {
         }
         if (!userColumns.includes('zipCode')) {
           tasks.push(addColumnIfMissing('User', 'zipCode', 'TEXT'));
+        }
+        // Contact information
+        if (!userColumns.includes('phone')) {
+          tasks.push(addColumnIfMissing('User', 'phone', 'TEXT'));
         }
 
         // user_value_overrides migrations

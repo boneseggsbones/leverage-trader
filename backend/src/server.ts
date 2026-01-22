@@ -23,6 +23,7 @@ import { logItemView, logSearch, logProfileView, getRecentViews, getRecentSearch
 import { watchItem, unwatchItem, getWatchlist, isWatching, removeWatch, findMatchingWatchers, getWatchCount } from './watchlistService';
 import { normalizeLocation, normalizeCity, normalizeState } from './locationUtils';
 import { calculateDistance, getCoordinates, getZipCodeData } from './distanceService';
+import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStripeConfigured } from './payments/paymentMethodService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -593,7 +594,7 @@ app.put('/api/users/:id', (req, res) => {
     return res.status(400).json({ error: 'Invalid user ID' });
   }
 
-  const { name, city, state, location, aboutMe } = req.body;
+  const { name, city, state, location, aboutMe, phone } = req.body;
 
   const updates: string[] = [];
   const values: any[] = [];
@@ -601,6 +602,11 @@ app.put('/api/users/:id', (req, res) => {
   if (name !== undefined) {
     updates.push('name = ?');
     values.push(name);
+  }
+
+  if (phone !== undefined) {
+    updates.push('phone = ?');
+    values.push(phone);
   }
 
   // Handle location field - parse "City, State" or just store as city
@@ -678,6 +684,213 @@ app.put('/api/users/:id', (req, res) => {
           res.json({ ...row, inventory: items });
         });
       });
+    }
+  );
+});
+
+// =====================================================
+// PAYMENT METHODS ENDPOINTS
+// =====================================================
+
+// Get payment providers configuration status
+app.get('/api/payment-providers/status', (req, res) => {
+  res.json(getPaymentProvidersStatus());
+});
+
+// Create Stripe SetupIntent for adding a card
+app.post('/api/users/:id/payment-methods/setup-intent', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  if (!isStripeConfigured()) {
+    return res.status(503).json({ error: 'Stripe is not configured' });
+  }
+
+  try {
+    // Get user email if available
+    const user = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT name FROM User WHERE id = ?', [userId], (err: Error | null, row: any) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const result = await createSetupIntent(userId, undefined, user?.name);
+    res.json({
+      clientSecret: result.clientSecret,
+      customerId: result.customerId,
+    });
+  } catch (err: any) {
+    console.error('[SetupIntent] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Confirm and save a payment method after SetupIntent
+app.post('/api/users/:id/payment-methods/confirm', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  const { paymentMethodId, customerId } = req.body;
+  if (!paymentMethodId || !customerId) {
+    return res.status(400).json({ error: 'paymentMethodId and customerId are required' });
+  }
+
+  try {
+    const result = await savePaymentMethod(userId, paymentMethodId, customerId);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[SavePaymentMethod] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all payment methods for a user
+app.get('/api/users/:id/payment-methods', (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  db.all(
+    `SELECT id, provider, display_name, is_default, is_verified, connected_at, last_used_at, last_four, brand 
+     FROM payment_methods WHERE user_id = ? ORDER BY is_default DESC, connected_at DESC`,
+    [userId],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(rows || []);
+    }
+  );
+});
+
+// Add a new payment method
+app.post('/api/users/:id/payment-methods', (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  const { provider, providerAccountId, displayName, isDefault, metadata } = req.body;
+
+  if (!provider || !displayName) {
+    return res.status(400).json({ error: 'provider and displayName are required' });
+  }
+
+  const validProviders = ['stripe_card', 'stripe_bank', 'venmo', 'paypal', 'coinbase'];
+  if (!validProviders.includes(provider)) {
+    return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
+  }
+
+  // If setting as default, clear other defaults first
+  const setDefault = isDefault ? 1 : 0;
+
+  const insertMethod = () => {
+    db.run(
+      `INSERT INTO payment_methods (user_id, provider, provider_account_id, display_name, is_default, metadata)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, provider, providerAccountId || null, displayName, setDefault, metadata ? JSON.stringify(metadata) : null],
+      function (err) {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({
+          id: this.lastID,
+          provider,
+          display_name: displayName,
+          is_default: setDefault,
+          is_verified: 0,
+          connected_at: new Date().toISOString()
+        });
+      }
+    );
+  };
+
+  if (setDefault) {
+    db.run('UPDATE payment_methods SET is_default = 0 WHERE user_id = ?', [userId], insertMethod);
+  } else {
+    insertMethod();
+  }
+});
+
+// Update a payment method (set as default, update display name)
+app.put('/api/users/:id/payment-methods/:methodId', (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  const methodId = parseInt(req.params.methodId, 10);
+
+  if (isNaN(userId) || isNaN(methodId)) {
+    return res.status(400).json({ error: 'Invalid IDs' });
+  }
+
+  const { displayName, isDefault } = req.body;
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (displayName !== undefined) {
+    updates.push('display_name = ?');
+    values.push(displayName);
+  }
+
+  if (isDefault !== undefined) {
+    updates.push('is_default = ?');
+    values.push(isDefault ? 1 : 0);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'No valid fields to update' });
+  }
+
+  values.push(methodId, userId);
+
+  const updateMethod = () => {
+    db.run(
+      `UPDATE payment_methods SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
+      values,
+      function (err) {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        if (this.changes === 0) {
+          return res.status(404).json({ error: 'Payment method not found' });
+        }
+        res.json({ success: true });
+      }
+    );
+  };
+
+  // If setting as default, clear other defaults first
+  if (isDefault) {
+    db.run('UPDATE payment_methods SET is_default = 0 WHERE user_id = ? AND id != ?', [userId, methodId], updateMethod);
+  } else {
+    updateMethod();
+  }
+});
+
+// Delete a payment method
+app.delete('/api/users/:id/payment-methods/:methodId', (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  const methodId = parseInt(req.params.methodId, 10);
+
+  if (isNaN(userId) || isNaN(methodId)) {
+    return res.status(400).json({ error: 'Invalid IDs' });
+  }
+
+  db.run(
+    'DELETE FROM payment_methods WHERE id = ? AND user_id = ?',
+    [methodId, userId],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Payment method not found' });
+      }
+      res.json({ success: true });
     }
   );
 });
