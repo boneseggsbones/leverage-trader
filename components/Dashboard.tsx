@@ -9,11 +9,13 @@ import DiscoveryItemCard from './DiscoveryItemCard.tsx';
 import { DiscoveryCardSkeleton } from './Skeleton.tsx';
 import WishlistMatches from './WishlistMatches.tsx';
 import OnboardingWalkthrough from './OnboardingWalkthrough.tsx';
+import NewUserSetupModal, { useNewUserSetup } from './NewUserSetupModal.tsx';
 
 const Dashboard: React.FC = () => {
     const { currentUser, updateUser } = useAuth();
     const navigate = useNavigate();
     const { addNotification } = useNotification();
+    const { showSetup, checkSetupNeeded, completeSetup } = useNewUserSetup();
 
     const [users, setUsers] = useState<User[]>([]);
     interface DashboardData {
@@ -562,7 +564,8 @@ const Dashboard: React.FC = () => {
                     </ItemCarousel>
                 </div>
             </div>
-            <OnboardingWalkthrough />
+            <OnboardingWalkthrough onComplete={checkSetupNeeded} />
+            <NewUserSetupModal show={showSetup} onComplete={completeSetup} />
         </div>
     );
 };
