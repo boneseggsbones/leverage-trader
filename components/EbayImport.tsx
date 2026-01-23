@@ -178,6 +178,77 @@ export default function EbayImport() {
         return <div className={styles.container}>Please log in to import from eBay</div>;
     }
 
+    // Gate eBay import behind Pro subscription
+    const isProUser = currentUser?.subscriptionTier === 'PRO' && currentUser?.subscriptionStatus === 'active';
+
+    if (!isProUser) {
+        return (
+            <div className={styles.container}>
+                <div style={{
+                    maxWidth: '600px',
+                    margin: '0 auto',
+                    padding: '3rem 2rem',
+                    textAlign: 'center',
+                }}>
+                    <div style={{
+                        fontSize: '4rem',
+                        marginBottom: '1.5rem',
+                    }}>
+                        🔒
+                    </div>
+                    <h1 style={{
+                        fontSize: '2rem',
+                        fontWeight: 'bold',
+                        color: 'white',
+                        marginBottom: '1rem',
+                    }}>
+                        Pro Feature
+                    </h1>
+                    <p style={{
+                        color: 'rgba(255,255,255,0.7)',
+                        marginBottom: '2rem',
+                        fontSize: '1.1rem',
+                        lineHeight: '1.6',
+                    }}>
+                        eBay Import is a Pro-exclusive feature. Upgrade to Pro to instantly
+                        import all your eBay listings with one click.
+                    </p>
+                    <a
+                        href="/pro"
+                        style={{
+                            display: 'inline-block',
+                            padding: '1rem 2rem',
+                            background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            borderRadius: '0.75rem',
+                            textDecoration: 'none',
+                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)',
+                            transition: 'transform 0.2s, box-shadow 0.2s',
+                        }}
+                        onMouseOver={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                            e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.5)';
+                        }}
+                        onMouseOut={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                            e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.4)';
+                        }}
+                    >
+                        Upgrade to Pro →
+                    </a>
+                    <p style={{
+                        color: 'rgba(255,255,255,0.5)',
+                        marginTop: '2rem',
+                        fontSize: '0.9rem',
+                    }}>
+                        Pro members also get 3 free trades per month!
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={styles.container}>
             <div className={styles.header}>
