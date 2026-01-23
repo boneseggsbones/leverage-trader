@@ -25,13 +25,13 @@ export interface User {
     accountCreatedAt: string;
     wishlist: string[]; // Array of Item IDs
     isAdmin?: boolean;
-    // Subscription fields
-    subscriptionTier: SubscriptionTier;
-    subscriptionStatus: SubscriptionStatus;
-    subscriptionRenewsAt: string | null; // ISO Date
-    subscriptionStripeId: string | null; // Stripe subscription ID
-    tradesThisCycle: number; // Track for fee waivers
-    cycleStartedAt: string | null; // When current billing cycle started
+    // Subscription fields (optional for legacy support)
+    subscriptionTier?: SubscriptionTier;
+    subscriptionStatus?: SubscriptionStatus;
+    subscriptionRenewsAt?: string | null; // ISO Date
+    subscriptionStripeId?: string | null; // Stripe subscription ID
+    tradesThisCycle?: number; // Track for fee waivers
+    cycleStartedAt?: string | null; // When current billing cycle started
 }
 
 export interface Item {
@@ -183,12 +183,12 @@ export interface Trade {
     proposerRated: boolean;
     receiverRated: boolean;
     ratingDeadline: string | null;
-    parentTradeId: string | null;
-    counterMessage: string | null;
-    // Platform fee fields
-    platformFeeCents: number; // e.g., 1500 for $15.00
-    isFeeWaived: boolean;
-    feePayerId: string | null; // Usually proposerId
+    parentTradeId?: string | null;
+    counterMessage?: string | null;
+    // Platform fee fields (optional for legacy support)
+    platformFeeCents?: number; // e.g., 1500 for $15.00
+    isFeeWaived?: boolean;
+    feePayerId?: string | null; // Usually proposerId
 }
 
 export enum TradeStatus {

@@ -3,10 +3,11 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { fetchUser, proposeTrade } from '../api/api';
-import { User, Item } from '../types.ts';
+import { User, Item, FEE_CONSTANTS } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
 import ItemDetailModal from './ItemDetailModal.tsx';
+import FeeBreakdown from './FeeBreakdown.tsx';
 import { formatCurrency, dollarsToCents } from '../utils/currency.ts';
 import {
     DndContext,
@@ -722,6 +723,18 @@ const TradeDesk: React.FC = () => {
                                 }
                             </div>
                         )}
+
+                        {/* Platform Fee Breakdown */}
+                        <FeeBreakdown
+                            platformFeeCents={FEE_CONSTANTS.FLAT_ESCROW_FEE_CENTS}
+                            isFeeWaived={currentUser?.subscriptionTier === 'PRO' && currentUser?.subscriptionStatus === 'active' && (currentUser?.tradesThisCycle ?? 0) < FEE_CONSTANTS.PRO_FREE_TRADES_LIMIT}
+                            feeReason="Secure your trade with escrow protection"
+                            remainingFreeTrades={currentUser?.subscriptionTier === 'PRO' ? Math.max(0, FEE_CONSTANTS.PRO_FREE_TRADES_LIMIT - (currentUser?.tradesThisCycle ?? 0) - 1) : undefined}
+                            onUpgrade={() => {
+                                setIsModalOpen(false);
+                                navigate('/pro');
+                            }}
+                        />
 
                         <p className="text-xs text-center text-slate-500">
                             This proposal will be sent to <strong>{otherUser.name}</strong> for review
