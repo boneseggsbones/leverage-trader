@@ -896,100 +896,132 @@ app.delete('/api/users/:id/payment-methods/:methodId', (req, res) => {
 });
 
 // Propose a new trade
-app.post('/api/trades', (req, res) => {
+app.post('/api/trades', async (req, res) => {
   const { proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash } = req.body;
 
   if (!proposerId || !receiverId) {
     return res.status(400).json({ error: 'proposerId and receiverId are required' });
   }
 
-  // Build a full trade record and insert into the new `trades` table.
-  const now = new Date().toISOString();
-  const tradeId = `trade-${Date.now()}`;
-  const newTrade = {
-    id: tradeId,
-    proposerId,
-    receiverId,
-    proposerItemIds: Array.isArray(proposerItemIds) ? proposerItemIds : [],
-    receiverItemIds: Array.isArray(receiverItemIds) ? receiverItemIds : [],
-    proposerCash: typeof proposerCash === 'number' ? proposerCash : 0,
-    receiverCash: 0,
-    status: 'PENDING_ACCEPTANCE',
-    createdAt: now,
-    updatedAt: now,
-    disputeTicketId: null,
-    proposerSubmittedTracking: 0,
-    receiverSubmittedTracking: 0,
-    proposerTrackingNumber: null,
-    receiverTrackingNumber: null,
-    proposerVerifiedSatisfaction: 0,
-    receiverVerifiedSatisfaction: 0,
-    proposerRated: 0,
-    receiverRated: 0,
-    ratingDeadline: null,
-  };
+  try {
+    // Calculate platform fee based on proposer's subscription status
+    const { calculateTradeFee, incrementTradeCounter } = await import('./feeService');
+    const feeResult = await calculateTradeFee(parseInt(proposerId, 10));
 
-  db.run(
-    'INSERT INTO trades (id, proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, status, createdAt, updatedAt, disputeTicketId, proposerSubmittedTracking, receiverSubmittedTracking, proposerTrackingNumber, receiverTrackingNumber, proposerVerifiedSatisfaction, receiverVerifiedSatisfaction, proposerRated, receiverRated, ratingDeadline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [
-      newTrade.id,
-      newTrade.proposerId,
-      newTrade.receiverId,
-      JSON.stringify(newTrade.proposerItemIds),
-      JSON.stringify(newTrade.receiverItemIds),
-      newTrade.proposerCash,
-      newTrade.receiverCash,
-      newTrade.status,
-      newTrade.createdAt,
-      newTrade.updatedAt,
-      newTrade.disputeTicketId,
-      newTrade.proposerSubmittedTracking,
-      newTrade.receiverSubmittedTracking,
-      newTrade.proposerTrackingNumber,
-      newTrade.receiverTrackingNumber,
-      newTrade.proposerVerifiedSatisfaction,
-      newTrade.receiverVerifiedSatisfaction,
-      newTrade.proposerRated,
-      newTrade.receiverRated,
-      newTrade.ratingDeadline,
-    ],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+    // Build a full trade record and insert into the new `trades` table.
+    const now = new Date().toISOString();
+    const tradeId = `trade-${Date.now()}`;
+    const newTrade = {
+      id: tradeId,
+      proposerId,
+      receiverId,
+      proposerItemIds: Array.isArray(proposerItemIds) ? proposerItemIds : [],
+      receiverItemIds: Array.isArray(receiverItemIds) ? receiverItemIds : [],
+      proposerCash: typeof proposerCash === 'number' ? proposerCash : 0,
+      receiverCash: 0,
+      status: 'PENDING_ACCEPTANCE',
+      createdAt: now,
+      updatedAt: now,
+      disputeTicketId: null,
+      proposerSubmittedTracking: 0,
+      receiverSubmittedTracking: 0,
+      proposerTrackingNumber: null,
+      receiverTrackingNumber: null,
+      proposerVerifiedSatisfaction: 0,
+      receiverVerifiedSatisfaction: 0,
+      proposerRated: 0,
+      receiverRated: 0,
+      ratingDeadline: null,
+      // Platform fee fields
+      platformFeeCents: feeResult.feeCents,
+      isFeeWaived: feeResult.isWaived ? 1 : 0,
+      feePayerId: proposerId,
+    };
 
-      // Return updated proposer user object using existing GET logic
-      db.get('SELECT * FROM User WHERE id = ?', [proposerId], (err, row) => {
+    // If fee is waived, increment the user's trade counter
+    if (feeResult.isWaived) {
+      await incrementTradeCounter(parseInt(proposerId, 10));
+      console.log(`[Trade] Fee waived for user ${proposerId}. Remaining free trades: ${feeResult.remainingFreeTrades}`);
+    }
+
+    db.run(
+      'INSERT INTO trades (id, proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, status, createdAt, updatedAt, disputeTicketId, proposerSubmittedTracking, receiverSubmittedTracking, proposerTrackingNumber, receiverTrackingNumber, proposerVerifiedSatisfaction, receiverVerifiedSatisfaction, proposerRated, receiverRated, ratingDeadline, platform_fee_cents, is_fee_waived, fee_payer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        newTrade.id,
+        newTrade.proposerId,
+        newTrade.receiverId,
+        JSON.stringify(newTrade.proposerItemIds),
+        JSON.stringify(newTrade.receiverItemIds),
+        newTrade.proposerCash,
+        newTrade.receiverCash,
+        newTrade.status,
+        newTrade.createdAt,
+        newTrade.updatedAt,
+        newTrade.disputeTicketId,
+        newTrade.proposerSubmittedTracking,
+        newTrade.receiverSubmittedTracking,
+        newTrade.proposerTrackingNumber,
+        newTrade.receiverTrackingNumber,
+        newTrade.proposerVerifiedSatisfaction,
+        newTrade.receiverVerifiedSatisfaction,
+        newTrade.proposerRated,
+        newTrade.receiverRated,
+        newTrade.ratingDeadline,
+        newTrade.platformFeeCents,
+        newTrade.isFeeWaived,
+        newTrade.feePayerId,
+      ],
+      function (err) {
         if (err) {
           res.status(500).json({ error: err.message });
           return;
         }
-        if (!row) {
-          res.status(404).json({ error: 'Proposer not found' });
-          return;
-        }
 
-        db.all('SELECT * FROM Item WHERE owner_id = ?', [proposerId], (err, items) => {
+        // Return updated proposer user object using existing GET logic
+        db.get('SELECT * FROM User WHERE id = ?', [proposerId], (err, row) => {
           if (err) {
             res.status(500).json({ error: err.message });
             return;
           }
+          if (!row) {
+            res.status(404).json({ error: 'Proposer not found' });
+            return;
+          }
 
-          const user = { ...row, inventory: items };
+          db.all('SELECT * FROM Item WHERE owner_id = ?', [proposerId], (err, items) => {
+            if (err) {
+              res.status(500).json({ error: err.message });
+              return;
+            }
 
-          // Notify the receiver about the new trade proposal
-          db.get('SELECT name FROM User WHERE id = ?', [proposerId], (err, proposerRow: any) => {
-            const proposerName = proposerRow?.name || 'Someone';
-            notifyTradeEvent(NotificationType.TRADE_PROPOSED, receiverId, tradeId, proposerName)
-              .catch(err => console.error('Failed to send trade proposal notification:', err));
+            const user = { ...row, inventory: items };
+
+            // Notify the receiver about the new trade proposal
+            db.get('SELECT name FROM User WHERE id = ?', [proposerId], (err, proposerRow: any) => {
+              const proposerName = proposerRow?.name || 'Someone';
+              notifyTradeEvent(NotificationType.TRADE_PROPOSED, receiverId, tradeId, proposerName)
+                .catch(err => console.error('Failed to send trade proposal notification:', err));
+            });
+
+            // Include fee info in response
+            res.json({
+              trade: {
+                ...newTrade,
+                platformFeeCents: feeResult.feeCents,
+                isFeeWaived: feeResult.isWaived,
+                feeReason: feeResult.reason,
+                remainingFreeTrades: feeResult.remainingFreeTrades,
+              },
+              updatedProposer: user
+            });
           });
-
-          res.json({ trade: newTrade, updatedProposer: user });
         });
-      });
-    }
-  );
+      }
+    );
+  } catch (err: any) {
+    console.error('[Trade] Error creating trade:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get trades for a user

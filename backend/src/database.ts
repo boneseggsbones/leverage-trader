@@ -607,10 +607,48 @@ const migrate = () => {
           tasks.push(addColumnIfMissing('User', 'phone', 'TEXT'));
         }
 
-        // user_value_overrides migrations
-        tasks.push(addColumnIfMissing('user_value_overrides', 'original_api_value_cents', 'INTEGER'));
+        // =====================================================
+        // SUBSCRIPTION & MONETIZATION MIGRATIONS
+        // =====================================================
+        if (!userColumns.includes('subscription_tier')) {
+          tasks.push(addColumnIfMissing('User', 'subscription_tier', "TEXT DEFAULT 'FREE'"));
+        }
+        if (!userColumns.includes('subscription_status')) {
+          tasks.push(addColumnIfMissing('User', 'subscription_status', "TEXT DEFAULT 'none'"));
+        }
+        if (!userColumns.includes('subscription_renews_at')) {
+          tasks.push(addColumnIfMissing('User', 'subscription_renews_at', 'TEXT'));
+        }
+        if (!userColumns.includes('subscription_stripe_id')) {
+          tasks.push(addColumnIfMissing('User', 'subscription_stripe_id', 'TEXT'));
+        }
+        if (!userColumns.includes('trades_this_cycle')) {
+          tasks.push(addColumnIfMissing('User', 'trades_this_cycle', 'INTEGER DEFAULT 0'));
+        }
+        if (!userColumns.includes('cycle_started_at')) {
+          tasks.push(addColumnIfMissing('User', 'cycle_started_at', 'TEXT'));
+        }
 
-        Promise.all(tasks).then(() => resolve()).catch(reject);
+        // Trade fee columns
+        db.all("PRAGMA table_info('trades')", (err3, tradeRows: any[]) => {
+          if (err3) return reject(err3);
+          const tradeColumns = tradeRows.map((r: any) => r.name);
+
+          if (!tradeColumns.includes('platform_fee_cents')) {
+            tasks.push(addColumnIfMissing('trades', 'platform_fee_cents', 'INTEGER DEFAULT 0'));
+          }
+          if (!tradeColumns.includes('is_fee_waived')) {
+            tasks.push(addColumnIfMissing('trades', 'is_fee_waived', 'INTEGER DEFAULT 0'));
+          }
+          if (!tradeColumns.includes('fee_payer_id')) {
+            tasks.push(addColumnIfMissing('trades', 'fee_payer_id', 'TEXT'));
+          }
+
+          // user_value_overrides migrations
+          tasks.push(addColumnIfMissing('user_value_overrides', 'original_api_value_cents', 'INTEGER'));
+
+          Promise.all(tasks).then(() => resolve()).catch(reject);
+        });
       });
     });
   });

@@ -50,27 +50,33 @@ export class StripePaymentProvider implements PaymentProvider {
         currency: string,
         tradeId: string,
         payerId: number,
-        metadata?: Record<string, string>
+        metadata?: Record<string, string>,
+        platformFeeCents: number = 0
     ): Promise<PaymentIntent> {
         const stripeClient = this.ensureStripe();
 
+        const totalAmount = amount + platformFeeCents;
+
         // Create a PaymentIntent with manual capture for escrow-style holds
         const intent = await stripeClient.paymentIntents.create({
-            amount: amount, // Amount in cents
+            amount: totalAmount, // Total amount (cash + fee) in cents
             currency: currency.toLowerCase(),
             capture_method: 'manual', // Don't capture immediately - hold funds
             metadata: {
                 tradeId,
                 payerId: String(payerId),
+                cashComponent: String(amount),
+                feeComponent: String(platformFeeCents),
+                type: platformFeeCents > 0 ? 'trade_escrow_plus_fee' : 'trade_escrow',
                 ...metadata,
             },
         });
 
-        console.log(`[Stripe] Created PaymentIntent: ${intent.id} for $${amount / 100}`);
+        console.log(`[Stripe] Created PaymentIntent: ${intent.id} for total $${totalAmount / 100} (cash: $${amount / 100}, fee: $${platformFeeCents / 100})`);
 
         return {
             id: intent.id,
-            amount,
+            amount: totalAmount,
             currency,
             status: this.mapStripeStatus(intent.status),
             clientSecret: intent.client_secret || undefined,
@@ -78,6 +84,8 @@ export class StripePaymentProvider implements PaymentProvider {
             metadata: {
                 tradeId,
                 payerId: String(payerId),
+                cashComponent: String(amount),
+                feeComponent: String(platformFeeCents),
                 ...metadata,
             },
         };

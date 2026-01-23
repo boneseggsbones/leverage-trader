@@ -1,5 +1,15 @@
 // --- Core Game Entities ---
 
+// Subscription & Fee Constants
+export type SubscriptionTier = 'FREE' | 'PRO';
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'none';
+
+export const FEE_CONSTANTS = {
+    FLAT_ESCROW_FEE_CENTS: 1500, // $15.00
+    PRO_MONTHLY_PRICE_CENTS: 1200, // $12.00
+    PRO_FREE_TRADES_LIMIT: 3
+} as const;
+
 export interface User {
     id: string;
     name: string;
@@ -15,6 +25,13 @@ export interface User {
     accountCreatedAt: string;
     wishlist: string[]; // Array of Item IDs
     isAdmin?: boolean;
+    // Subscription fields
+    subscriptionTier: SubscriptionTier;
+    subscriptionStatus: SubscriptionStatus;
+    subscriptionRenewsAt: string | null; // ISO Date
+    subscriptionStripeId: string | null; // Stripe subscription ID
+    tradesThisCycle: number; // Track for fee waivers
+    cycleStartedAt: string | null; // When current billing cycle started
 }
 
 export interface Item {
@@ -168,6 +185,10 @@ export interface Trade {
     ratingDeadline: string | null;
     parentTradeId: string | null;
     counterMessage: string | null;
+    // Platform fee fields
+    platformFeeCents: number; // e.g., 1500 for $15.00
+    isFeeWaived: boolean;
+    feePayerId: string | null; // Usually proposerId
 }
 
 export enum TradeStatus {
