@@ -24,6 +24,7 @@ import { watchItem, unwatchItem, getWatchlist, isWatching, removeWatch, findMatc
 import { normalizeLocation, normalizeCity, normalizeState } from './locationUtils';
 import { calculateDistance, getCoordinates, getZipCodeData } from './distanceService';
 import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStripeConfigured } from './payments/paymentMethodService';
+import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession } from './subscriptionService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -689,8 +690,69 @@ app.put('/api/users/:id', (req, res) => {
 });
 
 // =====================================================
+// SUBSCRIPTION ENDPOINTS
+// =====================================================
+
+// Create Pro subscription checkout session
+app.post('/api/subscription/checkout', async (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  const result = await createProCheckoutSession(
+    parseInt(userId, 10),
+    'http://localhost:5173/pro?success=true',
+    'http://localhost:5173/pro?canceled=true'
+  );
+
+  if (result.success) {
+    res.json({ checkoutUrl: result.checkoutUrl, sessionId: result.sessionId });
+  } else {
+    res.status(500).json({ error: result.error });
+  }
+});
+
+// Get subscription status for user
+app.get('/api/users/:id/subscription', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    const status = await getSubscriptionStatus(userId);
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create customer portal session for subscription management
+app.post('/api/subscription/portal', async (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  const result = await createCustomerPortalSession(
+    parseInt(userId, 10),
+    'http://localhost:5173/pro'
+  );
+
+  if ('url' in result) {
+    res.json({ portalUrl: result.url });
+  } else {
+    res.status(400).json({ error: result.error });
+  }
+});
+
+// =====================================================
 // PAYMENT METHODS ENDPOINTS
 // =====================================================
+
 
 // Get payment providers configuration status
 app.get('/api/payment-providers/status', (req, res) => {

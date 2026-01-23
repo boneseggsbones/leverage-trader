@@ -1,5 +1,5 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { FEE_CONSTANTS } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -10,13 +10,64 @@ import { formatCurrency } from '../utils/currency';
  */
 const ProUpgradePage: React.FC = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { currentUser } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
     const isProUser = currentUser?.subscriptionTier === 'PRO' && currentUser?.subscriptionStatus === 'active';
+
+    // Check for success/cancel params
+    useEffect(() => {
+        if (searchParams.get('success') === 'true') {
+            setMessage({ type: 'success', text: 'Welcome to Pro! Your subscription is now active. Please refresh or re-login to see your updated status.' });
+        } else if (searchParams.get('canceled') === 'true') {
+            setMessage({ type: 'error', text: 'Checkout was canceled. You can try again anytime.' });
+        }
+    }, [searchParams]);
+
+    const handleUpgrade = async () => {
+        if (!currentUser?.id) return;
+
+        setIsLoading(true);
+        setMessage(null);
+
+        try {
+            const response = await fetch('http://localhost:4000/api/subscription/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id }),
+            });
+
+            const data = await response.json();
+
+            if (data.checkoutUrl) {
+                // Redirect to Stripe Checkout
+                window.location.href = data.checkoutUrl;
+            } else {
+                setMessage({ type: 'error', text: data.error || 'Failed to create checkout session' });
+            }
+        } catch (err: any) {
+            setMessage({ type: 'error', text: err.message || 'Something went wrong' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-slate-900 via-violet-950 to-slate-900">
             {/* Hero Section */}
             <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+                {/* Success/Error Message */}
+                {message && (
+                    <div className={`mb-8 px-6 py-4 rounded-xl font-medium ${message.type === 'success'
+                        ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
+                        : 'bg-red-500/20 border border-red-500/50 text-red-400'
+                        }`}>
+                        {message.text}
+                    </div>
+                )}
+
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 rounded-full text-slate-900 font-bold text-sm mb-8">
                     ✨ LEVERAGE PRO
                 </div>
@@ -46,13 +97,11 @@ const ProUpgradePage: React.FC = () => {
                         </div>
                     ) : (
                         <button
-                            onClick={() => {
-                                // TODO: Implement Stripe Checkout for subscription
-                                alert('Stripe subscription checkout coming soon!');
-                            }}
-                            className="w-full px-8 py-4 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg shadow-violet-500/25 transition-all transform hover:scale-105"
+                            onClick={handleUpgrade}
+                            disabled={isLoading}
+                            className="w-full px-8 py-4 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg shadow-violet-500/25 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                         >
-                            Upgrade to Pro
+                            {isLoading ? 'Loading...' : 'Upgrade to Pro'}
                         </button>
                     )}
                 </div>
