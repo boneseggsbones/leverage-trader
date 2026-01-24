@@ -189,12 +189,15 @@ export default function EbayImport() {
                     margin: '0 auto',
                     padding: '3rem 2rem',
                     textAlign: 'center',
+                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.05))',
+                    borderRadius: '1.5rem',
+                    border: '1px solid rgba(139, 92, 246, 0.2)',
                 }}>
                     <div style={{
                         fontSize: '4rem',
                         marginBottom: '1.5rem',
                     }}>
-                        🔒
+                        ⚡
                     </div>
                     <h1 style={{
                         fontSize: '2rem',
@@ -202,7 +205,7 @@ export default function EbayImport() {
                         color: 'white',
                         marginBottom: '1rem',
                     }}>
-                        Pro Feature
+                        Power Traders Only
                     </h1>
                     <p style={{
                         color: 'rgba(255,255,255,0.7)',
@@ -210,8 +213,8 @@ export default function EbayImport() {
                         fontSize: '1.1rem',
                         lineHeight: '1.6',
                     }}>
-                        eBay Import is a Pro-exclusive feature. Upgrade to Pro to instantly
-                        import all your eBay listings with one click.
+                        Import your entire eBay inventory in seconds.<br />
+                        Upgrade to Pro for <strong style={{ color: '#8B5CF6' }}>$12/mo</strong>.
                     </p>
                     <a
                         href="/pro"
@@ -242,7 +245,7 @@ export default function EbayImport() {
                         marginTop: '2rem',
                         fontSize: '0.9rem',
                     }}>
-                        Pro members also get 3 free trades per month!
+                        Pro members also get 3 free trades per month with no escrow fees!
                     </p>
                 </div>
             </div>
