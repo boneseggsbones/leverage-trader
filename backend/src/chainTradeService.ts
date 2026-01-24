@@ -15,6 +15,7 @@
 import { db } from './database';
 import { ChainCycle, findChainsForUser, findValidChains } from './chainMatchService';
 import { createNotification, NotificationType } from './notifications/notificationService';
+import { stripePaymentProvider } from './payments/stripeProvider';
 import crypto from 'crypto';
 
 // Platform fee - everyone pays $15 as "skin in the game"
@@ -408,16 +409,31 @@ export async function fundChainEscrow(chainId: string, userId: number): Promise<
 
     // EVERYONE pays $15 platform fee + any cash they owe
     // This is the "Chain Breaker" logic - skin in the game for all participants
-    const holdId = `hold_${crypto.randomUUID()}`;
     const amountToCollect = participant.totalOwed; // platformFeeCents + max(0, cashDelta)
 
     console.log(`[ChainTrade] User ${userId} funding escrow: $${(amountToCollect / 100).toFixed(2)} (fee: $${(participant.platformFeeCents / 100).toFixed(2)}, cash balance: $${(Math.max(0, participant.cashDelta) / 100).toFixed(2)})`);
 
-    // Create escrow hold for fee + any cash obligation
+    // Create real Stripe PaymentIntent for escrow (fee is already included in totalOwed)
+    const cashComponent = Math.max(0, participant.cashDelta);
+    const feeComponent = participant.platformFeeCents;
+
+    const paymentIntent = await stripePaymentProvider.createPaymentIntent(
+        cashComponent,           // Cash portion
+        'usd',
+        chainId,                 // Use chain ID as trade ID
+        userId,
+        { chainTrade: 'true', participantId: String(participant.id) },
+        feeComponent             // Platform fee ($15)
+    );
+
+    // Store escrow hold with Stripe provider reference
+    const holdId = `hold_${crypto.randomUUID()}`;
     await dbRun(`
-      INSERT INTO escrow_holds (id, trade_id, payer_id, recipient_id, amount, status, provider, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'HELD', 'mock', datetime('now'), datetime('now'))
-    `, [holdId, chainId, userId, 0, amountToCollect]); // recipient 0 = platform pool
+      INSERT INTO escrow_holds (id, trade_id, payer_id, recipient_id, amount, status, provider, provider_reference, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'PENDING', 'stripe', ?, datetime('now'), datetime('now'))
+    `, [holdId, chainId, userId, 0, amountToCollect, paymentIntent.providerReference]);
+
+    console.log(`[ChainTrade] Created Stripe PaymentIntent ${paymentIntent.id} for chain ${chainId}, user ${userId}`);
 
     await dbRun(`
       UPDATE chain_participants SET has_funded = 1 WHERE chain_id = ? AND user_id = ?
