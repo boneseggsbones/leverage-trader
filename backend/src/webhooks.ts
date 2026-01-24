@@ -1,11 +1,11 @@
-/**
- * Stripe Webhook Handler
- * Handles Stripe webhook events for payment lifecycle
- */
-
 import Stripe from 'stripe';
 import { db } from './database';
 import { EscrowStatus } from './payments/types';
+import {
+    handleSubscriptionCreated,
+    handleSubscriptionUpdated,
+    handleSubscriptionCanceled,
+} from './subscriptionService';
 
 // Initialize Stripe
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -60,6 +60,17 @@ async function processEvent(event: Stripe.Event): Promise<WebhookResult> {
         case 'charge.dispute.created':
             return handleDisputeCreated(event.data.object as Stripe.Dispute);
 
+        // Subscription events
+        case 'checkout.session.completed':
+            return handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated':
+            return handleSubscriptionEvent(event.data.object as Stripe.Subscription);
+
+        case 'customer.subscription.deleted':
+            return handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+
         default:
             return {
                 handled: false,
@@ -67,6 +78,91 @@ async function processEvent(event: Stripe.Event): Promise<WebhookResult> {
                 message: `Unhandled event type: ${event.type}`,
             };
     }
+}
+
+/**
+ * Handle checkout session completed (for subscription creation)
+ */
+async function handleCheckoutSessionCompleted(
+    session: Stripe.Checkout.Session
+): Promise<WebhookResult> {
+    console.log(`[Webhook] Checkout session completed: ${session.id}`);
+
+    // Only handle subscription checkouts
+    if (session.mode !== 'subscription') {
+        return {
+            handled: true,
+            event: 'checkout.session.completed',
+            message: 'Non-subscription checkout, skipping',
+        };
+    }
+
+    const userId = session.metadata?.userId;
+    const subscriptionId = session.subscription as string;
+
+    if (!userId || !subscriptionId) {
+        console.error('[Webhook] Missing userId or subscriptionId in checkout session');
+        return {
+            handled: false,
+            event: 'checkout.session.completed',
+            message: 'Missing metadata',
+        };
+    }
+
+    await handleSubscriptionCreated(subscriptionId, parseInt(userId, 10));
+
+    return {
+        handled: true,
+        event: 'checkout.session.completed',
+        message: `User ${userId} subscribed with ${subscriptionId}`,
+    };
+}
+
+/**
+ * Handle subscription created/updated events
+ */
+async function handleSubscriptionEvent(
+    subscription: Stripe.Subscription
+): Promise<WebhookResult> {
+    const subscriptionId = subscription.id;
+    const status = subscription.status;
+
+    console.log(`[Webhook] Subscription ${subscriptionId} status: ${status}`);
+
+    // Map Stripe status to our status
+    let mappedStatus: 'active' | 'past_due' | 'canceled' = 'active';
+    if (status === 'past_due') {
+        mappedStatus = 'past_due';
+    } else if (status === 'canceled' || status === 'unpaid') {
+        mappedStatus = 'canceled';
+    }
+
+    await handleSubscriptionUpdated(subscriptionId, mappedStatus);
+
+    return {
+        handled: true,
+        event: 'customer.subscription.updated',
+        message: `Subscription ${subscriptionId} updated to ${mappedStatus}`,
+    };
+}
+
+/**
+ * Handle subscription deleted (canceled)
+ */
+async function handleSubscriptionDeleted(
+    subscription: Stripe.Subscription
+): Promise<WebhookResult> {
+    const subscriptionId = subscription.id;
+
+    console.log(`[Webhook] Subscription deleted: ${subscriptionId}`);
+
+    await handleSubscriptionCanceled(subscriptionId);
+
+    return {
+        handled: true,
+        event: 'customer.subscription.deleted',
+        message: `Subscription ${subscriptionId} canceled`,
+    };
 }
 
 /**
