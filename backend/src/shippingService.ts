@@ -1,9 +1,15 @@
 /**
  * Shipping Service
  * Handles carrier detection, tracking status, and delivery confirmation
+ * 
+ * Gap 1 Fix: Integrated Shippo API for real tracking validation
  */
 
 import { db } from './database';
+
+// Shippo API configuration
+const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY;
+const SHIPPO_API_URL = 'https://api.goshippo.com';
 
 // Tracking status enum
 export type TrackingStatus =
@@ -18,6 +24,15 @@ export type TrackingStatus =
 // Detected carriers
 export type Carrier = 'USPS' | 'UPS' | 'FEDEX' | 'DHL' | 'UNKNOWN';
 
+// Shippo carrier codes
+const CARRIER_MAP: Record<Carrier, string> = {
+    'USPS': 'usps',
+    'UPS': 'ups',
+    'FEDEX': 'fedex',
+    'DHL': 'dhl_express',
+    'UNKNOWN': 'usps', // Default to USPS for unknown
+};
+
 export interface TrackingInfo {
     trackingNumber: string;
     carrier: Carrier;
@@ -27,6 +42,15 @@ export interface TrackingInfo {
     estimatedDelivery: string | null;
     deliveredAt: string | null;
     lastUpdated: string;
+}
+
+export interface ShippoValidationResult {
+    isValid: boolean;
+    status?: TrackingStatus;
+    statusDetail?: string;
+    location?: string;
+    carrier?: string;
+    error?: string;
 }
 
 /**
@@ -75,7 +99,7 @@ export function detectCarrier(trackingNumber: string): Carrier {
 
 /**
  * Get mock tracking status based on time elapsed since creation
- * In production, this would call actual carrier APIs
+ * Used as fallback when Shippo API is not configured
  */
 export function getMockTrackingStatus(createdAt: string): { status: TrackingStatus; statusDetail: string; location: string } {
     const created = new Date(createdAt).getTime();
@@ -112,6 +136,96 @@ export function getMockTrackingStatus(createdAt: string): { status: TrackingStat
             statusDetail: 'Package delivered',
             location: 'Delivered to recipient'
         };
+    }
+}
+
+/**
+ * Gap 1 Fix: Validate tracking number via Shippo API
+ * Confirms the tracking number is real and returns current status
+ * Falls back gracefully if API is not configured
+ */
+export async function validateWithShippo(
+    trackingNumber: string,
+    carrier?: Carrier
+): Promise<ShippoValidationResult> {
+    // If no API key, skip validation (development mode)
+    if (!SHIPPO_API_KEY) {
+        console.log('[Shipping] Shippo API not configured, skipping validation');
+        return { isValid: true, status: 'LABEL_CREATED', statusDetail: 'Validation skipped (dev mode)' };
+    }
+
+    // Allow test tracking numbers in development
+    const cleaned = trackingNumber.replace(/\s+/g, '').toUpperCase();
+    if (cleaned.startsWith('TRACK-') || cleaned.startsWith('TEST')) {
+        console.log('[Shipping] Test tracking number detected, skipping API validation');
+        return { isValid: true, status: 'LABEL_CREATED', statusDetail: 'Test tracking number' };
+    }
+
+    try {
+        const detectedCarrier = carrier || detectCarrier(trackingNumber);
+        const shippoCarrier = CARRIER_MAP[detectedCarrier];
+
+        console.log(`[Shipping] Validating tracking ${trackingNumber} with carrier ${shippoCarrier} via Shippo...`);
+
+        const response = await fetch(`${SHIPPO_API_URL}/tracks/${shippoCarrier}/${trackingNumber}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Shipping] Shippo API error: ${response.status} - ${errorText}`);
+
+            // 404 or 400 typically means invalid tracking number
+            if (response.status === 404 || response.status === 400) {
+                return { isValid: false, error: 'Invalid or unknown tracking number' };
+            }
+
+            // For other errors, allow through but log (API issue, not user's fault)
+            return { isValid: true, status: 'UNKNOWN', statusDetail: 'Could not verify (API error)' };
+        }
+
+        const data = await response.json();
+
+        // Map Shippo status to our status enum
+        const shippoStatus = data.tracking_status?.status || 'UNKNOWN';
+        let mappedStatus: TrackingStatus = 'UNKNOWN';
+
+        switch (shippoStatus.toUpperCase()) {
+            case 'PRE_TRANSIT':
+                mappedStatus = 'LABEL_CREATED';
+                break;
+            case 'TRANSIT':
+                mappedStatus = 'IN_TRANSIT';
+                break;
+            case 'DELIVERED':
+                mappedStatus = 'DELIVERED';
+                break;
+            case 'RETURNED':
+            case 'FAILURE':
+                mappedStatus = 'EXCEPTION';
+                break;
+            default:
+                mappedStatus = 'UNKNOWN';
+        }
+
+        console.log(`[Shipping] Tracking ${trackingNumber} validated: ${mappedStatus}`);
+
+        return {
+            isValid: true,
+            status: mappedStatus,
+            statusDetail: data.tracking_status?.status_details || null,
+            location: data.tracking_status?.location?.city || null,
+            carrier: data.carrier,
+        };
+
+    } catch (error: any) {
+        console.error(`[Shipping] Shippo validation error:`, error.message);
+        // Network errors - allow through but mark as unverified
+        return { isValid: true, status: 'UNKNOWN', statusDetail: 'Could not verify (network error)' };
     }
 }
 

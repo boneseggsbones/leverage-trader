@@ -345,12 +345,29 @@ export function validateChain(
     return { isValid: true };
 }
 
-// ============================================
-// Main Entry Points
-// ============================================
+/**
+ * Generate a hash for a cycle to match against rejected_chains
+ */
+function generateCycleHash(cycle: ChainCycle): string {
+    // Sort participants to make hash order-independent
+    const participantData = cycle.edges
+        .map(e => `${e.fromUserId}:${e.itemId}`)
+        .sort()
+        .join('|');
+
+    // Create a simple hash
+    let hash = 0;
+    for (let i = 0; i < participantData.length; i++) {
+        const char = participantData.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return `cycle_${Math.abs(hash).toString(16)}`;
+}
 
 /**
  * Scan the entire graph and find all valid chains
+ * Gap 2 Fix: Filters out rejected cycles within 30-day cooldown
  */
 export async function findValidChains(): Promise<ChainCycle[]> {
     console.log('[ChainMatch] Building trade graph...');
@@ -367,9 +384,30 @@ export async function findValidChains(): Promise<ChainCycle[]> {
     const allCycles = findAllCycles(graph);
     console.log(`[ChainMatch] Found ${allCycles.length} cycles`);
 
-    // Validate each cycle
+    // Gap 2 Fix: Load rejected cycle hashes (unexpired)
+    let rejectedHashes = new Set<string>();
+    try {
+        const rejectedRows = await dbAll<{ cycle_hash: string }>(
+            `SELECT cycle_hash FROM rejected_chains WHERE expires_at > datetime('now')`
+        );
+        rejectedHashes = new Set(rejectedRows.map(r => r.cycle_hash));
+        if (rejectedHashes.size > 0) {
+            console.log(`[ChainMatch] Filtering out ${rejectedHashes.size} rejected cycles`);
+        }
+    } catch (e) {
+        console.warn('[ChainMatch] Could not load rejected chains (table may not exist yet)');
+    }
+
+    // Validate each cycle and filter rejected ones
     const validCycles: ChainCycle[] = [];
     for (const cycle of allCycles) {
+        // Check if this cycle was previously rejected
+        const cycleHash = generateCycleHash(cycle);
+        if (rejectedHashes.has(cycleHash)) {
+            console.log(`[ChainMatch] Cycle ${cycleHash} filtered (on cooldown)`);
+            continue;
+        }
+
         const validation = validateChain(cycle, graph);
         if (validation.isValid) {
             validCycles.push(cycle);
