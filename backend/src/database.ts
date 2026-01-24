@@ -1,7 +1,13 @@
 import sqlite3 from 'sqlite3';
 import bcrypt from 'bcryptjs';
 
-const DBSOURCE = 'db.sqlite';
+// Database isolation: Use test.sqlite when running tests to prevent data contamination
+const isTestEnv = process.env.NODE_ENV === 'test';
+const DBSOURCE = isTestEnv ? 'test.sqlite' : 'db.sqlite';
+
+if (isTestEnv) {
+  console.log('[Database] Running in TEST mode - using test.sqlite');
+}
 
 const db = new sqlite3.Database(DBSOURCE);
 

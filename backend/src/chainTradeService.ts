@@ -111,11 +111,13 @@ function dbRun(sql: string, params: any[] = []): Promise<{ lastID: number; chang
 /**
  * P2 FIX: Generate a hash for a chain cycle to prevent re-proposing rejected chains
  * Hash is based on sorted participant IDs and item IDs to be order-independent
+ * MUST match the format in chainMatchService.ts to work correctly!
  */
 function generateCycleHash(proposal: ChainProposal): string {
     // Sort participants to make hash order-independent
+    // Format MUST match chainMatchService.ts: ${userId}:${givesItemId}
     const participantData = proposal.participants
-        .map(p => `${p.userId}:${p.givesItemId}:${p.receivesItemId}`)
+        .map(p => `${p.userId}:${p.givesItemId}`)
         .sort()
         .join('|');
 
