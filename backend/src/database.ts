@@ -457,6 +457,50 @@ const init = () => {
         last_checked TEXT DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_psa_cert_grade ON psa_certifications(grade);
+
+      -- =====================================================
+      -- CHAIN TRADE TABLES
+      -- =====================================================
+
+      -- Chain trade proposals (parent container for multi-party trades)
+      CREATE TABLE IF NOT EXISTS chain_proposals (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'PROPOSED',
+        total_value_cents INTEGER NOT NULL,
+        value_tolerance_percent INTEGER DEFAULT 15,
+        max_participants INTEGER DEFAULT 3,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT,
+        executed_at TEXT,
+        failed_reason TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_chain_proposals_status ON chain_proposals(status);
+
+      -- Chain participants (one row per user in chain)
+      CREATE TABLE IF NOT EXISTS chain_participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id TEXT NOT NULL REFERENCES chain_proposals(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        gives_item_id INTEGER NOT NULL REFERENCES Item(id),
+        receives_item_id INTEGER NOT NULL REFERENCES Item(id),
+        gives_to_user_id INTEGER NOT NULL REFERENCES User(id),
+        receives_from_user_id INTEGER NOT NULL REFERENCES User(id),
+        cash_delta INTEGER DEFAULT 0,
+        has_accepted INTEGER DEFAULT 0,
+        has_funded INTEGER DEFAULT 0,
+        has_shipped INTEGER DEFAULT 0,
+        tracking_number TEXT,
+        carrier TEXT,
+        has_received INTEGER DEFAULT 0,
+        accepted_at TEXT,
+        shipped_at TEXT,
+        received_at TEXT,
+        UNIQUE(chain_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_chain_participants_chain ON chain_participants(chain_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_participants_user ON chain_participants(user_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_participants_item ON chain_participants(gives_item_id);
     `, (err) => {
       if (err) {
         reject(err);
@@ -627,6 +671,9 @@ const migrate = () => {
         }
         if (!userColumns.includes('cycle_started_at')) {
           tasks.push(addColumnIfMissing('User', 'cycle_started_at', 'TEXT'));
+        }
+        if (!userColumns.includes('stripe_customer_id')) {
+          tasks.push(addColumnIfMissing('User', 'stripe_customer_id', 'TEXT'));
         }
 
         // Trade fee columns

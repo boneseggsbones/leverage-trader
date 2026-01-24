@@ -3328,6 +3328,207 @@ app.post('/api/ebay/import', async (req, res) => {
 });
 
 // =============================================================================
+// CHAIN TRADE ENDPOINTS
+// =============================================================================
+
+import {
+  scanAndPropose,
+  getChainProposalsForUser,
+  getChainProposal,
+  acceptChainProposal,
+  rejectChainProposal,
+  fundChainEscrow,
+  submitChainShipping,
+  verifyChainReceipt,
+  ChainStatus
+} from './chainTradeService';
+import { findValidChains, getGraphStats } from './chainMatchService';
+
+// Scan for chain trade opportunities and create proposals
+app.post('/api/chains/scan', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    console.log(`[ChainTrade] Scanning for chains for user ${userId}...`);
+    const proposals = await scanAndPropose(Number(userId));
+    res.json({ proposals, count: proposals.length });
+  } catch (err: any) {
+    console.error('[ChainTrade] Scan error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all chain proposals for a user
+app.get('/api/chains/proposals', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const proposals = await getChainProposalsForUser(Number(userId));
+    res.json({ proposals });
+  } catch (err: any) {
+    console.error('[ChainTrade] Get proposals error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a specific chain proposal
+app.get('/api/chains/:id', async (req, res) => {
+  const chainId = req.params.id;
+
+  try {
+    const proposal = await getChainProposal(chainId);
+    if (!proposal) {
+      return res.status(404).json({ error: 'Chain proposal not found' });
+    }
+    res.json({ proposal });
+  } catch (err: any) {
+    console.error('[ChainTrade] Get proposal error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Accept a chain proposal
+app.post('/api/chains/:id/accept', async (req, res) => {
+  const chainId = req.params.id;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const proposal = await acceptChainProposal(chainId, Number(userId));
+    res.json({ proposal, success: true });
+  } catch (err: any) {
+    console.error('[ChainTrade] Accept error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Reject a chain proposal (cancels the entire chain)
+app.post('/api/chains/:id/reject', async (req, res) => {
+  const chainId = req.params.id;
+  const { userId, reason } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const proposal = await rejectChainProposal(chainId, Number(userId), reason);
+    res.json({ proposal, success: true });
+  } catch (err: any) {
+    console.error('[ChainTrade] Reject error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Fund escrow for a chain trade
+app.post('/api/chains/:id/fund', async (req, res) => {
+  const chainId = req.params.id;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const proposal = await fundChainEscrow(chainId, Number(userId));
+    res.json({ proposal, success: true });
+  } catch (err: any) {
+    console.error('[ChainTrade] Fund error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Submit shipping for a chain leg
+app.post('/api/chains/:id/ship', async (req, res) => {
+  const chainId = req.params.id;
+  const { userId, trackingNumber, carrier } = req.body;
+
+  if (!userId || !trackingNumber) {
+    return res.status(400).json({ error: 'userId and trackingNumber are required' });
+  }
+
+  try {
+    const proposal = await submitChainShipping(chainId, Number(userId), trackingNumber, carrier || 'Unknown');
+    res.json({ proposal, success: true });
+  } catch (err: any) {
+    console.error('[ChainTrade] Ship error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Verify receipt for a chain leg
+app.post('/api/chains/:id/verify', async (req, res) => {
+  const chainId = req.params.id;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  try {
+    const proposal = await verifyChainReceipt(chainId, Number(userId));
+    res.json({ proposal, success: true });
+  } catch (err: any) {
+    console.error('[ChainTrade] Verify error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Admin: Get all valid chains in the system
+app.get('/api/admin/chains', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const chains = await findValidChains();
+    const stats = await getGraphStats();
+    res.json({ chains, stats });
+  } catch (err: any) {
+    console.error('[ChainTrade] Admin chains error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Get trade graph statistics
+app.get('/api/admin/chain-graph-stats', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const isAdmin = await checkAdminAuth(userId as string);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const stats = await getGraphStats();
+    res.json(stats);
+  } catch (err: any) {
+    console.error('[ChainTrade] Graph stats error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================================
 // PSA GRADING API ENDPOINTS
 // =============================================================================
 
