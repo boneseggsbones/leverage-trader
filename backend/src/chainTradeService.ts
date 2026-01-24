@@ -16,9 +16,10 @@ import { db } from './database';
 import { ChainCycle, findChainsForUser, findValidChains } from './chainMatchService';
 import { createNotification, NotificationType } from './notifications/notificationService';
 import { stripePaymentProvider } from './payments/stripeProvider';
+import { calculateTradeFee, incrementTradeCounter } from './feeService';
 import crypto from 'crypto';
 
-// Platform fee - everyone pays $15 as "skin in the game"
+// Platform fee - everyone pays $15 as "skin in the game" (unless Pro waived)
 const CHAIN_PLATFORM_FEE_CENTS = 1500; // $15.00
 
 // ============================================
@@ -407,33 +408,48 @@ export async function fundChainEscrow(chainId: string, userId: number): Promise<
         throw new Error('User has already funded escrow');
     }
 
-    // EVERYONE pays $15 platform fee + any cash they owe
-    // This is the "Chain Breaker" logic - skin in the game for all participants
-    const amountToCollect = participant.totalOwed; // platformFeeCents + max(0, cashDelta)
-
-    console.log(`[ChainTrade] User ${userId} funding escrow: $${(amountToCollect / 100).toFixed(2)} (fee: $${(participant.platformFeeCents / 100).toFixed(2)}, cash balance: $${(Math.max(0, participant.cashDelta) / 100).toFixed(2)})`);
-
-    // Create real Stripe PaymentIntent for escrow (fee is already included in totalOwed)
+    // Check if user qualifies for Pro waiver (Task 1.1b)
+    const feeResult = await calculateTradeFee(userId);
+    const feeComponent = feeResult.isWaived ? 0 : CHAIN_PLATFORM_FEE_CENTS;
     const cashComponent = Math.max(0, participant.cashDelta);
-    const feeComponent = participant.platformFeeCents;
+    const amountToCollect = cashComponent + feeComponent;
 
-    const paymentIntent = await stripePaymentProvider.createPaymentIntent(
-        cashComponent,           // Cash portion
-        'usd',
-        chainId,                 // Use chain ID as trade ID
-        userId,
-        { chainTrade: 'true', participantId: String(participant.id) },
-        feeComponent             // Platform fee ($15)
-    );
+    console.log(`[ChainTrade] User ${userId} funding escrow: $${(amountToCollect / 100).toFixed(2)} (fee: $${(feeComponent / 100).toFixed(2)}${feeResult.isWaived ? ' WAIVED' : ''}, cash: $${(cashComponent / 100).toFixed(2)})`);
 
-    // Store escrow hold with Stripe provider reference
-    const holdId = `hold_${crypto.randomUUID()}`;
-    await dbRun(`
-      INSERT INTO escrow_holds (id, trade_id, payer_id, recipient_id, amount, status, provider, provider_reference, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'PENDING', 'stripe', ?, datetime('now'), datetime('now'))
-    `, [holdId, chainId, userId, 0, amountToCollect, paymentIntent.providerReference]);
+    // If Pro user gets waiver but still has cash to pay
+    if (feeResult.isWaived && amountToCollect > 0) {
+        console.log(`[ChainTrade] Pro waiver applied for user ${userId}. Reason: ${feeResult.reason}`);
+    }
 
-    console.log(`[ChainTrade] Created Stripe PaymentIntent ${paymentIntent.id} for chain ${chainId}, user ${userId}`);
+    // Create Stripe PaymentIntent (only if there's money to collect)
+    let paymentIntentId: string | null = null;
+    if (amountToCollect > 0) {
+        const paymentIntent = await stripePaymentProvider.createPaymentIntent(
+            cashComponent,
+            'usd',
+            chainId,
+            userId,
+            { chainTrade: 'true', participantId: String(participant.id), feeWaived: String(feeResult.isWaived) },
+            feeComponent
+        );
+        paymentIntentId = paymentIntent.providerReference;
+
+        // Store escrow hold with Stripe provider reference
+        const holdId = `hold_${crypto.randomUUID()}`;
+        await dbRun(`
+          INSERT INTO escrow_holds (id, trade_id, payer_id, recipient_id, amount, status, provider, provider_reference, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'PENDING', 'stripe', ?, datetime('now'), datetime('now'))
+        `, [holdId, chainId, userId, 0, amountToCollect, paymentIntentId]);
+
+        console.log(`[ChainTrade] Created Stripe PaymentIntent ${paymentIntent.id} for chain ${chainId}, user ${userId}`);
+    } else {
+        console.log(`[ChainTrade] User ${userId} has nothing to pay (Pro waiver + no cash delta)`);
+    }
+
+    // Increment trade counter if waiver was used
+    if (feeResult.isWaived) {
+        await incrementTradeCounter(userId);
+    }
 
     await dbRun(`
       UPDATE chain_participants SET has_funded = 1 WHERE chain_id = ? AND user_id = ?
@@ -467,40 +483,80 @@ export async function fundChainEscrow(chainId: string, userId: number): Promise<
 }
 
 /**
- * Submit shipping for a chain leg
+ * Submit shipping for a chain leg (with "Green Light" logic - Task 3.2)
+ * All participants must submit tracking before the chain progresses
  */
 export async function submitChainShipping(
     chainId: string,
     userId: number,
     trackingNumber: string,
-    carrier: string
-): Promise<ChainProposal> {
+    carrier: string,
+    shippingPhotoUrl?: string
+): Promise<ChainProposal & { greenLight: boolean }> {
     const proposal = await getChainProposal(chainId);
     if (!proposal) throw new Error('Chain proposal not found');
 
-    if (proposal.status !== ChainStatus.SHIPPING) {
-        throw new Error('Chain must be in SHIPPING status');
+    // Allow shipping during both ESCROW_FUNDED and SHIPPING status
+    if (proposal.status !== ChainStatus.ESCROW_FUNDED && proposal.status !== ChainStatus.SHIPPING) {
+        throw new Error('Chain must be in ESCROW_FUNDED or SHIPPING status to submit shipping');
     }
 
     const participant = proposal.participants.find(p => p.userId === userId);
     if (!participant) throw new Error('User is not a participant in this chain');
 
+    if (participant.hasShipped) {
+        throw new Error('User has already submitted shipping');
+    }
+
+    // Update this participant's shipping info (with optional photo URL for Task 3.1)
     await dbRun(`
     UPDATE chain_participants 
     SET has_shipped = 1, tracking_number = ?, carrier = ?, shipped_at = datetime('now')
     WHERE chain_id = ? AND user_id = ?
   `, [trackingNumber, carrier, chainId, userId]);
 
-    // Notify the recipient
-    await createNotification(
-        participant.givesToUserId,
-        NotificationType.TRACKING_ADDED,
-        '📬 Item Shipped!',
-        `Your item is on its way! Tracking: ${trackingNumber}`,
-        null
-    );
+    // Check if ALL participants have now submitted tracking ("Green Light" logic)
+    const pendingShipments = await dbGet<{ count: number }>(`
+    SELECT COUNT(*) as count FROM chain_participants 
+    WHERE chain_id = ? AND has_shipped = 0
+  `, [chainId]);
 
-    return getChainProposal(chainId) as Promise<ChainProposal>;
+    const allShipped = pendingShipments?.count === 0;
+
+    if (allShipped) {
+        // GREEN LIGHT: Everyone has tracking! Move to SHIPPING status
+        await dbRun(`
+          UPDATE chain_proposals SET status = ?, updated_at = datetime('now') WHERE id = ?
+        `, [ChainStatus.SHIPPING, chainId]);
+
+        // Notify all participants: "Green Light - Drop off your packages now!"
+        for (const p of proposal.participants) {
+            await createNotification(
+                p.userId,
+                NotificationType.CHAIN_TRADE_SHIPPING,
+                '🟢 Green Light: Ship Now!',
+                `All ${proposal.participants.length} participants have tracking. Drop off your packages now!`,
+                null
+            );
+        }
+
+        console.log(`[ChainTrade] GREEN LIGHT for chain ${chainId} - all ${proposal.participants.length} participants have tracking`);
+    } else {
+        // Notify recipient that their item is coming
+        await createNotification(
+            participant.givesToUserId,
+            NotificationType.TRACKING_ADDED,
+            '📬 Item Shipped!',
+            `Your item is on its way! Tracking: ${trackingNumber}`,
+            null
+        );
+
+        // Notify the shipper they're waiting for others
+        console.log(`[ChainTrade] User ${userId} submitted tracking for chain ${chainId}. Waiting for ${pendingShipments?.count} more.`);
+    }
+
+    const updatedProposal = await getChainProposal(chainId) as ChainProposal;
+    return { ...updatedProposal, greenLight: allShipped };
 }
 
 /**

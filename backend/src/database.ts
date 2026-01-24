@@ -694,6 +694,14 @@ const migrate = () => {
           // user_value_overrides migrations
           tasks.push(addColumnIfMissing('user_value_overrides', 'original_api_value_cents', 'INTEGER'));
 
+          // =====================================================
+          // CHAIN TRADE SHIPPING PHOTO SCHEMA (Task 3.1)
+          // =====================================================
+          // Add shipping photo URL for proof-of-shipping verification
+          tasks.push(addColumnIfMissing('chain_participants', 'shipping_photo_url', 'TEXT'));
+          // Store raw carrier API responses for dispute resolution
+          tasks.push(addColumnIfMissing('chain_participants', 'carrier_status_raw', 'TEXT'));
+
           Promise.all(tasks).then(() => resolve()).catch(reject);
         });
       });
