@@ -17,6 +17,7 @@ import { ChainCycle, findChainsForUser, findValidChains } from './chainMatchServ
 import { createNotification, NotificationType } from './notifications/notificationService';
 import { stripePaymentProvider } from './payments/stripeProvider';
 import { calculateTradeFee, incrementTradeCounter } from './feeService';
+import { createTrackingRecord, detectCarrier } from './shippingService';
 import crypto from 'crypto';
 
 // Platform fee - everyone pays $15 as "skin in the game" (unless Pro waived)
@@ -105,6 +106,27 @@ function dbRun(sql: string, params: any[] = []): Promise<{ lastID: number; chang
             else resolve({ lastID: this.lastID, changes: this.changes });
         });
     });
+}
+
+/**
+ * P2 FIX: Generate a hash for a chain cycle to prevent re-proposing rejected chains
+ * Hash is based on sorted participant IDs and item IDs to be order-independent
+ */
+function generateCycleHash(proposal: ChainProposal): string {
+    // Sort participants to make hash order-independent
+    const participantData = proposal.participants
+        .map(p => `${p.userId}:${p.givesItemId}:${p.receivesItemId}`)
+        .sort()
+        .join('|');
+
+    // Create a simple hash (in production, use crypto.createHash)
+    let hash = 0;
+    for (let i = 0; i < participantData.length; i++) {
+        const char = participantData.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return `cycle_${Math.abs(hash).toString(16)}`;
 }
 
 // ============================================
@@ -314,14 +336,49 @@ export async function acceptChainProposal(chainId: string, userId: number): Prom
   `, [chainId]);
 
     if (allAccepted?.count === 0) {
-        // All accepted - move to LOCKED and lock items
-        await dbRun(`
-      UPDATE chain_proposals SET status = ?, updated_at = datetime('now') WHERE id = ?
-    `, [ChainStatus.LOCKED, chainId]);
+        // All accepted - move to LOCKED and lock items with OPTIMISTIC LOCKING
+        // P0 FIX: Prevent "Double-Spend" race condition by checking status = 'active'
+        const lockedItems: number[] = [];
 
-        // Lock all items
-        for (const p of proposal.participants) {
-            await dbRun(`UPDATE Item SET status = 'locked' WHERE id = ?`, [p.givesItemId]);
+        try {
+            for (const p of proposal.participants) {
+                // Only lock if item is still 'active' (not already locked by another trade)
+                const result = await dbRun(
+                    `UPDATE Item SET status = 'locked' WHERE id = ? AND status = 'active'`,
+                    [p.givesItemId]
+                );
+
+                // Check if update affected any rows (SQLite returns changes count)
+                const changes = await dbGet<{ changes: number }>(
+                    `SELECT changes() as changes`
+                );
+
+                if (!changes || changes.changes === 0) {
+                    // Item was already locked - rollback and fail the chain
+                    throw new Error(`Item ${p.givesItemId} already locked by another trade`);
+                }
+
+                lockedItems.push(p.givesItemId);
+            }
+
+            // All items successfully locked - update chain status
+            await dbRun(`
+              UPDATE chain_proposals SET status = ?, updated_at = datetime('now') WHERE id = ?
+            `, [ChainStatus.LOCKED, chainId]);
+
+        } catch (lockError: any) {
+            // Rollback: unlock any items we managed to lock
+            console.error(`[ChainTrade] Lock conflict for chain ${chainId}: ${lockError.message}`);
+            for (const itemId of lockedItems) {
+                await dbRun(`UPDATE Item SET status = 'active' WHERE id = ?`, [itemId]);
+            }
+
+            // Fail the chain proposal
+            await dbRun(`
+              UPDATE chain_proposals SET status = ?, failed_reason = ?, updated_at = datetime('now') WHERE id = ?
+            `, [ChainStatus.FAILED, `Race condition: ${lockError.message}`, chainId]);
+
+            throw new Error(`Chain could not be locked: ${lockError.message}`);
         }
 
         // Notify everyone that chain is locked
@@ -348,6 +405,7 @@ export async function acceptChainProposal(chainId: string, userId: number): Prom
 
 /**
  * Reject a chain proposal (cancels the entire chain)
+ * P2 FIX: Records rejection to prevent zombie chains from being re-proposed
  */
 export async function rejectChainProposal(chainId: string, userId: number, reason?: string): Promise<ChainProposal> {
     const proposal = await getChainProposal(chainId);
@@ -366,6 +424,22 @@ export async function rejectChainProposal(chainId: string, userId: number, reaso
     SET status = ?, failed_reason = ?, updated_at = datetime('now')
     WHERE id = ?
   `, [ChainStatus.FAILED, reason || `Rejected by user ${userId}`, chainId]);
+
+    // P2 FIX: Record this cycle hash to prevent re-proposing (30-day cooldown)
+    const cycleHash = generateCycleHash(proposal);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+    try {
+        await dbRun(`
+          INSERT OR REPLACE INTO rejected_chains (cycle_hash, rejected_by_user_id, original_chain_id, rejected_at, expires_at, reason)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [cycleHash, userId, chainId, now.toISOString(), expiresAt.toISOString(), reason || 'User rejection']);
+
+        console.log(`[ChainTrade] Recorded rejection for cycle ${cycleHash} by user ${userId}, expires ${expiresAt.toISOString()}`);
+    } catch (e) {
+        console.warn(`[ChainTrade] Could not record rejection (table may not exist yet):`, e);
+    }
 
     // Unlock all items
     for (const p of proposal.participants) {
@@ -508,12 +582,19 @@ export async function submitChainShipping(
         throw new Error('User has already submitted shipping');
     }
 
-    // Update this participant's shipping info (with optional photo URL for Task 3.1)
+    // P1 FIX: Data Schism - Use centralized shipment_tracking table for carrier API polling
+    // This ensures chain trades get auto-updated like direct trades
+    const detectedCarrier = carrier || detectCarrier(trackingNumber);
+    await createTrackingRecord(chainId, userId, trackingNumber);
+
+    // Update chain_participants flag for Green Light logic (keep tracking number for reference)
     await dbRun(`
     UPDATE chain_participants 
-    SET has_shipped = 1, tracking_number = ?, carrier = ?, shipped_at = datetime('now')
+    SET has_shipped = 1, tracking_number = ?, carrier = ?, shipped_at = datetime('now')${shippingPhotoUrl ? ', shipping_photo_url = ?' : ''}
     WHERE chain_id = ? AND user_id = ?
-  `, [trackingNumber, carrier, chainId, userId]);
+  `, shippingPhotoUrl
+        ? [trackingNumber, detectedCarrier, shippingPhotoUrl, chainId, userId]
+        : [trackingNumber, detectedCarrier, chainId, userId]);
 
     // Check if ALL participants have now submitted tracking ("Green Light" logic)
     const pendingShipments = await dbGet<{ count: number }>(`

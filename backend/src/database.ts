@@ -501,6 +501,19 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_chain_participants_chain ON chain_participants(chain_id);
       CREATE INDEX IF NOT EXISTS idx_chain_participants_user ON chain_participants(user_id);
       CREATE INDEX IF NOT EXISTS idx_chain_participants_item ON chain_participants(gives_item_id);
+
+      -- P2 FIX: Rejected chains cooldown (prevent "Zombie" chains from being re-proposed)
+      CREATE TABLE IF NOT EXISTS rejected_chains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_hash TEXT NOT NULL UNIQUE,  -- Hash of participants/items to identify duplicate cycles
+        rejected_by_user_id INTEGER NOT NULL REFERENCES User(id),
+        original_chain_id TEXT REFERENCES chain_proposals(id),
+        rejected_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,  -- 30-day cooldown
+        reason TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_rejected_chains_hash ON rejected_chains(cycle_hash);
+      CREATE INDEX IF NOT EXISTS idx_rejected_chains_expires ON rejected_chains(expires_at);
     `, (err) => {
       if (err) {
         reject(err);
