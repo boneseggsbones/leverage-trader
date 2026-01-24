@@ -4,7 +4,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   transformIgnorePatterns: [
-    'node_modules/(?!(@auth)/)'
+    'node_modules/(?!(@auth|@faker-js)/)'
   ],
   transform: {
     '^.+\\.(ts|tsx)$': 'ts-jest',

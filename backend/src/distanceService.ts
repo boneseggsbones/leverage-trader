@@ -219,3 +219,8 @@ export function getCoordinates(
 export function getZipCodeData(zipCode: string): { lat: number; lng: number; city: string; state: string } | null {
     return ZIP_COORDINATES[zipCode] || null;
 }
+
+/**
+ * Export list of known zip codes for simulation/testing
+ */
+export const KNOWN_ZIP_CODES = Object.keys(ZIP_COORDINATES);
