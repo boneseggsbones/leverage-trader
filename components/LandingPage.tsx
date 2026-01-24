@@ -43,7 +43,7 @@ const LandingPage: React.FC = () => {
                             </h1>
                             <p className="text-xl text-gray-600 mb-8 leading-relaxed">
                                 Turn your collectibles into exactly what you want.{' '}
-                                <span className="text-indigo-600 font-medium">No fees, just fair trades.</span>
+                                <span className="text-indigo-600 font-medium">Transparent fees. Protected trades.</span>
                             </p>
 
                             {/* ELI5 Explanation */}
@@ -89,12 +89,12 @@ const LandingPage: React.FC = () => {
                 <div className="max-w-6xl mx-auto px-6">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
                         <div>
-                            <p className="text-4xl font-bold">0%</p>
-                            <p className="text-indigo-200 mt-1">Trading Fees</p>
+                            <p className="text-4xl font-bold">$15</p>
+                            <p className="text-indigo-200 mt-1">Flat Escrow Fee</p>
                         </div>
                         <div>
                             <p className="text-4xl font-bold">$0</p>
-                            <p className="text-indigo-200 mt-1">To Get Started</p>
+                            <p className="text-indigo-200 mt-1">With Pro Membership</p>
                         </div>
                         <div>
                             <p className="text-4xl font-bold">24/7</p>
@@ -198,6 +198,104 @@ const LandingPage: React.FC = () => {
                 </div>
             </section>
 
+            {/* Pricing Section */}
+            <section className="py-24 px-6 bg-gradient-to-br from-slate-50 to-indigo-50">
+                <div className="max-w-5xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-4xl font-bold text-gray-900 mb-4">
+                            Simple, Transparent Pricing
+                        </h2>
+                        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                            Pay only when you trade. Go Pro to save even more.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                        {/* Free Tier */}
+                        <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-200 relative">
+                            <div className="mb-6">
+                                <h3 className="text-xl font-bold text-gray-900 mb-2">Free Account</h3>
+                                <p className="text-gray-500 text-sm">Perfect for occasional traders</p>
+                            </div>
+                            <div className="mb-6">
+                                <span className="text-5xl font-bold text-gray-900">$15</span>
+                                <span className="text-gray-500 ml-2">per trade</span>
+                            </div>
+                            <ul className="space-y-3 mb-8">
+                                <li className="flex items-center gap-3 text-gray-600">
+                                    <span className="text-green-500">✓</span>
+                                    Full escrow protection
+                                </li>
+                                <li className="flex items-center gap-3 text-gray-600">
+                                    <span className="text-green-500">✓</span>
+                                    Smart trade matching
+                                </li>
+                                <li className="flex items-center gap-3 text-gray-600">
+                                    <span className="text-green-500">✓</span>
+                                    Real market valuations
+                                </li>
+                                <li className="flex items-center gap-3 text-gray-600">
+                                    <span className="text-green-500">✓</span>
+                                    Dispute resolution
+                                </li>
+                            </ul>
+                            <Link
+                                to="/login"
+                                className="block w-full text-center py-3 px-6 rounded-full border-2 border-gray-200 text-gray-700 font-semibold hover:border-indigo-300 hover:text-indigo-600 transition-all"
+                            >
+                                Get Started Free
+                            </Link>
+                        </div>
+
+                        {/* Pro Tier */}
+                        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-3xl p-8 shadow-xl relative overflow-hidden">
+                            <div className="absolute top-4 right-4 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                                BEST VALUE
+                            </div>
+                            <div className="mb-6">
+                                <h3 className="text-xl font-bold text-white mb-2">Leverage Pro</h3>
+                                <p className="text-indigo-200 text-sm">For serious collectors</p>
+                            </div>
+                            <div className="mb-6">
+                                <span className="text-5xl font-bold text-white">$12</span>
+                                <span className="text-indigo-200 ml-2">/month</span>
+                            </div>
+                            <ul className="space-y-3 mb-8">
+                                <li className="flex items-center gap-3 text-white">
+                                    <span className="text-orange-400">✓</span>
+                                    <strong>3 free trades/month</strong>
+                                </li>
+                                <li className="flex items-center gap-3 text-indigo-100">
+                                    <span className="text-orange-400">✓</span>
+                                    Skip escrow fees entirely
+                                </li>
+                                <li className="flex items-center gap-3 text-indigo-100">
+                                    <span className="text-orange-400">✓</span>
+                                    eBay inventory import
+                                </li>
+                                <li className="flex items-center gap-3 text-indigo-100">
+                                    <span className="text-orange-400">✓</span>
+                                    Pro badge on profile
+                                </li>
+                                <li className="flex items-center gap-3 text-indigo-100">
+                                    <span className="text-orange-400">✓</span>
+                                    Advanced analytics
+                                </li>
+                            </ul>
+                            <Link
+                                to="/pro"
+                                className="block w-full text-center py-3 px-6 rounded-full bg-white text-indigo-600 font-bold hover:bg-indigo-50 transition-all shadow-lg"
+                            >
+                                Upgrade to Pro →
+                            </Link>
+                            <p className="text-center text-indigo-200 text-xs mt-4">
+                                Save up to $45/month on trades
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* What You Can Trade */}
             <section className="py-24 px-6">
                 <div className="max-w-6xl mx-auto">
@@ -286,7 +384,7 @@ const LandingPage: React.FC = () => {
                         Get Started — It's Free →
                     </Link>
                     <p className="text-sm text-gray-500 mt-6">
-                        No credit card required. No fees ever.
+                        $15 per trade for secure escrow protection, or go Pro for unlimited fee-free trading.
                     </p>
                 </div>
             </section>
