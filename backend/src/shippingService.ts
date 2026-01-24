@@ -266,21 +266,21 @@ export async function createTrackingRecord(
 }
 
 /**
- * Get tracking info for a trade
+ * Get tracking info for a trade - uses LIVE Shippo API for status updates
  */
 export async function getTrackingForTrade(tradeId: string): Promise<{
     proposerTracking: TrackingInfo | null;
     receiverTracking: TrackingInfo | null;
 }> {
     return new Promise((resolve, reject) => {
-        db.all('SELECT * FROM shipment_tracking WHERE trade_id = ?', [tradeId], (err: Error | null, rows: any[]) => {
+        db.all('SELECT * FROM shipment_tracking WHERE trade_id = ?', [tradeId], async (err: Error | null, rows: any[]) => {
             if (err) {
                 reject(err);
                 return;
             }
 
             // Get trade to know who is proposer/receiver
-            db.get('SELECT proposerId, receiverId FROM trades WHERE id = ?', [tradeId], (err2: Error | null, trade: any) => {
+            db.get('SELECT proposerId, receiverId FROM trades WHERE id = ?', [tradeId], async (err2: Error | null, trade: any) => {
                 if (err2) {
                     reject(err2);
                     return;
@@ -289,32 +289,120 @@ export async function getTrackingForTrade(tradeId: string): Promise<{
                 let proposerTracking: TrackingInfo | null = null;
                 let receiverTracking: TrackingInfo | null = null;
 
-                rows?.forEach((row: any) => {
-                    // Update status based on time (mock API)
-                    const mockStatus = getMockTrackingStatus(row.created_at);
+                // Process each tracking record with LIVE Shippo status
+                for (const row of rows || []) {
+                    let trackingInfo: TrackingInfo;
 
-                    const trackingInfo: TrackingInfo = {
-                        trackingNumber: row.tracking_number,
-                        carrier: row.carrier as Carrier,
-                        status: mockStatus.status,
-                        statusDetail: mockStatus.statusDetail,
-                        location: mockStatus.location,
-                        estimatedDelivery: row.estimated_delivery,
-                        deliveredAt: mockStatus.status === 'DELIVERED' ? new Date().toISOString() : null,
-                        lastUpdated: new Date().toISOString()
-                    };
+                    // Use Shippo API if configured, otherwise fall back to mock
+                    if (SHIPPO_API_KEY) {
+                        const liveStatus = await fetchLiveTrackingStatus(
+                            row.tracking_number,
+                            row.carrier as Carrier
+                        );
+
+                        trackingInfo = {
+                            trackingNumber: row.tracking_number,
+                            carrier: row.carrier as Carrier,
+                            status: liveStatus.status,
+                            statusDetail: liveStatus.statusDetail || null,
+                            location: liveStatus.location || null,
+                            estimatedDelivery: liveStatus.estimatedDelivery || null,
+                            deliveredAt: liveStatus.status === 'DELIVERED' ? new Date().toISOString() : null,
+                            lastUpdated: new Date().toISOString()
+                        };
+
+                        // Update cached status in database
+                        db.run(
+                            `UPDATE shipment_tracking SET status = ?, status_detail = ?, location = ?, last_updated = ? WHERE trade_id = ? AND user_id = ?`,
+                            [liveStatus.status, liveStatus.statusDetail, liveStatus.location, new Date().toISOString(), tradeId, row.user_id]
+                        );
+                    } else {
+                        // Fallback to mock for development
+                        const mockStatus = getMockTrackingStatus(row.created_at);
+                        trackingInfo = {
+                            trackingNumber: row.tracking_number,
+                            carrier: row.carrier as Carrier,
+                            status: mockStatus.status,
+                            statusDetail: mockStatus.statusDetail,
+                            location: mockStatus.location,
+                            estimatedDelivery: row.estimated_delivery,
+                            deliveredAt: mockStatus.status === 'DELIVERED' ? new Date().toISOString() : null,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
 
                     if (String(row.user_id) === String(trade?.proposerId)) {
                         proposerTracking = trackingInfo;
                     } else if (String(row.user_id) === String(trade?.receiverId)) {
                         receiverTracking = trackingInfo;
                     }
-                });
+                }
 
                 resolve({ proposerTracking, receiverTracking });
             });
         });
     });
+}
+
+/**
+ * Fetch live tracking status from Shippo API
+ */
+async function fetchLiveTrackingStatus(
+    trackingNumber: string,
+    carrier: Carrier
+): Promise<{
+    status: TrackingStatus;
+    statusDetail: string | null;
+    location: string | null;
+    estimatedDelivery: string | null;
+}> {
+    // Allow test tracking numbers
+    const cleaned = trackingNumber.replace(/\s+/g, '').toUpperCase();
+    if (cleaned.startsWith('TRACK-') || cleaned.startsWith('TEST')) {
+        return { status: 'IN_TRANSIT', statusDetail: 'Test tracking number', location: null, estimatedDelivery: null };
+    }
+
+    try {
+        const shippoCarrier = CARRIER_MAP[carrier];
+        const response = await fetch(`${SHIPPO_API_URL}/tracks/${shippoCarrier}/${trackingNumber}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            console.error(`[Shipping] Shippo status fetch failed: ${response.status}`);
+            return { status: 'UNKNOWN', statusDetail: 'Could not fetch status', location: null, estimatedDelivery: null };
+        }
+
+        const data = await response.json();
+
+        // Map Shippo status
+        const shippoStatus = data.tracking_status?.status || 'UNKNOWN';
+        let mappedStatus: TrackingStatus = 'UNKNOWN';
+
+        switch (shippoStatus.toUpperCase()) {
+            case 'PRE_TRANSIT': mappedStatus = 'LABEL_CREATED'; break;
+            case 'TRANSIT': mappedStatus = 'IN_TRANSIT'; break;
+            case 'DELIVERED': mappedStatus = 'DELIVERED'; break;
+            case 'RETURNED':
+            case 'FAILURE': mappedStatus = 'EXCEPTION'; break;
+            default: mappedStatus = 'IN_TRANSIT';
+        }
+
+        return {
+            status: mappedStatus,
+            statusDetail: data.tracking_status?.status_details || null,
+            location: data.tracking_status?.location?.city || null,
+            estimatedDelivery: data.eta || null,
+        };
+
+    } catch (error: any) {
+        console.error(`[Shipping] Error fetching live status:`, error.message);
+        return { status: 'UNKNOWN', statusDetail: 'Network error', location: null, estimatedDelivery: null };
+    }
 }
 
 /**
