@@ -17,6 +17,9 @@ import { ChainCycle, findChainsForUser, findValidChains } from './chainMatchServ
 import { createNotification, NotificationType } from './notifications/notificationService';
 import crypto from 'crypto';
 
+// Platform fee - everyone pays $15 as "skin in the game"
+const CHAIN_PLATFORM_FEE_CENTS = 1500; // $15.00
+
 // ============================================
 // Types
 // ============================================
@@ -58,6 +61,8 @@ export interface ChainParticipant {
     givesToUserId: number;
     receivesFromUserId: number;
     cashDelta: number;
+    platformFeeCents: number; // $15 per participant
+    totalOwed: number; // cashDelta + platformFeeCents
     hasAccepted: boolean;
     hasFunded: boolean;
     hasShipped: boolean;
@@ -207,28 +212,35 @@ export async function getChainProposal(chainId: string): Promise<ChainProposal |
     ORDER BY cp.id
   `, [chainId]);
 
-    const participants: ChainParticipant[] = participantRows.map(row => ({
-        id: row.id,
-        chainId: row.chain_id,
-        userId: row.user_id,
-        userName: row.user_name,
-        givesItemId: row.gives_item_id,
-        givesItemName: row.gives_item_name,
-        receivesItemId: row.receives_item_id,
-        receivesItemName: row.receives_item_name,
-        givesToUserId: row.gives_to_user_id,
-        receivesFromUserId: row.receives_from_user_id,
-        cashDelta: row.cash_delta,
-        hasAccepted: !!row.has_accepted,
-        hasFunded: !!row.has_funded,
-        hasShipped: !!row.has_shipped,
-        trackingNumber: row.tracking_number,
-        carrier: row.carrier,
-        hasReceived: !!row.has_received,
-        acceptedAt: row.accepted_at,
-        shippedAt: row.shipped_at,
-        receivedAt: row.received_at,
-    }));
+    const participants: ChainParticipant[] = participantRows.map(row => {
+        const cashDelta = row.cash_delta || 0;
+        const platformFeeCents = CHAIN_PLATFORM_FEE_CENTS;
+        const totalOwed = Math.max(0, cashDelta) + platformFeeCents; // Fee + any cash owed
+        return {
+            id: row.id,
+            chainId: row.chain_id,
+            userId: row.user_id,
+            userName: row.user_name,
+            givesItemId: row.gives_item_id,
+            givesItemName: row.gives_item_name,
+            receivesItemId: row.receives_item_id,
+            receivesItemName: row.receives_item_name,
+            givesToUserId: row.gives_to_user_id,
+            receivesFromUserId: row.receives_from_user_id,
+            cashDelta: cashDelta,
+            platformFeeCents: platformFeeCents,
+            totalOwed: totalOwed,
+            hasAccepted: !!row.has_accepted,
+            hasFunded: !!row.has_funded,
+            hasShipped: !!row.has_shipped,
+            trackingNumber: row.tracking_number,
+            carrier: row.carrier,
+            hasReceived: !!row.has_received,
+            acceptedAt: row.accepted_at,
+            shippedAt: row.shipped_at,
+            receivedAt: row.received_at,
+        };
+    });
 
     return {
         id: proposal.id,
@@ -390,23 +402,26 @@ export async function fundChainEscrow(chainId: string, userId: number): Promise<
     const participant = proposal.participants.find(p => p.userId === userId);
     if (!participant) throw new Error('User is not a participant in this chain');
 
-    if (participant.cashDelta <= 0) {
-        // User doesn't owe anything, mark as funded
-        await dbRun(`
-      UPDATE chain_participants SET has_funded = 1 WHERE chain_id = ? AND user_id = ?
-    `, [chainId, userId]);
-    } else {
-        // Create escrow hold (simplified - in production, integrate with payment provider)
-        const holdId = `hold_${crypto.randomUUID()}`;
-        await dbRun(`
+    if (participant.hasFunded) {
+        throw new Error('User has already funded escrow');
+    }
+
+    // EVERYONE pays $15 platform fee + any cash they owe
+    // This is the "Chain Breaker" logic - skin in the game for all participants
+    const holdId = `hold_${crypto.randomUUID()}`;
+    const amountToCollect = participant.totalOwed; // platformFeeCents + max(0, cashDelta)
+
+    console.log(`[ChainTrade] User ${userId} funding escrow: $${(amountToCollect / 100).toFixed(2)} (fee: $${(participant.platformFeeCents / 100).toFixed(2)}, cash balance: $${(Math.max(0, participant.cashDelta) / 100).toFixed(2)})`);
+
+    // Create escrow hold for fee + any cash obligation
+    await dbRun(`
       INSERT INTO escrow_holds (id, trade_id, payer_id, recipient_id, amount, status, provider, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 'HELD', 'mock', datetime('now'), datetime('now'))
-    `, [holdId, chainId, userId, 0, participant.cashDelta]); // recipient 0 = pool
+    `, [holdId, chainId, userId, 0, amountToCollect]); // recipient 0 = platform pool
 
-        await dbRun(`
+    await dbRun(`
       UPDATE chain_participants SET has_funded = 1 WHERE chain_id = ? AND user_id = ?
     `, [chainId, userId]);
-    }
 
     // Check if all participants have funded
     const allFunded = await dbGet<{ count: number }>(`
