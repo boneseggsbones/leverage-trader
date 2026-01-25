@@ -254,15 +254,25 @@ export const useNewUserSetup = () => {
         if (isComplete) {
             setSetupComplete(true);
         } else if (currentUser) {
-            // Show setup modal for new users
-            setShowSetup(true);
+            // If user already has profile data (name, city, state), they're an existing user
+            // Mark as complete and don't show the modal or tour
+            const hasProfileData = currentUser.name && currentUser.city && currentUser.state;
+            if (hasProfileData) {
+                localStorage.setItem(SETUP_COMPLETE_KEY, 'true');
+                localStorage.setItem('leverage_walkthrough_completed', 'true');
+                setSetupComplete(true);
+            } else {
+                // Show setup modal for truly new users
+                setShowSetup(true);
+            }
         }
     }, [currentUser]);
 
     const completeSetup = () => {
         setShowSetup(false);
         setSetupComplete(true);
-        // Clear walkthrough so it shows after setup
+        localStorage.setItem(SETUP_COMPLETE_KEY, 'true');
+        // Clear walkthrough so it shows after setup for new users
         localStorage.removeItem('leverage_walkthrough_completed');
     };
 

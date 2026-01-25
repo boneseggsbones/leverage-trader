@@ -26,6 +26,14 @@ const Header: React.FC = () => {
         };
     }, []);
 
+    // Clean up any leftover walkthrough highlight classes on mount
+    useEffect(() => {
+        const navIds = ['nav-discover', 'nav-inventory', 'nav-trades', 'nav-analytics'];
+        navIds.forEach(id => {
+            document.getElementById(id)?.classList.remove('walkthrough-highlight');
+        });
+    }, []);
+
     if (!currentUser) return null;
 
     const navItems = [

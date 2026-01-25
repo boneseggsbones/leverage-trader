@@ -111,6 +111,68 @@ const AccountSection: React.FC<AccountSectionProps> = ({ user, onUpdate }) => {
                 </div>
             )}
 
+            {/* Subscription Status */}
+            <div className={`rounded-xl border p-6 ${user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active'
+                    ? 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-300 dark:border-amber-600'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                }`}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active'
+                                ? 'bg-gradient-to-r from-amber-400 to-yellow-500'
+                                : 'bg-gray-100 dark:bg-gray-700'
+                            }`}>
+                            {user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active' ? '✨' : '🎟️'}
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+                                {user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active'
+                                    ? 'Leverage Pro'
+                                    : 'Free Plan'
+                                }
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active'
+                                    ? `${3 - (user.tradesThisCycle || 0)} free trades remaining this month`
+                                    : '$15/trade escrow fee applies'
+                                }
+                            </p>
+                        </div>
+                    </div>
+                    <div>
+                        {user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active' ? (
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const response = await fetch('http://localhost:4000/api/subscription/portal', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ userId: user.id }),
+                                        });
+                                        const data = await response.json();
+                                        if (data.portalUrl) {
+                                            window.location.href = data.portalUrl;
+                                        }
+                                    } catch (err) {
+                                        console.error('Failed to open portal:', err);
+                                    }
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 dark:hover:bg-amber-900/70 rounded-lg transition-colors"
+                            >
+                                Manage Subscription
+                            </button>
+                        ) : (
+                            <a
+                                href="/pro"
+                                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 rounded-lg transition-colors inline-block"
+                            >
+                                Upgrade to Pro
+                            </a>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Contact Information */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">

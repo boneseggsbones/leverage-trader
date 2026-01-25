@@ -24,7 +24,7 @@ import { watchItem, unwatchItem, getWatchlist, isWatching, removeWatch, findMatc
 import { normalizeLocation, normalizeCity, normalizeState } from './locationUtils';
 import { calculateDistance, getCoordinates, getZipCodeData } from './distanceService';
 import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStripeConfigured } from './payments/paymentMethodService';
-import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession } from './subscriptionService';
+import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession, syncSubscriptionFromStripe } from './subscriptionService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -582,7 +582,16 @@ app.get('/api/users/:id', (req, res) => {
           return;
         }
         const wishlist = wishlistRows.map((w: any) => w.itemId);
-        res.json({ ...row, inventory: items, wishlist });
+        // Map subscription fields from snake_case to camelCase
+        const userWithSubscription = {
+          ...row,
+          subscriptionTier: row.subscription_tier || 'FREE',
+          subscriptionStatus: row.subscription_status || 'none',
+          tradesThisCycle: row.trades_this_cycle || 0,
+          inventory: items,
+          wishlist
+        };
+        res.json(userWithSubscription);
       });
     });
   });
@@ -701,10 +710,12 @@ app.post('/api/subscription/checkout', async (req, res) => {
     return res.status(400).json({ error: 'userId is required' });
   }
 
+  // Note: We pass a generic success URL that the frontend will handle
+  // The ProUpgradePage will show success message and guide user to their profile
   const result = await createProCheckoutSession(
     parseInt(userId, 10),
-    'http://localhost:5173/pro?success=true',
-    'http://localhost:5173/pro?canceled=true'
+    `http://localhost:3000/profile/${userId}?upgraded=true`,
+    'http://localhost:3000/pro?canceled=true'
   );
 
   if (result.success) {
@@ -739,7 +750,7 @@ app.post('/api/subscription/portal', async (req, res) => {
 
   const result = await createCustomerPortalSession(
     parseInt(userId, 10),
-    'http://localhost:5173/pro'
+    'http://localhost:3000/pro'
   );
 
   if ('url' in result) {
@@ -747,6 +758,18 @@ app.post('/api/subscription/portal', async (req, res) => {
   } else {
     res.status(400).json({ error: result.error });
   }
+});
+
+// Sync subscription status from Stripe (for local dev without webhooks)
+app.post('/api/subscription/sync', async (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  const result = await syncSubscriptionFromStripe(parseInt(userId, 10));
+  res.json(result);
 });
 
 // =====================================================

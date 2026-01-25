@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
 import { fetchUser, fetchCompletedTradesForUser, fetchAllItems, fetchTradesForUser } from '../api/api.ts';
 import { User, Trade, Item, TradeStatus } from '../types.ts';
 import ItemCard from './ItemCard.tsx';
@@ -19,6 +19,7 @@ const ProfilePage: React.FC = () => {
     const { currentUser, oauthProfile } = useAuth();
     const navigate = useNavigate();
     const { userId } = useParams<{ userId: string }>();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [profileUser, setProfileUser] = useState<User | null>(null);
     const [completedTrades, setCompletedTrades] = useState<Trade[]>([]);
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
@@ -30,8 +31,39 @@ const ProfilePage: React.FC = () => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [tradesWith, setTradesWith] = useState<Trade[]>([]);
     const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
+    const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
 
     const isCurrentUserProfile = currentUser?.id?.toString() === userId;
+
+    // Handle upgraded=true from Stripe redirect
+    useEffect(() => {
+        const handleUpgrade = async () => {
+            if (searchParams.get('upgraded') === 'true' && userId) {
+                // Sync subscription from Stripe
+                try {
+                    const response = await fetch('http://localhost:4000/api/subscription/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId }),
+                    });
+                    const data = await response.json();
+                    if (data.tier === 'PRO') {
+                        setUpgradeMessage('🎉 Welcome to Pro! Your subscription is now active.');
+                        setActiveTab('account');
+                        // Reload profile data to get updated subscription status
+                        const updatedUser = await fetchUser(userId);
+                        if (updatedUser) setProfileUser(updatedUser);
+                    }
+                } catch (err) {
+                    console.error('Failed to sync subscription:', err);
+                }
+                // Clear the URL param
+                searchParams.delete('upgraded');
+                setSearchParams(searchParams, { replace: true });
+            }
+        };
+        handleUpgrade();
+    }, [searchParams, userId, setSearchParams]);
 
     useEffect(() => {
         if (!userId) {
@@ -131,6 +163,19 @@ const ProfilePage: React.FC = () => {
 
         return (
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Pro Upgrade Success Banner */}
+                {upgradeMessage && (
+                    <div className="mb-6 px-6 py-4 bg-gradient-to-r from-emerald-500/20 to-green-500/20 border border-emerald-500/50 rounded-xl text-emerald-700 dark:text-emerald-300 font-medium flex items-center justify-between">
+                        <span>{upgradeMessage}</span>
+                        <button
+                            onClick={() => setUpgradeMessage(null)}
+                            className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
                 {/* Compact Header */}
                 <div className="mb-6 flex items-center gap-4">
                     <img
@@ -139,7 +184,14 @@ const ProfilePage: React.FC = () => {
                         className="w-16 h-16 rounded-full border-4 border-white dark:border-gray-700 shadow-lg object-cover"
                     />
                     <div className="flex-1">
-                        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">{profileUser.name}</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">{profileUser.name}</h1>
+                            {profileUser.subscriptionTier === 'PRO' && profileUser.subscriptionStatus === 'active' && (
+                                <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 rounded-full text-xs font-bold">
+                                    PRO
+                                </span>
+                            )}
+                        </div>
                         <p className="text-gray-500 dark:text-gray-400">
                             {profileUser.city && profileUser.state ? `${profileUser.city}, ${profileUser.state}` : 'Location not set'} • Member for {accountAgeString}
                         </p>
@@ -162,8 +214,8 @@ const ProfilePage: React.FC = () => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
                                     }`}
                             >
                                 <span className="mr-2">{tab.icon}</span>
@@ -220,7 +272,7 @@ const ProfilePage: React.FC = () => {
                             )}
 
                             {/* Quick Links */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                 <Link
                                     to="/inventory"
                                     className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors"
@@ -242,6 +294,27 @@ const ProfilePage: React.FC = () => {
                                     <span className="text-2xl">🔄</span>
                                     <span className="text-gray-700 dark:text-gray-300 font-medium">Active Trades</span>
                                 </Link>
+                                {/* Pro Subscription Link / Badge */}
+                                {profileUser.subscriptionTier === 'PRO' && profileUser.subscriptionStatus === 'active' ? (
+                                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-amber-300 dark:border-amber-600">
+                                        <span className="text-2xl">✨</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-700 dark:text-gray-300 font-medium">Pro Member</span>
+                                            <span className="text-xs text-amber-600 dark:text-amber-400">{3 - (profileUser.tradesThisCycle || 0)} free trades left</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <Link
+                                        to="/pro"
+                                        className="flex items-center gap-3 p-4 rounded-xl border transition-colors bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/30 dark:to-purple-900/30 border-violet-300 dark:border-violet-600 hover:border-violet-500"
+                                    >
+                                        <span className="text-2xl">✨</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-700 dark:text-gray-300 font-medium">Upgrade to Pro</span>
+                                            <span className="text-xs text-violet-600 dark:text-violet-400">3 free trades/month</span>
+                                        </div>
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     )}

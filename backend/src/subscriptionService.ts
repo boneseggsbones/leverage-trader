@@ -254,3 +254,64 @@ export async function createCustomerPortalSession(
         return { error: err.message };
     }
 }
+
+/**
+ * Sync subscription status directly from Stripe
+ * Useful for local development where webhooks can't reach localhost
+ */
+export async function syncSubscriptionFromStripe(userId: number): Promise<{ synced: boolean; tier: string; error?: string }> {
+    if (!stripe) {
+        return { synced: false, tier: 'FREE', error: 'Stripe not configured' };
+    }
+
+    try {
+        const user = await new Promise<any>((resolve, reject) => {
+            db.get('SELECT stripe_customer_id FROM User WHERE id = ?', [userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!user?.stripe_customer_id) {
+            return { synced: false, tier: 'FREE' };
+        }
+
+        // Fetch subscriptions from Stripe
+        const subscriptions = await stripe.subscriptions.list({
+            customer: user.stripe_customer_id,
+            status: 'active',
+            limit: 1,
+        });
+
+        if (subscriptions.data.length > 0) {
+            const sub = subscriptions.data[0];
+            const now = new Date().toISOString();
+
+            // Update user's subscription status
+            await new Promise<void>((resolve, reject) => {
+                db.run(
+                    `UPDATE User SET 
+                        subscription_tier = 'PRO',
+                        subscription_status = 'active',
+                        subscription_stripe_id = ?,
+                        trades_this_cycle = COALESCE(trades_this_cycle, 0),
+                        cycle_started_at = COALESCE(cycle_started_at, ?)
+                    WHERE id = ?`,
+                    [sub.id, now, userId],
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+
+            console.log(`[Subscription] Synced user ${userId} to PRO from Stripe`);
+            return { synced: true, tier: 'PRO' };
+        }
+
+        return { synced: true, tier: 'FREE' };
+    } catch (err: any) {
+        console.error('[Subscription] Error syncing from Stripe:', err);
+        return { synced: false, tier: 'FREE', error: err.message };
+    }
+}

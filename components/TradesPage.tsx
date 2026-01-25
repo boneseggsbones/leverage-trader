@@ -321,8 +321,8 @@ const TradesPage: React.FC = () => {
                                 key={trade.id}
                                 ref={el => { tradeRefs.current[trade.id] = el; }}
                                 className={`transition-all duration-500 rounded-lg ${isHighlighted
-                                        ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse shadow-lg shadow-blue-200 dark:shadow-blue-900'
-                                        : ''
+                                    ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse shadow-lg shadow-blue-200 dark:shadow-blue-900'
+                                    : ''
                                     }`}
                             >
                                 <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
@@ -377,8 +377,113 @@ const TradesPage: React.FC = () => {
                 </div>
             </div>
             <div className="space-y-10">
-                <TradeList title="Action Required" tradeList={actionRequiredTrades} />
-                <TradeList title="Waiting for Other Party" tradeList={waitingTrades} />
+                {/* Show comprehensive empty state when no trades at all */}
+                {trades.length === 0 ? (
+                    <div className="text-center py-16">
+                        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 rounded-full mb-6">
+                            <span className="text-5xl">🤝</span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
+                            No Active Trades Yet
+                        </h3>
+                        <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-6">
+                            Your trade journey starts here! Browse items from other collectors and propose trades to grow your collection.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-blue-500/25 transition-all"
+                            >
+                                <span>🔍</span>
+                                Discover Items
+                            </button>
+                            <button
+                                onClick={() => navigate('/inventory')}
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:border-gray-300 dark:hover:border-gray-600 transition-all"
+                            >
+                                <span>📦</span>
+                                Add Inventory
+                            </button>
+                        </div>
+                        <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 max-w-lg mx-auto">
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                                <span className="font-medium">💡 Pro tip:</span> Complete your profile and add items to your inventory to attract more trade offers!
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Action Required Section */}
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-700 dark:text-white mb-4">Action Required</h2>
+                            {actionRequiredTrades.length > 0 ? (
+                                <div className="space-y-4">
+                                    {actionRequiredTrades.map(trade => {
+                                        const otherUserId = trade.proposerId === currentUser?.id ? trade.receiverId : trade.proposerId;
+                                        const otherUser = users[otherUserId];
+                                        if (!otherUser || !currentUser) return null;
+                                        const isHighlighted = highlightedTradeId === trade.id;
+                                        return (
+                                            <div
+                                                key={trade.id}
+                                                ref={el => { tradeRefs.current[trade.id] = el; }}
+                                                className={`transition-all duration-500 rounded-lg ${isHighlighted
+                                                    ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse shadow-lg shadow-blue-200 dark:shadow-blue-900'
+                                                    : ''
+                                                    }`}
+                                            >
+                                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
+                                                    {renderActionButtons(trade)}
+                                                </TradeCard>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="p-6 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800 text-center">
+                                    <span className="text-3xl mb-2 block">✅</span>
+                                    <p className="text-green-700 dark:text-green-400 font-medium">You're all caught up!</p>
+                                    <p className="text-green-600 dark:text-green-500 text-sm mt-1">No pending actions required on your end.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Waiting for Other Party Section */}
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-700 dark:text-white mb-4">Waiting for Other Party</h2>
+                            {waitingTrades.length > 0 ? (
+                                <div className="space-y-4">
+                                    {waitingTrades.map(trade => {
+                                        const otherUserId = trade.proposerId === currentUser?.id ? trade.receiverId : trade.proposerId;
+                                        const otherUser = users[otherUserId];
+                                        if (!otherUser || !currentUser) return null;
+                                        const isHighlighted = highlightedTradeId === trade.id;
+                                        return (
+                                            <div
+                                                key={trade.id}
+                                                ref={el => { tradeRefs.current[trade.id] = el; }}
+                                                className={`transition-all duration-500 rounded-lg ${isHighlighted
+                                                    ? 'ring-4 ring-blue-400 ring-opacity-75 animate-pulse shadow-lg shadow-blue-200 dark:shadow-blue-900'
+                                                    : ''
+                                                    }`}
+                                            >
+                                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
+                                                    {renderActionButtons(trade)}
+                                                </TradeCard>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="p-6 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 text-center">
+                                    <span className="text-3xl mb-2 block">⏳</span>
+                                    <p className="text-gray-600 dark:text-gray-400 font-medium">No pending trades</p>
+                                    <p className="text-gray-500 dark:text-gray-500 text-sm mt-1">Trades you're waiting on will appear here.</p>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
 
             <ConfirmationModal

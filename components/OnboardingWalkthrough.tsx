@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface WalkthroughStep {
     targetId: string;
@@ -54,6 +55,7 @@ interface OnboardingWalkthroughProps {
 }
 
 const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplete }) => {
+    const { currentUser } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
     const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
@@ -62,12 +64,25 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
     // Check if walkthrough should be shown
     useEffect(() => {
         const completed = localStorage.getItem(STORAGE_KEY);
-        if (!completed) {
-            // Small delay to let dashboard render
-            const timer = setTimeout(() => setIsVisible(true), 1000);
-            return () => clearTimeout(timer);
+        // Skip for existing users who already have profile data
+        const isExistingUser = currentUser?.name && currentUser?.city && currentUser?.state;
+
+        if (completed || isExistingUser) {
+            // Mark as complete for existing users
+            if (isExistingUser && !completed) {
+                localStorage.setItem(STORAGE_KEY, 'true');
+            }
+            // Clean up any leftover highlight classes
+            WALKTHROUGH_STEPS.forEach(step => {
+                document.getElementById(step.targetId)?.classList.remove('walkthrough-highlight');
+            });
+            return;
         }
-    }, []);
+
+        // Small delay to let dashboard render
+        const timer = setTimeout(() => setIsVisible(true), 1000);
+        return () => clearTimeout(timer);
+    }, [currentUser]);
 
     // Position the tooltip relative to the target element
     const positionTooltip = useCallback(() => {
@@ -141,6 +156,15 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
 
     // Remove highlight from previous step
     useEffect(() => {
+        // Only manage highlights if walkthrough is actually visible
+        if (!isVisible) {
+            // Clean up all highlights when walkthrough is not visible
+            WALKTHROUGH_STEPS.forEach(step => {
+                document.getElementById(step.targetId)?.classList.remove('walkthrough-highlight');
+            });
+            return;
+        }
+
         WALKTHROUGH_STEPS.forEach((step, index) => {
             const el = document.getElementById(step.targetId);
             if (el) {
@@ -151,7 +175,7 @@ const OnboardingWalkthrough: React.FC<OnboardingWalkthroughProps> = ({ onComplet
                 }
             }
         });
-    }, [currentStep]);
+    }, [currentStep, isVisible]);
 
     const handleNext = () => {
         if (currentStep < WALKTHROUGH_STEPS.length - 1) {

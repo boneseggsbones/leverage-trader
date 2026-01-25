@@ -23,6 +23,10 @@ const normalizeUser = (raw: any): User => ({
     aboutMe: raw.aboutMe || '',
     accountCreatedAt: raw.accountCreatedAt || new Date().toISOString(),
     wishlist: Array.isArray(raw.wishlist) ? raw.wishlist.map(String) : [],
+    // Subscription fields
+    subscriptionTier: raw.subscriptionTier || 'FREE',
+    subscriptionStatus: raw.subscriptionStatus || 'none',
+    tradesThisCycle: raw.tradesThisCycle || 0,
 });
 
 const normalizeTrade = (raw: any): Trade => ({
