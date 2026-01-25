@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from 'react';
 
+interface TableRow {
+  [key: string]: string | number | boolean | null;
+}
+
+interface DatabaseData {
+  [tableName: string]: TableRow[];
+}
+
 const DatabaseVisualizer = () => {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<DatabaseData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch('http://localhost:4000/api/db-data')
       .then(res => res.json())
-      .then(data => {
+      .then((data: DatabaseData) => {
         setData(data);
         setLoading(false);
       })
@@ -45,7 +53,7 @@ const DatabaseVisualizer = () => {
                   {tableData.map((row, index) => (
                     <tr key={index}>
                       {Object.values(row).map((value, i) => (
-                        <td key={i} className="border px-4 py-2">{value}</td>
+                        <td key={i} className="border px-4 py-2">{String(value ?? '')}</td>
                       ))}
                     </tr>
                   ))}

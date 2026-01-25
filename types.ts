@@ -25,6 +25,7 @@ export interface User {
     accountCreatedAt: string;
     wishlist: string[]; // Array of Item IDs
     isAdmin?: boolean;
+    rating?: number; // Average trade rating (1-5), computed from TradeRatings
     // Subscription fields (optional for legacy support)
     subscriptionTier?: SubscriptionTier;
     subscriptionStatus?: SubscriptionStatus;

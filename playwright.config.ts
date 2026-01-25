@@ -15,6 +15,6 @@ export default defineConfig({
     actionTimeout: 10_000,
     trace: 'retain-on-failure',
   },
-  // Ignore any test files outside the playwright test directory
-  ignoreTestFiles: ['**/backend/**', '**/node_modules/**'],
+  // testMatch is the replacement for deprecated ignoreTestFiles
+  testMatch: '**/*.spec.ts',
 });

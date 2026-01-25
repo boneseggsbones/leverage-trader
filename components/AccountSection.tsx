@@ -113,14 +113,14 @@ const AccountSection: React.FC<AccountSectionProps> = ({ user, onUpdate }) => {
 
             {/* Subscription Status */}
             <div className={`rounded-xl border p-6 ${user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active'
-                    ? 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-300 dark:border-amber-600'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                ? 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-300 dark:border-amber-600'
+                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
                 }`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active'
-                                ? 'bg-gradient-to-r from-amber-400 to-yellow-500'
-                                : 'bg-gray-100 dark:bg-gray-700'
+                            ? 'bg-gradient-to-r from-amber-400 to-yellow-500'
+                            : 'bg-gray-100 dark:bg-gray-700'
                             }`}>
                             {user.subscriptionTier === 'PRO' && user.subscriptionStatus === 'active' ? '✨' : '🎟️'}
                         </div>
@@ -182,7 +182,7 @@ const AccountSection: React.FC<AccountSectionProps> = ({ user, onUpdate }) => {
                     {renderEditableField(
                         'email',
                         'Email Address',
-                        oauthProfile?.email || user.email,
+                        oauthProfile?.email || 'Email not available',
                         'email@example.com',
                         '✉️',
                         true, // Email is readonly (from OAuth)
