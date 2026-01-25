@@ -296,11 +296,21 @@ const ProfilePage: React.FC = () => {
                                 </Link>
                                 {/* Pro Subscription Link / Badge */}
                                 {profileUser.subscriptionTier === 'PRO' && profileUser.subscriptionStatus === 'active' ? (
-                                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-amber-300 dark:border-amber-600">
-                                        <span className="text-2xl">✨</span>
+                                    <div className={`flex items-center gap-3 p-4 rounded-xl border ${(profileUser as any).cancelAtPeriodEnd
+                                            ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/30 border-orange-300 dark:border-orange-600'
+                                            : 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-amber-300 dark:border-amber-600'
+                                        }`}>
+                                        <span className="text-2xl">{(profileUser as any).cancelAtPeriodEnd ? '⏳' : '✨'}</span>
                                         <div className="flex flex-col">
-                                            <span className="text-gray-700 dark:text-gray-300 font-medium">Pro Member</span>
-                                            <span className="text-xs text-amber-600 dark:text-amber-400">{3 - (profileUser.tradesThisCycle || 0)} free trades left</span>
+                                            <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                                {(profileUser as any).cancelAtPeriodEnd ? 'Pro (Cancelling)' : 'Pro Member'}
+                                            </span>
+                                            <span className={`text-xs ${(profileUser as any).cancelAtPeriodEnd ? 'text-orange-600 dark:text-orange-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                                {(profileUser as any).cancelAtPeriodEnd && (profileUser as any).subscriptionCancelAt
+                                                    ? `Active until ${new Date((profileUser as any).subscriptionCancelAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                                    : `${3 - (profileUser.tradesThisCycle || 0)} free trades left`
+                                                }
+                                            </span>
                                         </div>
                                     </div>
                                 ) : (

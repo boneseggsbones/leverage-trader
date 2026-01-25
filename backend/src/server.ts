@@ -588,6 +588,8 @@ app.get('/api/users/:id', (req, res) => {
           subscriptionTier: row.subscription_tier || 'FREE',
           subscriptionStatus: row.subscription_status || 'none',
           tradesThisCycle: row.trades_this_cycle || 0,
+          cancelAtPeriodEnd: Boolean(row.cancel_at_period_end),
+          subscriptionCancelAt: row.subscription_cancel_at || null,
           inventory: items,
           wishlist
         };

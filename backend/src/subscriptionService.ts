@@ -147,20 +147,35 @@ export async function handleSubscriptionCreated(
  */
 export async function handleSubscriptionUpdated(
     stripeSubscriptionId: string,
-    status: 'active' | 'past_due' | 'canceled'
+    status: 'active' | 'past_due' | 'canceled',
+    cancelAtPeriodEnd?: boolean,
+    cancelAt?: string | null
 ): Promise<void> {
+    // Build dynamic update query based on what data we have
+    let query = 'UPDATE User SET subscription_status = ?';
+    const params: any[] = [status];
+
+    if (cancelAtPeriodEnd !== undefined) {
+        query += ', cancel_at_period_end = ?';
+        params.push(cancelAtPeriodEnd ? 1 : 0);
+    }
+
+    if (cancelAt !== undefined) {
+        query += ', subscription_cancel_at = ?';
+        params.push(cancelAt);
+    }
+
+    query += ' WHERE subscription_stripe_id = ?';
+    params.push(stripeSubscriptionId);
+
     await new Promise<void>((resolve, reject) => {
-        db.run(
-            `UPDATE User SET subscription_status = ? WHERE subscription_stripe_id = ?`,
-            [status, stripeSubscriptionId],
-            (err) => {
-                if (err) reject(err);
-                else resolve();
-            }
-        );
+        db.run(query, params, (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
     });
 
-    console.log(`[Subscription] Updated subscription ${stripeSubscriptionId} to status: ${status}`);
+    console.log(`[Subscription] Updated subscription ${stripeSubscriptionId} to status: ${status}${cancelAtPeriodEnd ? `, cancels at: ${cancelAt}` : ''}`);
 }
 
 /**

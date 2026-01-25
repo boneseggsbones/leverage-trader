@@ -126,8 +126,12 @@ async function handleSubscriptionEvent(
 ): Promise<WebhookResult> {
     const subscriptionId = subscription.id;
     const status = subscription.status;
+    const cancelAtPeriodEnd = subscription.cancel_at_period_end;
+    // Access current_period_end or cancel_at from subscription object
+    const subData = subscription as any;
+    const currentPeriodEnd = subData.current_period_end as number | undefined;
 
-    console.log(`[Webhook] Subscription ${subscriptionId} status: ${status}`);
+    console.log(`[Webhook] Subscription ${subscriptionId} status: ${status}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
 
     // Map Stripe status to our status
     let mappedStatus: 'active' | 'past_due' | 'canceled' = 'active';
@@ -137,12 +141,17 @@ async function handleSubscriptionEvent(
         mappedStatus = 'canceled';
     }
 
-    await handleSubscriptionUpdated(subscriptionId, mappedStatus);
+    // Pass cancellation info to the update handler
+    const cancelAt = cancelAtPeriodEnd && currentPeriodEnd
+        ? new Date(currentPeriodEnd * 1000).toISOString()
+        : null;
+
+    await handleSubscriptionUpdated(subscriptionId, mappedStatus, cancelAtPeriodEnd, cancelAt);
 
     return {
         handled: true,
         event: 'customer.subscription.updated',
-        message: `Subscription ${subscriptionId} updated to ${mappedStatus}`,
+        message: `Subscription ${subscriptionId} updated to ${mappedStatus}${cancelAtPeriodEnd ? ` (cancels at period end: ${cancelAt})` : ''}`,
     };
 }
 

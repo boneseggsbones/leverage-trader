@@ -694,6 +694,13 @@ const migrate = () => {
         if (!userColumns.includes('stripe_customer_id')) {
           tasks.push(addColumnIfMissing('User', 'stripe_customer_id', 'TEXT'));
         }
+        // Subscription cancellation tracking
+        if (!userColumns.includes('cancel_at_period_end')) {
+          tasks.push(addColumnIfMissing('User', 'cancel_at_period_end', 'INTEGER DEFAULT 0'));
+        }
+        if (!userColumns.includes('subscription_cancel_at')) {
+          tasks.push(addColumnIfMissing('User', 'subscription_cancel_at', 'TEXT'));
+        }
 
         // Trade fee columns
         db.all("PRAGMA table_info('trades')", (err3, tradeRows: any[]) => {
