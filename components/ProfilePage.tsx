@@ -11,6 +11,7 @@ import EditProfileModal from './EditProfileModal.tsx';
 import CollectionStats from './CollectionStats.tsx';
 import AccountSection from './AccountSection.tsx';
 import PaymentMethodsSection from './PaymentMethodsSection.tsx';
+import PayoutHistorySection from './PayoutHistorySection.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 type ProfileTab = 'overview' | 'account' | 'payments' | 'notifications';
@@ -297,8 +298,8 @@ const ProfilePage: React.FC = () => {
                                 {/* Pro Subscription Link / Badge */}
                                 {profileUser.subscriptionTier === 'PRO' && profileUser.subscriptionStatus === 'active' ? (
                                     <div className={`flex items-center gap-3 p-4 rounded-xl border ${(profileUser as any).cancelAtPeriodEnd
-                                            ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/30 border-orange-300 dark:border-orange-600'
-                                            : 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-amber-300 dark:border-amber-600'
+                                        ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/30 border-orange-300 dark:border-orange-600'
+                                        : 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-amber-300 dark:border-amber-600'
                                         }`}>
                                         <span className="text-2xl">{(profileUser as any).cancelAtPeriodEnd ? '⏳' : '✨'}</span>
                                         <div className="flex flex-col">
@@ -334,7 +335,10 @@ const ProfilePage: React.FC = () => {
                     )}
 
                     {activeTab === 'payments' && (
-                        <PaymentMethodsSection userId={profileUser.id} />
+                        <div className="space-y-6">
+                            <PaymentMethodsSection userId={profileUser.id} />
+                            <PayoutHistorySection userId={profileUser.id} />
+                        </div>
                     )}
 
                     {activeTab === 'notifications' && (
