@@ -1,10 +1,10 @@
 /**
  * Payout History Section
  * Shows user's payout history and pending payouts
+ * Styled to match the dark theme of the profile page
  */
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
 
 interface Payout {
     id: string;
@@ -33,11 +33,11 @@ interface PayoutHistorySectionProps {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-    pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending' },
-    pending_onboarding: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Setup Required' },
-    processing: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Processing' },
-    completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
-    failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed' },
+    pending: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'Pending' },
+    pending_onboarding: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Setup Required' },
+    processing: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Processing' },
+    completed: { bg: 'bg-green-500/20', text: 'text-green-400', label: 'Completed' },
+    failed: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Failed' },
 };
 
 function formatCurrency(cents: number): string {
@@ -104,11 +104,11 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
 
     if (loading) {
         return (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
                 <div className="animate-pulse">
-                    <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                    <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
                 </div>
             </div>
         );
@@ -116,11 +116,11 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
 
     if (error) {
         return (
-            <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
-                <p className="text-red-600">Error loading payouts: {error}</p>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-red-200 dark:border-red-800 p-6">
+                <p className="text-red-600 dark:text-red-400">Error loading payouts: {error}</p>
                 <button
                     onClick={loadPayouts}
-                    className="mt-2 text-sm text-blue-600 hover:underline"
+                    className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 >
                     Try again
                 </button>
@@ -131,20 +131,20 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
     const hasPendingOnboarding = payouts.some(p => p.status === 'pending_onboarding');
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Header - matches PaymentMethods styling */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                            💰 Payouts
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            Payouts
                         </h3>
-                        <p className="text-sm text-gray-600">Earnings from your completed trades</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Earnings from your completed trades</p>
                     </div>
                     {summary && summary.totalPendingCents > 0 && (
                         <div className="text-right">
-                            <p className="text-xs text-gray-500">Pending</p>
-                            <p className="text-lg font-bold text-yellow-600">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Pending</p>
+                            <p className="text-lg font-bold text-amber-500">
                                 {formatCurrency(summary.totalPendingCents)}
                             </p>
                         </div>
@@ -152,58 +152,59 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
                 </div>
             </div>
 
-            {/* Onboarding Alert */}
+            {/* Onboarding Alert - subtle styling */}
             {hasPendingOnboarding && (
-                <div className="mx-6 mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                    <div className="flex items-start gap-3">
-                        <span className="text-2xl">⚠️</span>
+                <div className="mx-4 mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                        <span className="text-xl">💳</span>
                         <div className="flex-1">
-                            <h4 className="font-medium text-orange-800">Setup Required to Receive Payouts</h4>
-                            <p className="text-sm text-orange-700 mt-1">
-                                You have pending payouts waiting! Complete your Stripe Connect setup to receive funds directly to your bank account.
+                            <p className="text-sm text-amber-600 dark:text-amber-400">
+                                <span className="font-medium">Setup required</span> — Complete Stripe Connect to receive payouts
                             </p>
-                            <a
-                                href="/profile?tab=payments"
-                                className="inline-block mt-2 px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
-                            >
-                                Set Up Payouts →
-                            </a>
                         </div>
+                        <a
+                            href="/profile?tab=payments"
+                            className="px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors"
+                        >
+                            Set Up
+                        </a>
                     </div>
                 </div>
             )}
 
-            {/* Summary Cards */}
+            {/* Summary Stats - inline, subtle */}
             {summary && (payouts.length > 0 || summary.totalCompletedCents > 0) && (
-                <div className="grid grid-cols-3 gap-4 p-6 border-b border-gray-100">
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <p className="text-2xl font-bold text-green-600">
+                <div className="flex items-center gap-6 px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <div>
+                        <p className="text-2xl font-bold text-green-500">
                             {formatCurrency(summary.totalCompletedCents)}
                         </p>
-                        <p className="text-xs text-gray-600">Total Earned</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Total Earned</p>
                     </div>
-                    <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                        <p className="text-2xl font-bold text-yellow-600">
+                    <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+                    <div>
+                        <p className="text-2xl font-bold text-amber-500">
                             {formatCurrency(summary.totalPendingCents)}
                         </p>
-                        <p className="text-xs text-gray-600">Pending</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Pending</p>
                     </div>
-                    <div className="text-center p-4 bg-gray-50 rounded-lg">
-                        <p className="text-2xl font-bold text-gray-600">
-                            {summary.completedCount}
+                    <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+                    <div>
+                        <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">
+                            {summary.completedCount + summary.pendingCount}
                         </p>
-                        <p className="text-xs text-gray-600">Payouts</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
                     </div>
                 </div>
             )}
 
             {/* Payout List */}
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {payouts.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                        <span className="text-4xl block mb-2">📭</span>
+                    <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                        <span className="text-3xl block mb-2">💰</span>
                         <p>No payouts yet</p>
-                        <p className="text-sm mt-1">Complete trades to start earning!</p>
+                        <p className="text-sm mt-1 text-gray-400 dark:text-gray-500">Complete trades to start earning</p>
                     </div>
                 ) : (
                     payouts.map((payout) => {
@@ -211,26 +212,26 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
                         const canRetry = ['failed', 'pending_onboarding'].includes(payout.status);
 
                         return (
-                            <div key={payout.id} className="p-4 hover:bg-gray-50 transition-colors">
+                            <div key={payout.id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium text-gray-900">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-lg font-semibold text-gray-900 dark:text-white">
                                                 {formatCurrency(payout.amountCents)}
                                             </span>
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
                                                 {statusStyle.label}
                                             </span>
                                         </div>
-                                        <p className="text-sm text-gray-500 mt-1">
-                                            Trade: {payout.tradeId.substring(0, 20)}...
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                            {payout.tradeId.startsWith('chain_') ? 'Chain Trade' : 'Trade'}: {payout.tradeId.substring(0, 18)}...
                                         </p>
-                                        <p className="text-xs text-gray-400">
+                                        <p className="text-xs text-gray-400 dark:text-gray-500">
                                             {formatDate(payout.createdAt)}
                                             {payout.completedAt && ` • Completed ${formatDate(payout.completedAt)}`}
                                         </p>
-                                        {payout.errorMessage && (
-                                            <p className="text-xs text-red-500 mt-1">
+                                        {payout.errorMessage && payout.status !== 'pending_onboarding' && (
+                                            <p className="text-xs text-red-500 dark:text-red-400 mt-1">
                                                 {payout.errorMessage}
                                             </p>
                                         )}
@@ -238,13 +239,13 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
 
                                     <div className="flex items-center gap-2">
                                         {payout.status === 'completed' && (
-                                            <span className="text-green-500 text-xl">✓</span>
+                                            <span className="text-green-500 text-lg">✓</span>
                                         )}
                                         {canRetry && (
                                             <button
                                                 onClick={() => handleRetry(payout.id)}
                                                 disabled={retrying === payout.id}
-                                                className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                             >
                                                 {retrying === payout.id ? 'Retrying...' : 'Retry'}
                                             </button>
@@ -259,9 +260,9 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
 
             {/* Footer */}
             {payouts.length > 0 && (
-                <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-center">
-                    <p className="text-xs text-gray-500">
-                        Payouts are processed via Stripe Connect. Funds typically arrive in 1-2 business days.
+                <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 text-center">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                        Payouts via Stripe Connect • Funds arrive in 1-2 business days
                     </p>
                 </div>
             )}
