@@ -18,6 +18,7 @@ import ProUpgradePage from './components/ProUpgradePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import DatabaseVisualizer from './src/components/DatabaseVisualizer';
 import LandingPage from './components/LandingPage';
+import MessagesPage from './components/MessagesPage';
 import { useAuth } from './context/AuthContext';
 
 const AppRoutes = () => {
@@ -58,6 +59,7 @@ const AppRoutes = () => {
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/import/ebay" element={<EbayImport />} />
                 <Route path="/pro" element={<ProUpgradePage />} />
+                <Route path="/messages" element={<MessagesPage />} />
             </Route>
         </Routes>
     );

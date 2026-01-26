@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Item } from '../types.ts';
 import { formatCurrency, formatCurrencyOptional } from '../utils/currency.ts';
 import ValuationBadge from './ValuationBadge.tsx';
 import PSALinkModal from './PSALinkModal.tsx';
+import { createItemInquiry } from '../api/api';
+import { useAuth } from '../context/AuthContext';
 
 interface ItemDetailModalProps {
     item: Item | null;
@@ -26,10 +29,30 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
     actionLabel = 'Add to Trade',
     onItemUpdated
 }) => {
+    const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [showPSAModal, setShowPSAModal] = useState(false);
     const [psaData, setPsaData] = useState<any>(null);
+    const [isAskingQuestion, setIsAskingQuestion] = useState(false);
 
     if (!isOpen || !item) return null;
+
+    // Check if current user owns this item
+    const isOwnItem = currentUser && String(currentUser.id) === String(item.ownerId);
+
+    const handleAskQuestion = async () => {
+        if (!currentUser || isOwnItem) return;
+        setIsAskingQuestion(true);
+        try {
+            const conversation = await createItemInquiry(item.id, currentUser.id);
+            onClose();
+            navigate(`/messages?conversation=${conversation.id}`);
+        } catch (err) {
+            console.error('Failed to create inquiry:', err);
+        } finally {
+            setIsAskingQuestion(false);
+        }
+    };
 
     const imageUrl = item.imageUrl && item.imageUrl.startsWith('/')
         ? `http://localhost:4000${item.imageUrl}`
@@ -176,21 +199,43 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                             )}
                         </div>
 
-                        {/* Action Button */}
-                        {onAddToTrade && (
-                            <button
-                                onClick={() => {
-                                    onAddToTrade();
-                                    onClose();
-                                }}
-                                className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-all ${isInTrade
-                                    ? 'bg-red-500 hover:bg-red-600'
-                                    : 'bg-gradient-to-r from-blue-600 to-violet-600 hover:shadow-lg'
-                                    }`}
-                            >
-                                {isInTrade ? 'Remove from Trade' : actionLabel}
-                            </button>
-                        )}
+                        {/* Action Buttons */}
+                        <div className="space-y-2">
+                            {onAddToTrade && (
+                                <button
+                                    onClick={() => {
+                                        onAddToTrade();
+                                        onClose();
+                                    }}
+                                    className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-all ${isInTrade
+                                        ? 'bg-red-500 hover:bg-red-600'
+                                        : 'bg-gradient-to-r from-blue-600 to-violet-600 hover:shadow-lg'
+                                        }`}
+                                >
+                                    {isInTrade ? 'Remove from Trade' : actionLabel}
+                                </button>
+                            )}
+
+                            {/* Ask Question button (only for items not owned by current user) */}
+                            {!isOwnItem && currentUser && (
+                                <button
+                                    onClick={handleAskQuestion}
+                                    disabled={isAskingQuestion}
+                                    className="w-full py-3 px-4 rounded-xl font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isAskingQuestion ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                                            Opening...
+                                        </>
+                                    ) : (
+                                        <>
+                                            💬 Ask Question
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

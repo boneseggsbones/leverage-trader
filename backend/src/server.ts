@@ -27,6 +27,17 @@ import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStri
 import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession, syncSubscriptionFromStripe } from './subscriptionService';
 import { createLinkToken, exchangePublicToken, deletePlaidItem, isPlaidConfigured } from './payments/plaidService';
 import { createConnectedAccount, getConnectedAccount, refreshConnectedAccountStatus, createOnboardingLink, initConnectedAccountsTable } from './payments/stripeConnectService';
+import {
+  getOrCreateItemInquiry,
+  getOrCreateTradeConversation,
+  getConversationsForUser,
+  getConversation,
+  sendMessage,
+  getMessages,
+  markConversationRead,
+  getUnreadMessageCount,
+  archiveConversation
+} from './messaging/messagingService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -4047,6 +4058,184 @@ app.post('/api/items/:itemId/link-psa', async (req, res) => {
     res.json(result);
   } catch (err: any) {
     console.error('[PSA] Link error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =====================================================
+// MESSAGING ENDPOINTS
+// =====================================================
+
+// Get all conversations for the current user
+app.get('/api/users/:userId/conversations', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  try {
+    const includeArchived = req.query.includeArchived === 'true';
+    const limit = parseInt(req.query.limit as string, 10) || 50;
+    const conversations = await getConversationsForUser(userId, { includeArchived, limit });
+
+    // Enrich with context previews (item or trade info)
+    const enriched = await Promise.all(conversations.map(async (conv) => {
+      if (conv.type === 'item_inquiry') {
+        // Get item info
+        return new Promise((resolve) => {
+          db.get(`SELECT id, name, imageUrl, estimatedMarketValue FROM Item WHERE id = ?`,
+            [conv.contextId], (err: Error | null, item: any) => {
+              resolve({ ...conv, contextPreview: item || null });
+            });
+        });
+      } else if (conv.type === 'trade') {
+        // Get trade info with other user
+        return new Promise((resolve) => {
+          db.get(`SELECT id, proposerId, receiverId, status FROM trades WHERE id = ?`,
+            [conv.contextId], (err: Error | null, trade: any) => {
+              if (!trade) return resolve({ ...conv, contextPreview: null });
+              const otherUserId = trade.proposerId === userId ? trade.receiverId : trade.proposerId;
+              db.get(`SELECT id, name, profilePictureUrl FROM User WHERE id = ?`, [otherUserId],
+                (err2: Error | null, otherUser: any) => {
+                  resolve({ ...conv, contextPreview: { trade, otherUser } });
+                });
+            });
+        });
+      }
+      return conv;
+    }));
+
+    res.json({ conversations: enriched });
+  } catch (err: any) {
+    console.error('[Messaging] Get conversations error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get unread message count
+app.get('/api/users/:userId/messages/unread-count', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  try {
+    const count = await getUnreadMessageCount(userId);
+    res.json({ unreadCount: count });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get or create item inquiry conversation
+app.post('/api/items/:itemId/inquiry', async (req, res) => {
+  const itemId = parseInt(req.params.itemId, 10);
+  const { inquirerUserId } = req.body;
+
+  if (isNaN(itemId)) return res.status(400).json({ error: 'Invalid item ID' });
+  if (!inquirerUserId) return res.status(400).json({ error: 'inquirerUserId required' });
+
+  try {
+    // Get item owner
+    const item: any = await new Promise((resolve, reject) => {
+      db.get('SELECT owner_id FROM Item WHERE id = ?', [itemId], (err, row) => {
+        if (err) return reject(err);
+        resolve(row);
+      });
+    });
+
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.owner_id === inquirerUserId) {
+      return res.status(400).json({ error: 'Cannot inquire about your own item' });
+    }
+
+    const conversation = await getOrCreateItemInquiry(itemId, inquirerUserId, item.owner_id);
+    res.json(conversation);
+  } catch (err: any) {
+    console.error('[Messaging] Create inquiry error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a single conversation with messages
+app.get('/api/conversations/:conversationId', async (req, res) => {
+  const conversationId = req.params.conversationId;
+  const userId = parseInt(req.query.userId as string, 10);
+
+  if (!userId) return res.status(400).json({ error: 'userId query param required' });
+
+  try {
+    const conversation = await getConversation(conversationId, userId);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+    const messages = await getMessages(conversationId, userId, { limit: 100 });
+
+    // Mark as read
+    await markConversationRead(conversationId, userId);
+
+    res.json({ ...conversation, messages });
+  } catch (err: any) {
+    console.error('[Messaging] Get conversation error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get messages for a conversation (paginated)
+app.get('/api/conversations/:conversationId/messages', async (req, res) => {
+  const conversationId = req.params.conversationId;
+  const userId = parseInt(req.query.userId as string, 10);
+  const limit = parseInt(req.query.limit as string, 10) || 50;
+  const before = req.query.before as string | undefined;
+
+  if (!userId) return res.status(400).json({ error: 'userId query param required' });
+
+  try {
+    const messages = await getMessages(conversationId, userId, { limit, before });
+    res.json({ messages });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send a message
+app.post('/api/conversations/:conversationId/messages', async (req, res) => {
+  const conversationId = req.params.conversationId;
+  const { senderId, content, messageType } = req.body;
+
+  if (!senderId) return res.status(400).json({ error: 'senderId required' });
+  if (!content || !content.trim()) return res.status(400).json({ error: 'content required' });
+
+  try {
+    const message = await sendMessage(conversationId, senderId, content.trim(), messageType || 'text');
+    res.json(message);
+  } catch (err: any) {
+    console.error('[Messaging] Send message error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark conversation as read
+app.post('/api/conversations/:conversationId/read', async (req, res) => {
+  const conversationId = req.params.conversationId;
+  const { userId } = req.body;
+
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  try {
+    await markConversationRead(conversationId, userId);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Archive a conversation
+app.post('/api/conversations/:conversationId/archive', async (req, res) => {
+  const conversationId = req.params.conversationId;
+  const { userId } = req.body;
+
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  try {
+    await archiveConversation(conversationId, userId);
+    res.json({ success: true });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

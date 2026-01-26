@@ -1088,3 +1088,130 @@ export const getStripeConnectOnboardingLink = async (userId: string | number): P
     }
     return response.json();
 };
+
+// =====================================================
+// MESSAGING API
+// =====================================================
+
+export interface ConversationParticipant {
+    conversationId: string;
+    userId: number;
+    lastReadAt: string | null;
+    joinedAt: string;
+    userName?: string;
+    userAvatar?: string;
+}
+
+export interface Message {
+    id: string;
+    conversationId: string;
+    senderId: number;
+    content: string;
+    messageType: 'text' | 'system' | 'image';
+    createdAt: string;
+    senderName?: string;
+    senderAvatar?: string;
+}
+
+export interface Conversation {
+    id: string;
+    type: 'item_inquiry' | 'trade' | 'chain_trade';
+    contextId: string;
+    createdAt: string;
+    updatedAt: string;
+    isArchived: boolean;
+    convertedToTradeId: string | null;
+    participants?: ConversationParticipant[];
+    lastMessage?: Message;
+    unreadCount?: number;
+    contextPreview?: any;
+    messages?: Message[];
+}
+
+export const fetchConversations = async (userId: string | number): Promise<Conversation[]> => {
+    const response = await fetch(`${API_URL}/users/${userId}/conversations`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch conversations');
+    }
+    const data = await response.json();
+    return data.conversations;
+};
+
+export const fetchConversation = async (conversationId: string, userId: string | number): Promise<Conversation> => {
+    const response = await fetch(`${API_URL}/conversations/${conversationId}?userId=${userId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch conversation');
+    }
+    return response.json();
+};
+
+export const fetchMessages = async (
+    conversationId: string,
+    userId: string | number,
+    options?: { limit?: number; before?: string }
+): Promise<Message[]> => {
+    const params = new URLSearchParams({ userId: String(userId) });
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.before) params.set('before', options.before);
+
+    const response = await fetch(`${API_URL}/conversations/${conversationId}/messages?${params}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch messages');
+    }
+    const data = await response.json();
+    return data.messages;
+};
+
+export const sendMessage = async (
+    conversationId: string,
+    senderId: string | number,
+    content: string,
+    messageType: 'text' | 'system' | 'image' = 'text'
+): Promise<Message> => {
+    const response = await fetch(`${API_URL}/conversations/${conversationId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senderId, content, messageType }),
+    });
+    if (!response.ok) {
+        throw new Error('Failed to send message');
+    }
+    return response.json();
+};
+
+export const createItemInquiry = async (itemId: string | number, inquirerUserId: string | number): Promise<Conversation> => {
+    const response = await fetch(`${API_URL}/items/${itemId}/inquiry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquirerUserId }),
+    });
+    if (!response.ok) {
+        throw new Error('Failed to create inquiry');
+    }
+    return response.json();
+};
+
+export const markConversationRead = async (conversationId: string, userId: string | number): Promise<void> => {
+    await fetch(`${API_URL}/conversations/${conversationId}/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+    });
+};
+
+export const archiveConversation = async (conversationId: string, userId: string | number): Promise<void> => {
+    await fetch(`${API_URL}/conversations/${conversationId}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+    });
+};
+
+export const fetchUnreadMessageCount = async (userId: string | number): Promise<number> => {
+    const response = await fetch(`${API_URL}/users/${userId}/messages/unread-count`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch unread count');
+    }
+    const data = await response.json();
+    return data.unreadCount;
+};

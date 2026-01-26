@@ -522,6 +522,51 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_rejected_chains_expires ON rejected_chains(expires_at);
 
       -- =====================================================
+      -- =====================================================
+      -- MESSAGING SYSTEM TABLES
+      -- =====================================================
+      
+      -- Conversations can be about items (pre-trade inquiries) or trades
+      CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('item_inquiry', 'trade', 'chain_trade')),
+        context_id TEXT NOT NULL,  -- item_id, trade_id, or chain_id depending on type
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        is_archived INTEGER DEFAULT 0,
+        converted_to_trade_id TEXT  -- for item_inquiry that becomes a trade
+      );
+      CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type);
+      CREATE INDEX IF NOT EXISTS idx_conversations_context ON conversations(context_id);
+      
+      -- Conversation participants (supports 2+ participants for chain trades)
+      CREATE TABLE IF NOT EXISTS conversation_participants (
+        conversation_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        last_read_at TEXT,
+        joined_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (conversation_id, user_id),
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+        FOREIGN KEY (user_id) REFERENCES User(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_conv_participants_user ON conversation_participants(user_id);
+      
+      -- Messages within conversations
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        sender_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'system', 'image')),
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+        FOREIGN KEY (sender_id) REFERENCES User(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(conversation_id, created_at);
+
+      -- =====================================================
       -- PAYOUT TRACKING TABLE
       -- =====================================================
       
