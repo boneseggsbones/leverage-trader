@@ -539,6 +539,45 @@ const PaymentMethodsSection: React.FC<PaymentMethodsSectionProps> = ({ userId })
                                         }}
                                         onCancel={closeModal}
                                     />
+
+                                    {/* Alternative for businesses or users who prefer not to use Plaid */}
+                                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 text-center">
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                            Are you a business or prefer not to use Plaid?
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={async (e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                const btn = e.currentTarget;
+                                                btn.textContent = 'Setting up...';
+                                                btn.disabled = true;
+                                                try {
+                                                    const response = await fetch(`http://localhost:4000/api/users/${userId}/stripe-connect/onboard`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                    });
+                                                    const data = await response.json();
+                                                    if (data.onboardingUrl) {
+                                                        window.open(data.onboardingUrl, '_blank');
+                                                        btn.textContent = 'Set up with Stripe Connect →';
+                                                    } else if (data.error) {
+                                                        alert('Error: ' + data.error);
+                                                        btn.textContent = 'Set up with Stripe Connect →';
+                                                    }
+                                                } catch (err: any) {
+                                                    console.error('Stripe Connect error:', err);
+                                                    alert('Connection error. Please try again.');
+                                                    btn.textContent = 'Set up with Stripe Connect →';
+                                                }
+                                                btn.disabled = false;
+                                            }}
+                                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                        >
+                                            Set up with Stripe Connect →
+                                        </button>
+                                    </div>
                                 </>
                             ) : (
                                 // Non-Stripe providers (placeholder for now)

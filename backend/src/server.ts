@@ -26,6 +26,7 @@ import { calculateDistance, getCoordinates, getZipCodeData } from './distanceSer
 import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStripeConfigured } from './payments/paymentMethodService';
 import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession, syncSubscriptionFromStripe } from './subscriptionService';
 import { createLinkToken, exchangePublicToken, deletePlaidItem, isPlaidConfigured } from './payments/plaidService';
+import { createConnectedAccount, getConnectedAccount, refreshConnectedAccountStatus, createOnboardingLink, initConnectedAccountsTable } from './payments/stripeConnectService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -1085,6 +1086,108 @@ app.delete('/api/users/:id/plaid/:methodId', async (req, res) => {
   }
 });
 
+// ==================== STRIPE CONNECT ROUTES ====================
+
+// Get user's connected account status
+app.get('/api/users/:id/stripe-connect/status', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    const account = await getConnectedAccount(userId);
+    if (!account) {
+      return res.json({ hasAccount: false });
+    }
+
+    // Refresh status from Stripe
+    const refreshed = await refreshConnectedAccountStatus(userId);
+    res.json({
+      hasAccount: true,
+      onboardingComplete: refreshed?.onboardingComplete ?? false,
+      payoutsEnabled: refreshed?.payoutsEnabled ?? false,
+      email: refreshed?.email ?? null,
+    });
+  } catch (err: any) {
+    console.error('[StripeConnect] Error getting status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create connected account and get onboarding link
+app.post('/api/users/:id/stripe-connect/onboard', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  // Get user email
+  const user = await new Promise<any>((resolve, reject) => {
+    db.get('SELECT email FROM User WHERE id = ?', [userId], (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+
+  if (!user?.email) {
+    return res.status(400).json({ error: 'User not found or has no email' });
+  }
+
+  try {
+    const result = await createConnectedAccount(userId, user.email);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[StripeConnect] Error creating account:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get new onboarding link (if user needs to continue onboarding)
+app.post('/api/users/:id/stripe-connect/onboard-link', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    const account = await getConnectedAccount(userId);
+    if (!account) {
+      return res.status(404).json({ error: 'No connected account found' });
+    }
+
+    const onboardingUrl = await createOnboardingLink(account.stripeAccountId);
+    res.json({ onboardingUrl });
+  } catch (err: any) {
+    console.error('[StripeConnect] Error creating onboarding link:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset/delete connected account (for when Stripe test account gets in bad state)
+app.delete('/api/users/:id/stripe-connect', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    // Delete from local database (don't delete from Stripe - they may have issues)
+    await new Promise<void>((resolve, reject) => {
+      db.run('DELETE FROM connected_accounts WHERE user_id = ?', [userId], function (err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    console.log(`[StripeConnect] Deleted connected account record for user ${userId}`);
+    res.json({ success: true, message: 'Connected account reset. You can now create a new one.' });
+  } catch (err: any) {
+    console.error('[StripeConnect] Error deleting account:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Propose a new trade
 app.post('/api/trades', async (req, res) => {
   const { proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash } = req.body;
@@ -1352,59 +1455,70 @@ app.post('/api/trades/:id/respond', (req, res) => {
       const updatedAt = new Date().toISOString();
       const proposerCash = Number(tradeRow.proposerCash || 0);
       const receiverCash = Number(tradeRow.receiverCash || 0);
-      const hasCash = proposerCash > 0 || receiverCash > 0;
 
-      // If there's cash involved, go to PAYMENT_PENDING for escrow funding
-      // Otherwise complete the trade immediately
-      if (hasCash) {
-        db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?',
-          ['PAYMENT_PENDING', updatedAt, tradeId], function (err) {
-            if (err) return res.status(500).json({ error: err.message });
+      // Check BOTH explicit cash AND calculated cash differential from item values
+      // This ensures trades with value differences require escrow even if no explicit cash was set
+      (async () => {
+        try {
+          const cashDiff = await calculateCashDifferential(tradeId);
+          const hasCashOrDifferential = proposerCash > 0 || receiverCash > 0 || cashDiff.amount > 0;
 
-            // Notify the proposer about acceptance (they may need to fund)
+          // If there's cash or value differential involved, go to PAYMENT_PENDING for escrow funding
+          // Otherwise complete the trade immediately
+          if (hasCashOrDifferential) {
+            db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?',
+              ['PAYMENT_PENDING', updatedAt, tradeId], function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+
+                // Notify the proposer about acceptance (they may need to fund)
+                db.get('SELECT name FROM User WHERE id = ?', [tradeRow.receiverId], (err, receiverRow: any) => {
+                  const receiverName = receiverRow?.name || 'The other trader';
+                  notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
+                    .catch(err => console.error('Failed to send acceptance notification:', err));
+                });
+
+                return res.json({ id: tradeId, status: 'PAYMENT_PENDING' });
+              });
+            return;
+          }
+
+          // No cash involved - complete immediately
+          db.serialize(() => {
+            db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COMPLETED_AWAITING_RATING', updatedAt, tradeId]);
+
+            // Transfer items: proposerItemIds -> receiver, receiverItemIds -> proposer
+            const proposerItemIds = JSON.parse(tradeRow.proposerItemIds || '[]');
+            const receiverItemIds = JSON.parse(tradeRow.receiverItemIds || '[]');
+
+            proposerItemIds.forEach((itemId: string) => {
+              db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.receiverId, itemId]);
+            });
+
+            receiverItemIds.forEach((itemId: string) => {
+              db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.proposerId, itemId]);
+            });
+
+            // Generate price signals for all items in the completed trade
+            generatePriceSignalsForTrade(tradeId).then(result => {
+              console.log(`Price signals generated for trade ${tradeId}:`, result);
+            }).catch(err => {
+              console.error(`Failed to generate price signals for trade ${tradeId}:`, err);
+            });
+
+            // Notify the proposer about acceptance
             db.get('SELECT name FROM User WHERE id = ?', [tradeRow.receiverId], (err, receiverRow: any) => {
               const receiverName = receiverRow?.name || 'The other trader';
               notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
                 .catch(err => console.error('Failed to send acceptance notification:', err));
             });
 
-            return res.json({ id: tradeId, status: 'PAYMENT_PENDING' });
+            return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
           });
-        return;
-      }
-
-      // No cash involved - complete immediately
-      db.serialize(() => {
-        db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COMPLETED_AWAITING_RATING', updatedAt, tradeId]);
-
-        // Transfer items: proposerItemIds -> receiver, receiverItemIds -> proposer
-        const proposerItemIds = JSON.parse(tradeRow.proposerItemIds || '[]');
-        const receiverItemIds = JSON.parse(tradeRow.receiverItemIds || '[]');
-
-        proposerItemIds.forEach((itemId: string) => {
-          db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.receiverId, itemId]);
-        });
-
-        receiverItemIds.forEach((itemId: string) => {
-          db.run('UPDATE Item SET owner_id = ? WHERE id = ?', [tradeRow.proposerId, itemId]);
-        });
-
-        // Generate price signals for all items in the completed trade
-        generatePriceSignalsForTrade(tradeId).then(result => {
-          console.log(`Price signals generated for trade ${tradeId}:`, result);
-        }).catch(err => {
-          console.error(`Failed to generate price signals for trade ${tradeId}:`, err);
-        });
-
-        // Notify the proposer about acceptance
-        db.get('SELECT name FROM User WHERE id = ?', [tradeRow.receiverId], (err, receiverRow: any) => {
-          const receiverName = receiverRow?.name || 'The other trader';
-          notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
-            .catch(err => console.error('Failed to send acceptance notification:', err));
-        });
-
-        return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
-      });
+        } catch (err: any) {
+          console.error('Failed to calculate cash differential:', err);
+          return res.status(500).json({ error: 'Failed to process trade acceptance: ' + err.message });
+        }
+      })();
       return;
     }
 
@@ -3749,6 +3863,7 @@ if (require.main === module) {
   migrate()
     .then(() => init())
     .then(() => seedValuationData())
+    .then(() => initConnectedAccountsTable())
     .then(() => {
       // Initialize WebSocket server
       initWebSocket(httpServer);

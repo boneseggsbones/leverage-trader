@@ -195,3 +195,60 @@ export async function deletePlaidItem(accessToken: string): Promise<void> {
         // Continue anyway - we still want to delete from our database
     }
 }
+
+/**
+ * Get bank account and routing numbers from Plaid Auth
+ * Used for payouts to recipient bank accounts
+ */
+export async function getBankAccountNumbers(accessToken: string, accountId: string): Promise<{
+    accountNumber: string;
+    routingNumber: string;
+    accountType: 'checking' | 'savings';
+}> {
+    if (!plaidClient) {
+        throw new Error('Plaid not configured');
+    }
+
+    const response = await plaidClient.authGet({
+        access_token: accessToken,
+    });
+
+    // Find the specific account
+    const account = response.data.accounts.find(a => a.account_id === accountId);
+    if (!account) {
+        throw new Error(`Account ${accountId} not found`);
+    }
+
+    // Get the ACH numbers for this account
+    const achNumbers = response.data.numbers.ach.find(n => n.account_id === accountId);
+    if (!achNumbers) {
+        throw new Error(`ACH numbers not found for account ${accountId}`);
+    }
+
+    console.log(`[Plaid] Retrieved bank account numbers for account ending in ${achNumbers.account.slice(-4)}`);
+
+    return {
+        accountNumber: achNumbers.account,
+        routingNumber: achNumbers.routing,
+        accountType: account.subtype === 'savings' ? 'savings' : 'checking',
+    };
+}
+
+/**
+ * Create a Stripe bank account token using Plaid processor token
+ * This allows Stripe to receive bank account info directly from Plaid
+ */
+export async function createStripeProcessorToken(accessToken: string, accountId: string): Promise<string> {
+    if (!plaidClient) {
+        throw new Error('Plaid not configured');
+    }
+
+    const response = await plaidClient.processorStripeBankAccountTokenCreate({
+        access_token: accessToken,
+        account_id: accountId,
+    });
+
+    console.log(`[Plaid] Created Stripe processor token for account ${accountId}`);
+
+    return response.data.stripe_bank_account_token;
+}

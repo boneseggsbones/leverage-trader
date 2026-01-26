@@ -1037,3 +1037,54 @@ export const exchangePlaidToken = async (
     }
     return response.json();
 };
+
+// =====================================================
+// STRIPE CONNECT API (Payouts)
+// =====================================================
+
+export interface StripeConnectStatus {
+    hasAccount: boolean;
+    onboardingComplete: boolean;
+    payoutsEnabled: boolean;
+    email: string | null;
+}
+
+// Get user's Stripe Connect payout account status
+export const getStripeConnectStatus = async (userId: string | number): Promise<StripeConnectStatus> => {
+    const response = await fetch(`${API_URL}/users/${userId}/stripe-connect/status`);
+    if (!response.ok) {
+        throw new Error('Failed to get Stripe Connect status');
+    }
+    return response.json();
+};
+
+// Start Stripe Connect onboarding (create account and get link)
+export const startStripeConnectOnboarding = async (userId: string | number): Promise<{
+    accountId: string;
+    onboardingUrl: string;
+}> => {
+    const response = await fetch(`${API_URL}/users/${userId}/stripe-connect/onboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to start onboarding: ${text}`);
+    }
+    return response.json();
+};
+
+// Get new onboarding link (to continue incomplete onboarding)
+export const getStripeConnectOnboardingLink = async (userId: string | number): Promise<{
+    onboardingUrl: string;
+}> => {
+    const response = await fetch(`${API_URL}/users/${userId}/stripe-connect/onboard-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to get onboarding link: ${text}`);
+    }
+    return response.json();
+};

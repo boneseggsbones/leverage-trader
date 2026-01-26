@@ -12,6 +12,7 @@ import {
     EscrowStatus,
     PaymentStatus,
 } from './types';
+import { createStripeProcessorToken } from './plaidService';
 
 // Initialize Stripe with secret key
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -170,7 +171,7 @@ export class StripePaymentProvider implements PaymentProvider {
             throw new Error(`No Stripe PaymentIntent for escrow: ${escrowHoldId}`);
         }
 
-        // Capture the payment (releases authorized funds)
+        // Capture the payment (releases authorized funds to Stripe balance)
         await stripeClient.paymentIntents.capture(hold.providerReference);
 
         // Update database
@@ -187,6 +188,48 @@ export class StripePaymentProvider implements PaymentProvider {
         });
 
         console.log(`[Stripe] Released funds for escrow: ${escrowHoldId}`);
+
+        // Attempt to payout to recipient's Plaid-linked bank account
+        try {
+            // Get recipient's default bank account
+            const bankAccount = await new Promise<any>((resolve, reject) => {
+                db.get(
+                    `SELECT plaid_access_token, plaid_account_id, display_name 
+                     FROM payment_methods 
+                     WHERE user_id = ? AND provider = 'stripe_bank' AND plaid_access_token IS NOT NULL
+                     ORDER BY is_default DESC, id DESC LIMIT 1`,
+                    [hold.recipientId],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    }
+                );
+            });
+
+            if (bankAccount?.plaid_access_token && bankAccount?.plaid_account_id) {
+                // Create Stripe bank account token from Plaid
+                const bankToken = await createStripeProcessorToken(
+                    bankAccount.plaid_access_token,
+                    bankAccount.plaid_account_id
+                );
+
+                // Create an external account and payout
+                // Note: In production, you'd attach this to a Stripe account
+                // For now, log successful bank retrieval
+                console.log(`[Stripe] Ready to payout $${(hold.amount / 100).toFixed(2)} to ${bankAccount.display_name} for trade ${hold.tradeId}`);
+                console.log(`[Stripe] Bank token created: ${bankToken.substring(0, 20)}...`);
+
+                // TODO: In production with Stripe Payouts enabled, you would:
+                // 1. Attach bank account to your Connect account as external account
+                // 2. Create payout to that external account
+                // For sandbox testing, the funds are captured successfully
+            } else {
+                console.log(`[Stripe] Recipient ${hold.recipientId} has no linked bank account - funds held in platform balance`);
+            }
+        } catch (payoutError) {
+            // Log but don't fail - funds are captured, payout can be retried
+            console.error(`[Stripe] Payout preparation failed for escrow ${escrowHoldId}:`, payoutError);
+        }
     }
 
     async refundHeldFunds(escrowHoldId: string, amount?: number): Promise<void> {
