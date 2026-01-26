@@ -1913,11 +1913,11 @@ app.get('/api/users/:id/payouts', async (req, res) => {
   }
 
   try {
+    // Query payouts directly - includes both direct trades and chain trades
     const payouts = await new Promise<any[]>((resolve, reject) => {
       db.all(
-        `SELECT p.*, t.proposerId, t.receiverId 
+        `SELECT p.* 
          FROM payouts p
-         JOIN trades t ON p.trade_id = t.id
          WHERE p.recipient_user_id = ?
          ORDER BY p.created_at DESC`,
         [userId],
