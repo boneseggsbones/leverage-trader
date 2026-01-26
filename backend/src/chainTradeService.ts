@@ -448,7 +448,8 @@ export async function rejectChainProposal(chainId: string, userId: number, reaso
         await dbRun(`UPDATE Item SET status = 'active' WHERE id = ?`, [p.givesItemId]);
     }
 
-    // TODO: Refund any escrow holds
+    // Refund all escrow holds for this chain
+    await refundChainEscrows(chainId);
 
     // Notify all participants
     for (const p of proposal.participants) {
@@ -676,21 +677,17 @@ export async function verifyChainReceipt(chainId: string, userId: number): Promi
       WHERE id = ?
     `, [ChainStatus.COMPLETED, chainId]);
 
-        // Release escrow, transfer items
-        for (const p of proposal.participants) {
-            // Transfer item ownership
-            await dbRun(`UPDATE Item SET owner_id = ?, status = 'active' WHERE id = ?`, [
-                p.receivesFromUserId === p.userId ? p.userId : proposal.participants.find(pp => pp.givesToUserId === p.userId)?.userId,
-                p.givesItemId
-            ]);
-        }
+        // ========================================
+        // ESCROW RELEASE & PAYOUTS
+        // ========================================
+        await processChainEscrowAndPayouts(proposal);
 
         // Update item ownership correctly
         for (const p of proposal.participants) {
             // The item they receive was given by receivesFromUserId
             const giver = proposal.participants.find(pp => pp.userId === p.receivesFromUserId);
             if (giver) {
-                await dbRun(`UPDATE Item SET owner_id = ? WHERE id = ?`, [p.userId, giver.givesItemId]);
+                await dbRun(`UPDATE Item SET owner_id = ?, status = 'active' WHERE id = ?`, [p.userId, giver.givesItemId]);
             }
         }
 
@@ -708,3 +705,160 @@ export async function verifyChainReceipt(chainId: string, userId: number): Promi
 
     return getChainProposal(chainId) as Promise<ChainProposal>;
 }
+
+/**
+ * Process escrow release and payouts for a completed chain trade
+ * 1. Capture all PaymentIntents (funds move from buyers)
+ * 2. Transfer to recipients who are owed cash (negative cashDelta)
+ */
+async function processChainEscrowAndPayouts(proposal: ChainProposal): Promise<void> {
+    const now = new Date().toISOString();
+
+    // Get all escrow holds for this chain
+    const escrowHolds = await dbAll<any>(`
+        SELECT * FROM escrow_holds WHERE trade_id = ? AND status = 'FUNDED'
+    `, [proposal.id]);
+
+    console.log(`[ChainTrade] Processing ${escrowHolds.length} escrow holds for chain ${proposal.id}`);
+
+    // Step 1: Capture all payments (release from escrow to platform)
+    for (const hold of escrowHolds) {
+        try {
+            if (hold.provider === 'stripe' && hold.provider_reference) {
+                // Capture the Stripe PaymentIntent
+                await stripePaymentProvider.capturePayment(hold.provider_reference);
+                console.log(`[ChainTrade] Captured payment ${hold.provider_reference} for chain ${proposal.id}`);
+            }
+
+            // Mark escrow as released
+            await dbRun(`
+                UPDATE escrow_holds SET status = 'RELEASED', updated_at = ? WHERE id = ?
+            `, [now, hold.id]);
+
+        } catch (captureErr: any) {
+            console.error(`[ChainTrade] Failed to capture escrow ${hold.id}:`, captureErr.message);
+            // Continue processing other holds - we'll handle failures in payouts
+        }
+    }
+
+    // Step 2: Calculate who receives money (participants with negative cashDelta)
+    // Negative cashDelta means they're giving away higher-value items, so they receive cash
+    const recipients = proposal.participants.filter(p => p.cashDelta < 0);
+
+    console.log(`[ChainTrade] ${recipients.length} participants to receive payouts for chain ${proposal.id}`);
+
+    // Step 3: Create payouts for each recipient
+    for (const recipient of recipients) {
+        const amountToReceive = Math.abs(recipient.cashDelta); // Convert negative to positive
+
+        if (amountToReceive <= 0) continue;
+
+        const payoutId = `payout_chain_${proposal.id}_${recipient.userId}_${Date.now()}`;
+
+        try {
+            // Check if recipient has Stripe Connect
+            const connectedAccount = await dbGet<any>(`
+                SELECT stripe_account_id, payouts_enabled FROM connected_accounts WHERE user_id = ?
+            `, [recipient.userId]);
+
+            if (!connectedAccount) {
+                // No Connect account - create pending payout
+                await createChainPayoutRecord(payoutId, proposal.id, recipient.userId, amountToReceive, 'pending_onboarding',
+                    'Recipient needs to complete Stripe Connect onboarding');
+                console.log(`[ChainTrade] User ${recipient.userId} awaiting Connect onboarding for $${(amountToReceive / 100).toFixed(2)}`);
+                continue;
+            }
+
+            if (!connectedAccount.payouts_enabled) {
+                await createChainPayoutRecord(payoutId, proposal.id, recipient.userId, amountToReceive, 'pending_onboarding',
+                    'Stripe Connect payouts not yet enabled');
+                continue;
+            }
+
+            // Stripe Connect is ready - create transfer
+            const stripe = await import('stripe');
+            const stripeClient = new stripe.default(process.env.STRIPE_SECRET_KEY!, {
+                apiVersion: '2025-12-15.clover',
+            });
+
+            const transfer = await stripeClient.transfers.create({
+                amount: amountToReceive,
+                currency: 'usd',
+                destination: connectedAccount.stripe_account_id,
+                description: `Payout for chain trade ${proposal.id}`,
+                metadata: {
+                    chain_id: proposal.id,
+                    payout_id: payoutId,
+                    recipient_user_id: String(recipient.userId),
+                },
+            });
+
+            await createChainPayoutRecord(payoutId, proposal.id, recipient.userId, amountToReceive, 'completed', null, transfer.id);
+            console.log(`[ChainTrade] Transferred $${(amountToReceive / 100).toFixed(2)} to user ${recipient.userId} (transfer: ${transfer.id})`);
+
+        } catch (payoutErr: any) {
+            console.error(`[ChainTrade] Payout failed for user ${recipient.userId}:`, payoutErr.message);
+            await createChainPayoutRecord(payoutId, proposal.id, recipient.userId, amountToReceive, 'failed', payoutErr.message);
+        }
+    }
+}
+
+/**
+ * Create a payout record for chain trades
+ */
+async function createChainPayoutRecord(
+    payoutId: string,
+    chainId: string,
+    recipientUserId: number,
+    amountCents: number,
+    status: string,
+    errorMessage: string | null,
+    providerReference?: string
+): Promise<void> {
+    const now = new Date().toISOString();
+    const completedAt = status === 'completed' ? now : null;
+
+    await dbRun(`
+        INSERT INTO payouts (id, trade_id, escrow_hold_id, recipient_user_id, amount_cents, status, provider, provider_reference, error_message, created_at, updated_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [payoutId, chainId, `chain_${chainId}`, recipientUserId, amountCents, status, 'stripe_connect', providerReference || null, errorMessage, now, now, completedAt]);
+
+    console.log(`[ChainTrade] Created payout record ${payoutId} with status: ${status}`);
+}
+
+/**
+ * Refund all escrow holds for a chain trade
+ * Called when a chain is rejected or fails
+ */
+async function refundChainEscrows(chainId: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    // Get all escrow holds for this chain
+    const escrowHolds = await dbAll<any>(`
+        SELECT * FROM escrow_holds WHERE trade_id = ? AND status IN ('PENDING', 'FUNDED')
+    `, [chainId]);
+
+    console.log(`[ChainTrade] Refunding ${escrowHolds.length} escrow holds for chain ${chainId}`);
+
+    for (const hold of escrowHolds) {
+        try {
+            if (hold.provider === 'stripe' && hold.provider_reference) {
+                // Cancel the Stripe PaymentIntent (releases authorized funds back to buyer)
+                await stripePaymentProvider.refundPayment(hold.provider_reference);
+                console.log(`[ChainTrade] Cancelled PaymentIntent ${hold.provider_reference} for chain ${chainId}`);
+            }
+
+            // Mark escrow as refunded
+            await dbRun(`
+                UPDATE escrow_holds SET status = 'REFUNDED', updated_at = ? WHERE id = ?
+            `, [now, hold.id]);
+
+        } catch (refundErr: any) {
+            console.error(`[ChainTrade] Failed to refund escrow ${hold.id}:`, refundErr.message);
+            // Continue processing other holds
+        }
+    }
+
+    console.log(`[ChainTrade] Completed refunds for chain ${chainId}`);
+}
+
