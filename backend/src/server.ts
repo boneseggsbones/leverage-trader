@@ -1862,6 +1862,221 @@ app.get('/api/trades/:id/cash-differential', async (req, res) => {
 });
 
 // =====================================================
+// PAYOUT MANAGEMENT ENDPOINTS
+// =====================================================
+
+// Get payout status for a trade
+app.get('/api/trades/:id/payout-status', async (req, res) => {
+  const tradeId = req.params.id;
+
+  try {
+    const payout = await new Promise<any>((resolve, reject) => {
+      db.get(
+        `SELECT * FROM payouts WHERE trade_id = ? ORDER BY created_at DESC LIMIT 1`,
+        [tradeId],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+
+    if (!payout) {
+      return res.json({ hasPayout: false, message: 'No payout record for this trade' });
+    }
+
+    res.json({
+      hasPayout: true,
+      payout: {
+        id: payout.id,
+        status: payout.status,
+        amountCents: payout.amount_cents,
+        provider: payout.provider,
+        providerReference: payout.provider_reference,
+        errorMessage: payout.error_message,
+        retryCount: payout.retry_count,
+        createdAt: payout.created_at,
+        completedAt: payout.completed_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('Error getting payout status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all payouts for a user (payout history)
+app.get('/api/users/:id/payouts', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    const payouts = await new Promise<any[]>((resolve, reject) => {
+      db.all(
+        `SELECT p.*, t.proposerId, t.receiverId 
+         FROM payouts p
+         JOIN trades t ON p.trade_id = t.id
+         WHERE p.recipient_user_id = ?
+         ORDER BY p.created_at DESC`,
+        [userId],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        }
+      );
+    });
+
+    // Calculate totals
+    const totalPending = payouts
+      .filter(p => ['pending', 'pending_onboarding', 'processing'].includes(p.status))
+      .reduce((sum, p) => sum + p.amount_cents, 0);
+    const totalCompleted = payouts
+      .filter(p => p.status === 'completed')
+      .reduce((sum, p) => sum + p.amount_cents, 0);
+    const totalFailed = payouts
+      .filter(p => p.status === 'failed')
+      .reduce((sum, p) => sum + p.amount_cents, 0);
+
+    res.json({
+      payouts: payouts.map(p => ({
+        id: p.id,
+        tradeId: p.trade_id,
+        amountCents: p.amount_cents,
+        status: p.status,
+        provider: p.provider,
+        providerReference: p.provider_reference,
+        errorMessage: p.error_message,
+        retryCount: p.retry_count,
+        createdAt: p.created_at,
+        completedAt: p.completed_at,
+      })),
+      summary: {
+        totalPendingCents: totalPending,
+        totalCompletedCents: totalCompleted,
+        totalFailedCents: totalFailed,
+        pendingCount: payouts.filter(p => ['pending', 'pending_onboarding', 'processing'].includes(p.status)).length,
+        completedCount: payouts.filter(p => p.status === 'completed').length,
+        failedCount: payouts.filter(p => p.status === 'failed').length,
+      },
+    });
+  } catch (err: any) {
+    console.error('Error fetching user payouts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Retry a failed payout
+app.post('/api/payouts/:id/retry', async (req, res) => {
+  const payoutId = req.params.id;
+
+  try {
+    // Get the payout record
+    const payout = await new Promise<any>((resolve, reject) => {
+      db.get('SELECT * FROM payouts WHERE id = ?', [payoutId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!payout) {
+      return res.status(404).json({ error: 'Payout not found' });
+    }
+
+    // Only retry failed or pending_onboarding payouts
+    if (!['failed', 'pending_onboarding'].includes(payout.status)) {
+      return res.status(400).json({
+        error: `Cannot retry payout with status: ${payout.status}`,
+        currentStatus: payout.status
+      });
+    }
+
+    // Check if recipient now has Stripe Connect enabled
+    const connectedAccount = await new Promise<any>((resolve, reject) => {
+      db.get(
+        `SELECT stripe_account_id, payouts_enabled FROM connected_accounts WHERE user_id = ?`,
+        [payout.recipient_user_id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+
+    if (!connectedAccount || !connectedAccount.payouts_enabled) {
+      // Update retry count but keep pending
+      const now = new Date().toISOString();
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE payouts SET retry_count = retry_count + 1, updated_at = ?, error_message = ? WHERE id = ?`,
+          [now, 'Recipient still needs to complete Stripe Connect setup', payoutId],
+          err => err ? reject(err) : resolve()
+        );
+      });
+
+      return res.status(400).json({
+        error: 'Recipient has not completed Stripe Connect onboarding',
+        message: 'The seller needs to set up their Stripe account to receive payouts',
+        status: 'pending_onboarding',
+      });
+    }
+
+    // Attempt the transfer
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2025-12-15.clover',
+    });
+
+    const transfer = await stripe.transfers.create({
+      amount: payout.amount_cents,
+      currency: 'usd',
+      destination: connectedAccount.stripe_account_id,
+      description: `Payout retry for trade ${payout.trade_id}`,
+      metadata: {
+        trade_id: payout.trade_id,
+        payout_id: payoutId,
+        is_retry: 'true',
+      },
+    });
+
+    // Update payout record as completed
+    const now = new Date().toISOString();
+    await new Promise<void>((resolve, reject) => {
+      db.run(
+        `UPDATE payouts SET status = 'completed', provider_reference = ?, error_message = NULL, retry_count = retry_count + 1, updated_at = ?, completed_at = ? WHERE id = ?`,
+        [transfer.id, now, now, payoutId],
+        err => err ? reject(err) : resolve()
+      );
+    });
+
+    console.log(`[Payout] Retry successful for ${payoutId}, transfer: ${transfer.id}`);
+
+    res.json({
+      success: true,
+      message: 'Payout completed successfully',
+      transferId: transfer.id,
+      amountCents: payout.amount_cents,
+    });
+
+  } catch (err: any) {
+    console.error('Error retrying payout:', err);
+
+    // Update payout with error
+    const now = new Date().toISOString();
+    await new Promise<void>((resolve) => {
+      db.run(
+        `UPDATE payouts SET retry_count = retry_count + 1, updated_at = ?, error_message = ? WHERE id = ?`,
+        [now, err.message, payoutId],
+        () => resolve()
+      );
+    });
+
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =====================================================
 // NOTIFICATION ENDPOINTS
 // =====================================================
 

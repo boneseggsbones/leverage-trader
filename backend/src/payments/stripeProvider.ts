@@ -174,7 +174,7 @@ export class StripePaymentProvider implements PaymentProvider {
         // Capture the payment (releases authorized funds to Stripe balance)
         await stripeClient.paymentIntents.capture(hold.providerReference);
 
-        // Update database
+        // Update escrow_holds status
         const now = new Date().toISOString();
         await new Promise<void>((resolve, reject) => {
             db.run(
@@ -187,17 +187,26 @@ export class StripePaymentProvider implements PaymentProvider {
             );
         });
 
-        console.log(`[Stripe] Released funds for escrow: ${escrowHoldId}`);
+        console.log(`[Stripe] Captured payment for escrow: ${escrowHoldId}`);
 
-        // Attempt to payout to recipient's Plaid-linked bank account
+        // Now transfer funds to the recipient via Stripe Connect
+        await this.processPayoutToRecipient(hold, escrowHoldId);
+    }
+
+    /**
+     * Process payout to recipient via Stripe Connect
+     * Creates a payout record and attempts to transfer funds
+     */
+    private async processPayoutToRecipient(hold: EscrowHold, escrowHoldId: string): Promise<void> {
+        const payoutId = generateId('payout');
+        const now = new Date().toISOString();
+
         try {
-            // Get recipient's default bank account
-            const bankAccount = await new Promise<any>((resolve, reject) => {
+            // Check if recipient has a Stripe Connect account
+            const connectedAccount = await new Promise<any>((resolve, reject) => {
                 db.get(
-                    `SELECT plaid_access_token, plaid_account_id, display_name 
-                     FROM payment_methods 
-                     WHERE user_id = ? AND provider = 'stripe_bank' AND plaid_access_token IS NOT NULL
-                     ORDER BY is_default DESC, id DESC LIMIT 1`,
+                    `SELECT stripe_account_id, payouts_enabled, onboarding_complete 
+                     FROM connected_accounts WHERE user_id = ?`,
                     [hold.recipientId],
                     (err, row) => {
                         if (err) reject(err);
@@ -206,30 +215,81 @@ export class StripePaymentProvider implements PaymentProvider {
                 );
             });
 
-            if (bankAccount?.plaid_access_token && bankAccount?.plaid_account_id) {
-                // Create Stripe bank account token from Plaid
-                const bankToken = await createStripeProcessorToken(
-                    bankAccount.plaid_access_token,
-                    bankAccount.plaid_account_id
-                );
-
-                // Create an external account and payout
-                // Note: In production, you'd attach this to a Stripe account
-                // For now, log successful bank retrieval
-                console.log(`[Stripe] Ready to payout $${(hold.amount / 100).toFixed(2)} to ${bankAccount.display_name} for trade ${hold.tradeId}`);
-                console.log(`[Stripe] Bank token created: ${bankToken.substring(0, 20)}...`);
-
-                // TODO: In production with Stripe Payouts enabled, you would:
-                // 1. Attach bank account to your Connect account as external account
-                // 2. Create payout to that external account
-                // For sandbox testing, the funds are captured successfully
-            } else {
-                console.log(`[Stripe] Recipient ${hold.recipientId} has no linked bank account - funds held in platform balance`);
+            if (!connectedAccount) {
+                // Recipient hasn't set up Stripe Connect - create pending payout
+                console.log(`[Payout] Recipient ${hold.recipientId} has no Connect account - payout pending onboarding`);
+                await this.createPayoutRecord(payoutId, hold, escrowHoldId, 'pending_onboarding',
+                    'Recipient needs to complete Stripe Connect onboarding to receive payout');
+                return;
             }
-        } catch (payoutError) {
-            // Log but don't fail - funds are captured, payout can be retried
-            console.error(`[Stripe] Payout preparation failed for escrow ${escrowHoldId}:`, payoutError);
+
+            if (!connectedAccount.payouts_enabled) {
+                // Connect account exists but payouts not enabled
+                console.log(`[Payout] Recipient ${hold.recipientId} Connect account not enabled for payouts`);
+                await this.createPayoutRecord(payoutId, hold, escrowHoldId, 'pending_onboarding',
+                    'Stripe Connect payouts not yet enabled - complete verification');
+                return;
+            }
+
+            // Stripe Connect is ready - create transfer
+            const stripeClient = this.ensureStripe();
+
+            // Create transfer to connected account
+            const transfer = await stripeClient.transfers.create({
+                amount: Math.round(hold.amount), // Amount in cents
+                currency: 'usd',
+                destination: connectedAccount.stripe_account_id,
+                description: `Payout for trade ${hold.tradeId}`,
+                metadata: {
+                    trade_id: hold.tradeId,
+                    escrow_hold_id: escrowHoldId,
+                    payout_id: payoutId,
+                    recipient_user_id: String(hold.recipientId),
+                },
+            });
+
+            console.log(`[Payout] Successfully transferred $${(hold.amount / 100).toFixed(2)} to user ${hold.recipientId} (transfer: ${transfer.id})`);
+
+            // Record successful payout
+            await this.createPayoutRecord(payoutId, hold, escrowHoldId, 'completed', null, transfer.id);
+
+        } catch (payoutError: any) {
+            // Payout failed - record for retry
+            console.error(`[Payout] Failed for escrow ${escrowHoldId}:`, payoutError.message);
+            await this.createPayoutRecord(payoutId, hold, escrowHoldId, 'failed', payoutError.message);
         }
+    }
+
+    /**
+     * Create a payout record in the database
+     */
+    private async createPayoutRecord(
+        payoutId: string,
+        hold: EscrowHold,
+        escrowHoldId: string,
+        status: string,
+        errorMessage: string | null,
+        providerReference?: string
+    ): Promise<void> {
+        const now = new Date().toISOString();
+        const completedAt = status === 'completed' ? now : null;
+
+        await new Promise<void>((resolve, reject) => {
+            db.run(
+                `INSERT INTO payouts (id, trade_id, escrow_hold_id, recipient_user_id, amount_cents, status, provider, provider_reference, error_message, created_at, updated_at, completed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [payoutId, hold.tradeId, escrowHoldId, hold.recipientId, Math.round(hold.amount), status, 'stripe_connect', providerReference || null, errorMessage, now, now, completedAt],
+                function (err) {
+                    if (err) {
+                        console.error('[Payout] Failed to create payout record:', err);
+                        reject(err);
+                    } else {
+                        console.log(`[Payout] Created record ${payoutId} with status: ${status}`);
+                        resolve();
+                    }
+                }
+            );
+        });
     }
 
     async refundHeldFunds(escrowHoldId: string, amount?: number): Promise<void> {

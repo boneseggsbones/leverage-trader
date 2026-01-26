@@ -520,6 +520,31 @@ const init = () => {
       );
       CREATE INDEX IF NOT EXISTS idx_rejected_chains_hash ON rejected_chains(cycle_hash);
       CREATE INDEX IF NOT EXISTS idx_rejected_chains_expires ON rejected_chains(expires_at);
+
+      -- =====================================================
+      -- PAYOUT TRACKING TABLE
+      -- =====================================================
+      
+      -- Track payouts to sellers when trades complete
+      CREATE TABLE IF NOT EXISTS payouts (
+        id TEXT PRIMARY KEY,
+        trade_id TEXT NOT NULL,
+        escrow_hold_id TEXT NOT NULL,
+        recipient_user_id INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',  -- pending, processing, completed, failed, pending_onboarding
+        provider TEXT NOT NULL DEFAULT 'stripe_connect',
+        provider_reference TEXT,  -- Stripe transfer ID
+        error_message TEXT,
+        retry_count INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        completed_at TEXT,
+        FOREIGN KEY (recipient_user_id) REFERENCES User(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payouts_trade ON payouts(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_payouts_recipient ON payouts(recipient_user_id);
+      CREATE INDEX IF NOT EXISTS idx_payouts_status ON payouts(status);
     `, (err) => {
       if (err) {
         reject(err);
