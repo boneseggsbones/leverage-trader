@@ -124,8 +124,8 @@ const CounterOfferModal: React.FC<CounterOfferModalProps> = ({
                                         key={item.id}
                                         onClick={() => toggleItem(item.id, 'yours')}
                                         className={`p-2 rounded-lg border-2 text-left transition-all ${selectedYourItems.includes(item.id)
-                                                ? 'border-orange-500 bg-orange-50'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         <p className="text-xs font-medium truncate">{item.name}</p>
@@ -139,9 +139,10 @@ const CounterOfferModal: React.FC<CounterOfferModalProps> = ({
                                 <input
                                     type="number"
                                     min="0"
-                                    value={yourCash}
+                                    value={yourCash || ''}
                                     onChange={e => setYourCash(Math.max(0, parseInt(e.target.value) || 0))}
                                     className="w-24 px-2 py-1 border rounded text-sm"
+                                    placeholder="0"
                                 />
                             </div>
                         </div>
@@ -155,8 +156,8 @@ const CounterOfferModal: React.FC<CounterOfferModalProps> = ({
                                         key={item.id}
                                         onClick={() => toggleItem(item.id, 'theirs')}
                                         className={`p-2 rounded-lg border-2 text-left transition-all ${selectedTheirItems.includes(item.id)
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-blue-500 bg-blue-50'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         <p className="text-xs font-medium truncate">{item.name}</p>
@@ -170,9 +171,10 @@ const CounterOfferModal: React.FC<CounterOfferModalProps> = ({
                                 <input
                                     type="number"
                                     min="0"
-                                    value={theirCash}
+                                    value={theirCash || ''}
                                     onChange={e => setTheirCash(Math.max(0, parseInt(e.target.value) || 0))}
                                     className="w-24 px-2 py-1 border rounded text-sm"
+                                    placeholder="0"
                                 />
                             </div>
                         </div>

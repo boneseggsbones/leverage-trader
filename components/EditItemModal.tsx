@@ -104,7 +104,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ show, onClose, onEditItem
                                         min="0"
                                         name="estimatedMarketValue"
                                         id="estimatedMarketValue"
-                                        value={estimatedMarketValue}
+                                        value={estimatedMarketValue || ''}
                                         onChange={(e) => setEstimatedMarketValue(parseFloat(e.target.value) || 0)}
                                         className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md"
                                         placeholder="0.00"
