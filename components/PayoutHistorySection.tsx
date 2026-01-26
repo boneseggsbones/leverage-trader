@@ -58,6 +58,7 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [retrying, setRetrying] = useState<string | null>(null);
+    const [settingUp, setSettingUp] = useState(false);
 
     const loadPayouts = async () => {
         try {
@@ -99,6 +100,28 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
             alert(`Error: ${err.message}`);
         } finally {
             setRetrying(null);
+        }
+    };
+
+    const handleSetupStripeConnect = async () => {
+        try {
+            setSettingUp(true);
+            const response = await fetch(`http://localhost:4000/api/users/${userId}/stripe-connect/onboard`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await response.json();
+
+            if (data.onboardingUrl) {
+                // Redirect to Stripe Connect onboarding
+                window.location.href = data.onboardingUrl;
+            } else if (data.error) {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (err: any) {
+            alert(`Error starting setup: ${err.message}`);
+        } finally {
+            setSettingUp(false);
         }
     };
 
@@ -162,12 +185,13 @@ export function PayoutHistorySection({ userId }: PayoutHistorySectionProps) {
                                 <span className="font-medium">Setup required</span> — Complete Stripe Connect to receive payouts
                             </p>
                         </div>
-                        <a
-                            href="/profile?tab=payments"
-                            className="px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors"
+                        <button
+                            onClick={handleSetupStripeConnect}
+                            disabled={settingUp}
+                            className="px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
                         >
-                            Set Up
-                        </a>
+                            {settingUp ? 'Loading...' : 'Set Up'}
+                        </button>
                     </div>
                 </div>
             )}
