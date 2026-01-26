@@ -219,7 +219,7 @@ export function getPaymentProvidersStatus(): {
         },
         plaid: {
             configured: Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET),
-            features: [],
+            features: Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET) ? ['bank_accounts', 'auth'] : [],
         },
         paypal: {
             configured: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET),

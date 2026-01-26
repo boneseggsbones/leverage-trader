@@ -20,6 +20,7 @@ import {
 } from '../api/api';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import PlaidLinkButton from './PlaidLinkButton';
 
 // Load Stripe outside of component
 const stripePublishableKey = (import.meta as any).env?.VITE_STRIPE_PUBLISHABLE_KEY
@@ -500,6 +501,44 @@ const PaymentMethodsSection: React.FC<PaymentMethodsSectionProps> = ({ userId })
                                             onCancel={closeModal}
                                         />
                                     </Elements>
+                                </>
+                            ) : selectedProvider === 'stripe_bank' ? (
+                                <>
+                                    <button
+                                        onClick={() => setSelectedProvider(null)}
+                                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                        ← Back to all methods
+                                    </button>
+
+                                    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center text-white">
+                                                🏦
+                                            </div>
+                                            <p className="font-medium text-gray-800 dark:text-white">
+                                                Bank Account
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <PlaidLinkButton
+                                        userId={userId}
+                                        onSuccess={(method) => {
+                                            setMethods([...methods, {
+                                                id: method.id,
+                                                provider: method.provider as PaymentProvider,
+                                                display_name: method.displayName,
+                                                is_default: methods.length === 0 ? 1 : 0,
+                                                is_verified: 1,
+                                                connected_at: new Date().toISOString(),
+                                                last_used_at: null,
+                                                last_four: method.lastFour,
+                                            }]);
+                                            closeModal();
+                                        }}
+                                        onCancel={closeModal}
+                                    />
                                 </>
                             ) : (
                                 // Non-Stripe providers (placeholder for now)

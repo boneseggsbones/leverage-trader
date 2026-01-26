@@ -995,3 +995,45 @@ export const getPaymentProvidersStatus = async (): Promise<PaymentProvidersStatu
     }
     return response.json();
 };
+
+// =====================================================
+// PLAID API
+// =====================================================
+
+// Create Plaid Link token for bank account connection
+export const createPlaidLinkToken = async (userId: string | number): Promise<{
+    linkToken: string;
+}> => {
+    const response = await fetch(`${API_URL}/users/${userId}/plaid/link-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to create Plaid Link token: ${text}`);
+    }
+    return response.json();
+};
+
+// Exchange Plaid public token for access token and save bank account
+export const exchangePlaidToken = async (
+    userId: string | number,
+    publicToken: string,
+    metadata: any
+): Promise<{
+    id: number;
+    provider: string;
+    displayName: string;
+    lastFour: string;
+}> => {
+    const response = await fetch(`${API_URL}/users/${userId}/plaid/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicToken, metadata }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to exchange Plaid token: ${text}`);
+    }
+    return response.json();
+};

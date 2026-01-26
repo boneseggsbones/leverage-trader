@@ -25,6 +25,7 @@ import { normalizeLocation, normalizeCity, normalizeState } from './locationUtil
 import { calculateDistance, getCoordinates, getZipCodeData } from './distanceService';
 import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStripeConfigured } from './payments/paymentMethodService';
 import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession, syncSubscriptionFromStripe } from './subscriptionService';
+import { createLinkToken, exchangePublicToken, deletePlaidItem, isPlaidConfigured } from './payments/plaidService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -980,6 +981,108 @@ app.delete('/api/users/:id/payment-methods/:methodId', (req, res) => {
       res.json({ success: true });
     }
   );
+});
+
+// =====================================================
+// PLAID ENDPOINTS
+// =====================================================
+
+// Create Plaid Link token for bank account connection
+app.post('/api/users/:id/plaid/link-token', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  if (!isPlaidConfigured()) {
+    return res.status(503).json({ error: 'Plaid is not configured' });
+  }
+
+  try {
+    const result = await createLinkToken(userId);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[Plaid] Error creating Link token:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Exchange Plaid public token for access token and save bank account
+app.post('/api/users/:id/plaid/exchange', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  if (!isPlaidConfigured()) {
+    return res.status(503).json({ error: 'Plaid is not configured' });
+  }
+
+  const { publicToken, metadata } = req.body;
+  if (!publicToken || !metadata) {
+    return res.status(400).json({ error: 'publicToken and metadata are required' });
+  }
+
+  try {
+    const result = await exchangePublicToken(userId, publicToken, {
+      accountId: metadata.account_id || metadata.accountId,
+      accountName: metadata.account?.name || metadata.accountName || 'Bank Account',
+      accountMask: metadata.account?.mask || metadata.accountMask || '****',
+      institutionName: metadata.institution?.name || metadata.institutionName || 'Bank',
+      institutionId: metadata.institution?.institution_id || metadata.institutionId || '',
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[Plaid] Error exchanging token:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a Plaid-connected bank account
+app.delete('/api/users/:id/plaid/:methodId', async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  const methodId = parseInt(req.params.methodId, 10);
+
+  if (isNaN(userId) || isNaN(methodId)) {
+    return res.status(400).json({ error: 'Invalid IDs' });
+  }
+
+  try {
+    // Get the Plaid access token for this method
+    const method = await new Promise<any>((resolve, reject) => {
+      db.get(
+        'SELECT plaid_access_token FROM payment_methods WHERE id = ? AND user_id = ?',
+        [methodId, userId],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+
+    // Remove from Plaid if it has an access token
+    if (method?.plaid_access_token) {
+      await deletePlaidItem(method.plaid_access_token);
+    }
+
+    // Delete from database
+    await new Promise<void>((resolve, reject) => {
+      db.run(
+        'DELETE FROM payment_methods WHERE id = ? AND user_id = ?',
+        [methodId, userId],
+        function (err) {
+          if (err) reject(err);
+          else if (this.changes === 0) reject(new Error('Payment method not found'));
+          else resolve();
+        }
+      );
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[Plaid] Error deleting bank account:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Propose a new trade
