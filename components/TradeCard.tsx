@@ -1,6 +1,7 @@
 import React from 'react';
 import { Trade, User, Item, TradeStatus } from '../types.ts';
 import { formatCurrencyOptional, formatCurrency } from '../utils/currency.ts';
+import { DisputeStatusCard } from './DisputeStatusCard.tsx';
 
 // Tracking info from the API
 export interface TrackingDisplayInfo {
@@ -35,6 +36,7 @@ interface TradeCardProps {
     allItems: Map<string, Item>;
     trackingData?: TradeTrackingData;
     escrowInfo?: EscrowDisplayInfo | null;
+    onOpenDisputeResponse?: () => void;
     children?: React.ReactNode;
 }
 
@@ -107,7 +109,7 @@ const ShippingTracker: React.FC<{ tracking: TrackingDisplayInfo; label: string }
 };
 
 
-const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, allItems, trackingData, escrowInfo, children }) => {
+const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, allItems, trackingData, escrowInfo, onOpenDisputeResponse, children }) => {
     const wasProposer = trade.proposerId === currentUser.id;
 
     const youGiveItemIds = wasProposer ? trade.proposerItemIds : trade.receiverItemIds;
@@ -255,6 +257,17 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                     {theirTracking && (
                         <ShippingTracker tracking={theirTracking} label={`${otherUser.name}'s Shipment`} />
                     )}
+                </div>
+            )}
+
+            {/* Dispute Status Card */}
+            {trade.status === TradeStatus.DISPUTE_OPENED && trade.disputeTicketId && (
+                <div className="mt-3">
+                    <DisputeStatusCard
+                        disputeId={trade.disputeTicketId}
+                        currentUserId={typeof currentUser.id === 'string' ? parseInt(currentUser.id, 10) : currentUser.id}
+                        onRespond={onOpenDisputeResponse}
+                    />
                 </div>
             )}
 

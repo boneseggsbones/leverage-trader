@@ -75,11 +75,36 @@ const NotificationBell: React.FC = () => {
             }
         }
 
-        // Navigate to trade if applicable
-        if (notification.tradeId) {
-            setIsOpen(false);
-            navigate(`/trades?highlight=${notification.tradeId}`);
+        setIsOpen(false);
+
+        // Type-specific navigation
+        const type = notification.type;
+        const tradeId = notification.tradeId;
+
+        // Chain trade notifications
+        if (type?.startsWith('CHAIN_TRADE_')) {
+            if (tradeId) {
+                navigate(`/chains?highlight=${tradeId}`);
+            } else {
+                navigate('/chains');
+            }
+            return;
         }
+
+        // Wishlist notifications - go to inventory/discover
+        if (type === 'WISHLIST_ITEM_AVAILABLE' || type === 'WISHLIST_MATCH_FOUND') {
+            navigate('/discover');
+            return;
+        }
+
+        // Trade-related notifications
+        if (tradeId) {
+            navigate(`/trades?highlight=${tradeId}`);
+            return;
+        }
+
+        // Default: go to trades page
+        navigate('/trades');
     };
 
     const handleMarkAllRead = async () => {

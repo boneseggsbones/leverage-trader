@@ -12,6 +12,7 @@ import CollectionStats from './CollectionStats.tsx';
 import AccountSection from './AccountSection.tsx';
 import PaymentMethodsSection from './PaymentMethodsSection.tsx';
 import PayoutHistorySection from './PayoutHistorySection.tsx';
+import ReviewsSection from './ReviewsSection.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 type ProfileTab = 'overview' | 'account' | 'payments' | 'notifications';
@@ -252,6 +253,9 @@ const ProfilePage: React.FC = () => {
 
                             {/* Collection Stats */}
                             <CollectionStats items={profileUser.inventory} />
+
+                            {/* Reviews */}
+                            <ReviewsSection userId={profileUser.id} userName={profileUser.name} />
 
                             {/* Trade-Up Journey */}
                             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
