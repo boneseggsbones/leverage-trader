@@ -172,166 +172,213 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     const givePercent = totalValue > 0 ? (youGiveTotal / totalValue) * 100 : 50;
     const getPercent = totalValue > 0 ? (youGetTotal / totalValue) * 100 : 50;
 
-    return (
-        <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 shadow-md hover:shadow-xl ring-1 ring-gray-900/5 dark:ring-white/10 transition-all duration-300">
-            {/* Decorative background elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-full -mr-16 -mt-16" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full -ml-12 -mb-12" />
+    // Determine if this is a "winning" trade for celebration effects
+    const isWinning = valueDiff > 50; // More than $50 in your favor triggers celebration
 
-            {/* Status ribbon */}
-            <div className="absolute top-3 right-3 z-10">
+    return (
+        <div className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border-2 border-amber-200/60 dark:border-gray-700/60 shadow-lg hover:shadow-2xl transition-all duration-300">
+
+            {/* Floating decorations - stars, coins, sparkles */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                {/* Stars */}
+                <span className="absolute top-8 left-8 text-amber-400/60 text-lg animate-pulse">⭐</span>
+                <span className="absolute top-20 left-16 text-amber-300/40 text-sm" style={{ animationDelay: '0.5s' }}>✦</span>
+                <span className="absolute bottom-32 left-6 text-purple-400/40 text-base">✧</span>
+
+                {/* Floating coins */}
+                <span className="absolute top-12 right-12 text-xl animate-bounce" style={{ animationDuration: '2s' }}>🪙</span>
+                <span className="absolute top-28 right-24 text-lg animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.3s' }}>🪙</span>
+                <span className="absolute bottom-48 right-8 text-base animate-bounce" style={{ animationDuration: '3s', animationDelay: '0.6s' }}>💰</span>
+
+                {/* Confetti when winning */}
+                {isWinning && (
+                    <>
+                        <span className="absolute top-16 right-32 text-red-500/70 text-lg animate-pulse">🎊</span>
+                        <span className="absolute top-8 right-48 text-blue-500/60 rotate-12 text-sm">🎉</span>
+                        <span className="absolute bottom-40 right-16 text-green-500/50 text-base">🎉</span>
+                        <div className="absolute top-24 right-20 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
+                        <div className="absolute top-32 right-12 w-1.5 h-1.5 bg-pink-400 rounded-full animate-ping" style={{ animationDelay: '0.2s' }} />
+                        <div className="absolute top-16 right-36 w-2 h-2 bg-blue-400 rounded-full animate-ping" style={{ animationDelay: '0.4s' }} />
+                    </>
+                )}
+            </div>
+
+            {/* Status badge - pill style with icon */}
+            <div className="absolute top-4 right-4 z-10">
                 {trade.status === TradeStatus.PENDING_ACCEPTANCE && (
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-200 shadow-sm">
-                        ⏳ {wasProposer ? `Waiting for ${otherUser.name}` : 'Awaiting your response'}
+                    <span className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-bold rounded-full bg-amber-400 text-amber-900 shadow-lg shadow-amber-400/30 border-2 border-amber-500">
+                        <span className="text-base">⏰</span>
+                        {wasProposer ? `Waiting for ${otherUser.name}` : 'Awaiting your response'}
                     </span>
                 )}
                 {trade.status === TradeStatus.ESCROW_FUNDED && (
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm">
-                        💰 Funds Secured
+                    <span className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-bold rounded-full bg-emerald-400 text-emerald-900 shadow-lg shadow-emerald-400/30 border-2 border-emerald-500">
+                        <span className="text-base">💰</span>
+                        Funds Secured
                     </span>
                 )}
                 {trade.status === TradeStatus.COMPLETED && (
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 border border-green-200 shadow-sm">
-                        ✅ Complete
-                    </span>
-                )}
-                {trade.status === TradeStatus.REJECTED && (
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700 border border-red-200 shadow-sm">
-                        ❌ Declined
-                    </span>
-                )}
-                {trade.status === TradeStatus.SHIPPING_PENDING && (
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
-                        📦 Ship Items
-                    </span>
-                )}
-                {trade.status === TradeStatus.IN_TRANSIT && (
-                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
-                        🚚 In Transit
+                    <span className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-bold rounded-full bg-green-400 text-green-900 shadow-lg shadow-green-400/30 border-2 border-green-500">
+                        <span className="text-base">✅</span>
+                        Complete
                     </span>
                 )}
             </div>
 
-            <div className="relative p-5">
-                {/* Header with avatars and swap visualization */}
-                <div className="flex items-center justify-center gap-4 mb-5">
-                    {/* Your side */}
+            <div className="relative p-6">
+                {/* Avatar header with illustrated style */}
+                <div className="flex items-center justify-center gap-6 mb-6">
+                    {/* Your avatar */}
                     <div className="flex flex-col items-center">
-                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-lg font-bold shadow-lg ring-4 ring-white dark:ring-gray-800">
-                            {currentUser.name.charAt(0).toUpperCase()}
+                        <div className="relative">
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-sky-300">
+                                {currentUser.name.charAt(0).toUpperCase()}
+                            </div>
+                            {/* Decorative ring */}
+                            <div className="absolute -inset-1 rounded-full border-2 border-dashed border-sky-300/50 animate-spin" style={{ animationDuration: '10s' }} />
                         </div>
-                        <span className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">You</span>
+                        <span className="mt-2 text-sm font-bold text-gray-700 dark:text-white">You</span>
                     </div>
 
-                    {/* Swap icon with animation */}
-                    <div className="relative">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    {/* Swap arrow - playful curved arrow */}
+                    <div className="relative flex items-center">
+                        <svg className="w-10 h-10 text-emerald-500" viewBox="0 0 40 40" fill="none">
+                            <path d="M8 20 Q 20 8, 32 20" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" className="drop-shadow-sm" />
+                            <path d="M28 14 L32 20 L26 22" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        </svg>
+                        {/* Circular refresh arrows behind */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                            <svg className="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none">
+                                <path d="M4 12a8 8 0 018-8m8 8a8 8 0 01-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                             </svg>
                         </div>
-                        {/* Animated rings */}
-                        <div className="absolute inset-0 rounded-full border-2 border-purple-400/30 animate-ping" style={{ animationDuration: '2s' }} />
                     </div>
 
-                    {/* Their side */}
+                    {/* Their avatar */}
                     <div className="flex flex-col items-center">
-                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-lg font-bold shadow-lg ring-4 ring-white dark:ring-gray-800">
-                            {otherUser.name.charAt(0).toUpperCase()}
+                        <div className="relative">
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-orange-300">
+                                {otherUser.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="absolute -inset-1 rounded-full border-2 border-dashed border-orange-300/50 animate-spin" style={{ animationDuration: '10s', animationDirection: 'reverse' }} />
                         </div>
-                        <span className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{otherUser.name}</span>
+                        <span className="mt-2 text-sm font-bold text-gray-700 dark:text-white">{otherUser.name}</span>
                     </div>
                 </div>
 
-                {/* Trade flow visualization */}
-                <div className="grid grid-cols-2 gap-3">
-                    {/* You Give */}
+                {/* Trade panels - colorful with decorative elements */}
+                <div className="grid grid-cols-2 gap-4">
+                    {/* SENDING panel - pink/red theme */}
                     <div className="relative">
-                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                            SENDING
-                            {(youGiveItems.length + (youGiveCash > 0 ? 1 : 0)) > 0 && (
-                                <span className="bg-white/30 px-1.5 rounded-full text-[9px]">{youGiveItems.length + (youGiveCash > 0 ? 1 : 0)}</span>
-                            )}
+                        <div className="absolute -top-3 left-4 z-10">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full shadow-lg border-2 border-rose-400">
+                                <span className="text-sm">↑</span>
+                                SENDING
+                            </span>
                         </div>
-                        <div className="pt-4 p-3 rounded-xl bg-gradient-to-br from-rose-50/80 to-orange-50/80 dark:from-rose-900/20 dark:to-orange-900/20 border border-rose-200/50 dark:border-rose-700/30 min-h-[110px] hover:border-rose-300 dark:hover:border-rose-600 transition-colors">
+                        <div className="relative pt-5 p-4 rounded-2xl bg-gradient-to-br from-rose-100 to-pink-50 dark:from-rose-900/30 dark:to-pink-900/20 border-2 border-rose-300/60 dark:border-rose-700/40 min-h-[120px]">
+                            {/* Decorative stars in corner */}
+                            <span className="absolute top-3 right-3 text-rose-300/60 text-xs">✦</span>
+                            <span className="absolute bottom-8 right-6 text-amber-300/50 text-sm">⭐</span>
+
                             <div className="flex flex-wrap gap-2">
                                 {youGiveItems.map(item => <ItemPill key={item.id} item={item} />)}
                                 {youGiveCash > 0 && <CashPill amount={youGiveCash} />}
                                 {youGiveItems.length === 0 && youGiveCash === 0 && (
-                                    <div className="w-full flex flex-col items-center justify-center py-4 text-gray-400">
-                                        <svg className="w-8 h-8 mb-1 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 12H4" /></svg>
-                                        <span className="text-xs italic">Nothing to send</span>
+                                    <div className="w-full flex flex-col items-center justify-center py-6 text-gray-400">
+                                        <span className="text-2xl mb-1">📭</span>
+                                        <span className="text-xs font-medium">Nothing to send</span>
                                     </div>
                                 )}
                             </div>
-                            <div className="mt-3 pt-2 border-t border-rose-200/50 dark:border-rose-700/30 flex justify-between items-center">
-                                <span className="text-[10px] uppercase tracking-wider text-rose-400 dark:text-rose-500 font-medium">Total Value</span>
-                                <span className="text-sm font-bold text-rose-700 dark:text-rose-300">{formatCurrency(youGiveTotal)}</span>
+                            <div className="mt-3 pt-2 border-t border-rose-300/40 flex justify-between items-center">
+                                <span className="text-[11px] uppercase tracking-wider text-rose-500 font-bold">Total Value</span>
+                                <span className="text-base font-bold text-rose-600 dark:text-rose-400">{formatCurrency(youGiveTotal)}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* You Get */}
+                    {/* RECEIVING panel - green theme with confetti if winning */}
                     <div className="relative">
-                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
-                            RECEIVING
-                            {(youGetItems.length + (youGetCash > 0 ? 1 : 0)) > 0 && (
-                                <span className="bg-white/30 px-1.5 rounded-full text-[9px]">{youGetItems.length + (youGetCash > 0 ? 1 : 0)}</span>
-                            )}
+                        <div className="absolute -top-3 left-4 z-10">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold rounded-full shadow-lg border-2 border-emerald-400">
+                                <span className="text-sm">↓</span>
+                                RECEIVING
+                            </span>
                         </div>
-                        <div className="pt-4 p-3 rounded-xl bg-gradient-to-br from-emerald-50/80 to-teal-50/80 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200/50 dark:border-emerald-700/30 min-h-[110px] hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors">
+                        <div className="relative pt-5 p-4 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/20 border-2 border-emerald-300/60 dark:border-emerald-700/40 min-h-[120px]">
+                            {/* Confetti decorations when winning */}
+                            {isWinning && (
+                                <>
+                                    <span className="absolute top-2 right-2 text-lg">🎊</span>
+                                    <span className="absolute top-4 right-8 text-sm rotate-12">🎉</span>
+                                    <span className="absolute bottom-12 right-4 text-base">✨</span>
+                                </>
+                            )}
+                            <span className="absolute top-3 right-3 text-emerald-300/60 text-xs">✦</span>
+                            <span className="absolute bottom-8 right-6 text-amber-300/50 text-sm">💰</span>
+
                             <div className="flex flex-wrap gap-2">
                                 {youGetItems.map(item => <ItemPill key={item.id} item={item} />)}
                                 {youGetCash > 0 && <CashPill amount={youGetCash} />}
                                 {youGetItems.length === 0 && youGetCash === 0 && (
-                                    <div className="w-full flex flex-col items-center justify-center py-4 text-gray-400">
-                                        <svg className="w-8 h-8 mb-1 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 12H4" /></svg>
-                                        <span className="text-xs italic">Nothing to receive</span>
+                                    <div className="w-full flex flex-col items-center justify-center py-6 text-gray-400">
+                                        <span className="text-2xl mb-1">📭</span>
+                                        <span className="text-xs font-medium">Nothing to receive</span>
                                     </div>
                                 )}
                             </div>
-                            <div className="mt-3 pt-2 border-t border-emerald-200/50 dark:border-emerald-700/30 flex justify-between items-center">
-                                <span className="text-[10px] uppercase tracking-wider text-emerald-400 dark:text-emerald-500 font-medium">Total Value</span>
-                                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(youGetTotal)}</span>
+                            <div className="mt-3 pt-2 border-t border-emerald-300/40 flex justify-between items-center">
+                                <span className="text-[11px] uppercase tracking-wider text-emerald-500 font-bold">Total Value</span>
+                                <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(youGetTotal)}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Visual value balance bar */}
+                {/* Value balance bar - treasure chest style */}
                 {totalValue > 0 && (
-                    <div className="mt-4 space-y-2">
-                        <div className="flex h-2 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
+                    <div className="mt-5 relative">
+                        {/* Treasure chest decorations on the bar */}
+                        <div className="flex h-4 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 relative">
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 text-lg z-10">📦</div>
+                            <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 text-lg z-10">📦</div>
                             <div
-                                className="bg-gradient-to-r from-rose-400 to-rose-500 transition-all duration-500"
+                                className="bg-gradient-to-r from-rose-400 via-rose-500 to-rose-400 transition-all duration-500 flex items-center justify-center"
                                 style={{ width: `${givePercent}%` }}
                             />
                             <div
-                                className="bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+                                className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400 transition-all duration-500"
                                 style={{ width: `${getPercent}%` }}
                             />
                         </div>
-                        <div className={`text-center py-1.5 px-4 rounded-lg text-xs font-semibold ${valueDiff > 0
-                            ? 'bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+
+                        {/* Value difference message - celebratory style */}
+                        <div className={`mt-3 py-3 px-5 rounded-2xl text-center font-bold flex items-center justify-center gap-2 ${valueDiff > 0
+                            ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-lg shadow-emerald-500/30'
                             : valueDiff < 0
-                                ? 'bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                : 'bg-gray-100/80 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'
+                                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-amber-900 shadow-lg shadow-amber-400/30'
+                                : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                             }`}>
-                            {valueDiff > 0
-                                ? `📈 +${formatCurrency(valueDiff)} in your favor`
-                                : valueDiff < 0
-                                    ? `📉 ${formatCurrency(Math.abs(valueDiff))} extra from you`
-                                    : '⚖️ Perfectly balanced'
-                            }
+                            <span className="text-xl">
+                                {valueDiff > 0 ? '💰' : valueDiff < 0 ? '📉' : '⚖️'}
+                            </span>
+                            <span className="text-base">
+                                {valueDiff > 0
+                                    ? `+${formatCurrency(valueDiff)} in your favor! Winning!`
+                                    : valueDiff < 0
+                                        ? `${formatCurrency(Math.abs(valueDiff))} extra from you`
+                                        : 'Perfectly balanced trade'
+                                }
+                            </span>
+                            {valueDiff > 0 && <span className="text-xl">🎉</span>}
                         </div>
                     </div>
                 )}
 
                 {/* Timestamp */}
-                <div className="mt-3 text-center">
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                <div className="mt-4 text-center">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
                         {wasProposer ? 'You proposed' : `${otherUser.name} proposed`} • {new Date(trade.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                 </div>
