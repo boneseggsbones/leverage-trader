@@ -148,7 +148,20 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
         <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 transition-colors">
             <div className="flex justify-between items-start mb-3">
                 <div>
-                    <p className="font-semibold text-gray-800 dark:text-white">Trade with {otherUser.name}</p>
+                    {/* Visual direction indicator */}
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className={`font-semibold ${wasProposer ? 'text-blue-600 dark:text-blue-400' : 'text-gray-800 dark:text-white'}`}>
+                            {wasProposer ? 'You' : otherUser.name}
+                        </span>
+                        <span className="flex items-center text-gray-400">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                            </svg>
+                        </span>
+                        <span className={`font-semibold ${!wasProposer ? 'text-blue-600 dark:text-blue-400' : 'text-gray-800 dark:text-white'}`}>
+                            {wasProposer ? otherUser.name : 'You'}
+                        </span>
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                         {wasProposer ? "You proposed" : `${otherUser.name} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
                     </p>
