@@ -270,13 +270,39 @@ const TradesPage: React.FC = () => {
         switch (trade.status) {
             case TradeStatus.PENDING_ACCEPTANCE:
                 if (isReceiver) return (
-                    <div className="flex gap-2">
-                        <button onClick={() => handleAction(trade, 'accept')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded">Accept</button>
-                        <button onClick={() => { setActionTrade(trade); setIsCounterModalOpen(true); }} className="px-3 py-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded">Counter</button>
-                        <button onClick={() => handleAction(trade, 'reject')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded">Reject</button>
+                    <div className="flex gap-3 items-center justify-end">
+                        <button
+                            onClick={() => handleAction(trade, 'accept')}
+                            className="group flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 rounded-xl shadow-md shadow-emerald-500/25 hover:shadow-lg hover:shadow-emerald-500/30 transition-all duration-200 hover:-translate-y-0.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            Accept
+                        </button>
+                        <button
+                            onClick={() => { setActionTrade(trade); setIsCounterModalOpen(true); }}
+                            className="group flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-xl shadow-md shadow-orange-500/25 hover:shadow-lg hover:shadow-orange-500/30 transition-all duration-200 hover:-translate-y-0.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                            Counter
+                        </button>
+                        <button
+                            onClick={() => handleAction(trade, 'reject')}
+                            className="group flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 rounded-xl shadow-md shadow-red-500/25 hover:shadow-lg hover:shadow-red-500/30 transition-all duration-200 hover:-translate-y-0.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            Reject
+                        </button>
                     </div>
                 );
-                if (isProposer) return <button onClick={() => handleAction(trade, 'cancel')} className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>;
+                if (isProposer) return (
+                    <button
+                        onClick={() => handleAction(trade, 'cancel')}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition-all duration-200"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        Cancel Trade
+                    </button>
+                );
                 return null;
             case TradeStatus.PAYMENT_PENDING:
                 // Show Fund Escrow button that opens the modal
