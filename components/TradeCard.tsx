@@ -305,11 +305,21 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 <div className="grid grid-cols-2 gap-4">
                     {/* SENDING panel - pink/red theme */}
                     <div className="relative">
-                        <div className="absolute -top-3 left-4 z-10">
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full shadow-lg border-2 border-rose-400">
+                        <div className="absolute -top-3 left-4 z-10 flex items-center">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full shadow-lg border-2 border-rose-400">
                                 <span className="text-sm">↑</span>
                                 SENDING
+                                <span className="inline-flex items-center justify-center w-5 h-5 bg-white/20 rounded-full text-[10px]">
+                                    {youGiveItems.length + (youGiveCash > 0 ? 1 : 0)}
+                                </span>
                             </span>
+                            {/* Arrow extending from badge */}
+                            <div className="flex items-center -ml-1">
+                                <div className="w-8 h-0.5 bg-rose-400" />
+                                <svg className="w-3 h-3 text-rose-400 -ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M13.172 12l-4.95-4.95 1.414-1.414L16 12l-6.364 6.364-1.414-1.414z" />
+                                </svg>
+                            </div>
                         </div>
                         <div className="relative pt-5 p-4 rounded-2xl bg-gradient-to-br from-rose-100 to-pink-50 dark:from-rose-900/30 dark:to-pink-900/20 border-2 border-rose-300/60 dark:border-rose-700/40 min-h-[120px]">
                             {/* Decorative stars in corner */}
@@ -335,11 +345,21 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
 
                     {/* RECEIVING panel - green theme with confetti if winning */}
                     <div className="relative">
-                        <div className="absolute -top-3 left-4 z-10">
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold rounded-full shadow-lg border-2 border-emerald-400">
+                        <div className="absolute -top-3 left-4 z-10 flex items-center">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold rounded-full shadow-lg border-2 border-emerald-400">
                                 <span className="text-sm">↓</span>
                                 RECEIVING
+                                <span className="inline-flex items-center justify-center w-5 h-5 bg-white/20 rounded-full text-[10px]">
+                                    {youGetItems.length + (youGetCash > 0 ? 1 : 0)}
+                                </span>
                             </span>
+                            {/* Arrow extending from badge */}
+                            <div className="flex items-center -ml-1">
+                                <div className="w-8 h-0.5 bg-emerald-400" />
+                                <svg className="w-3 h-3 text-emerald-400 -ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M13.172 12l-4.95-4.95 1.414-1.414L16 12l-6.364 6.364-1.414-1.414z" />
+                                </svg>
+                            </div>
                         </div>
                         <div className="relative pt-5 p-4 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/20 border-2 border-emerald-300/60 dark:border-emerald-700/40 min-h-[120px]">
                             {/* Confetti decorations when winning */}
