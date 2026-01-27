@@ -15,7 +15,7 @@ interface SearchParams {
     maxPrice?: number;
     city?: string;
     state?: string;
-    sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'relevance';
+    sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'relevance' | 'popularity';
     page?: number;
     limit?: number;
     excludeUserId?: string; // Exclude items from a specific user (e.g., current user)
@@ -114,6 +114,10 @@ router.get('/items', async (req, res) => {
                 break;
             case 'newest':
                 orderBy = 'i.id DESC';
+                break;
+            case 'popularity':
+                // Sort by owner's reputation score (higher = more popular)
+                orderBy = 'u.valuationReputationScore DESC NULLS LAST, i.id DESC';
                 break;
             case 'relevance':
             default:

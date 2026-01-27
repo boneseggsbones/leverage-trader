@@ -368,6 +368,258 @@ const LocationFilter: React.FC<LocationFilterProps> = ({ city, state, onCityChan
 };
 
 // =====================================================
+// SORT DROPDOWN (Custom styled to match filter buttons)
+// =====================================================
+
+const SORT_OPTIONS = [
+    { value: 'newest', label: 'Newest First', icon: '🕐' },
+    { value: 'price_asc', label: 'Price: Low to High', icon: '💰' },
+    { value: 'price_desc', label: 'Price: High to Low', icon: '💎' },
+    { value: 'popularity', label: 'Most Popular', icon: '⭐' },
+];
+
+interface SortDropdownProps {
+    value: string;
+    onChange: (value: string) => void;
+    isOpen: boolean;
+    onToggle: () => void;
+    onClose: () => void;
+}
+
+const SortDropdown: React.FC<SortDropdownProps> = ({ value, onChange, isOpen, onToggle, onClose }) => {
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const currentOption = SORT_OPTIONS.find(o => o.value === value) || SORT_OPTIONS[0];
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen, onClose]);
+
+    return (
+        <div ref={dropdownRef} className="relative">
+            <button
+                onClick={onToggle}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full border-2 text-sm font-semibold transition-all ${isOpen
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600'
+                    }`}
+            >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+                {currentOption.label}
+                <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <div className="absolute z-50 top-full right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 min-w-[200px] overflow-hidden">
+                    <div className="p-2">
+                        {SORT_OPTIONS.map(option => (
+                            <button
+                                key={option.value}
+                                onClick={() => { onChange(option.value); onClose(); }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${value === option.value
+                                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                    }`}
+                            >
+                                <span className="text-lg">{option.icon}</span>
+                                <span className="font-medium">{option.label}</span>
+                                {value === option.value && (
+                                    <svg className="w-4 h-4 ml-auto text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// =====================================================
+// ACTIVE FILTER CHIPS
+// =====================================================
+
+interface ActiveFilter {
+    type: 'category' | 'condition' | 'price' | 'location' | 'search';
+    label: string;
+    value: string;
+}
+
+interface ActiveFilterChipsProps {
+    filters: ActiveFilter[];
+    onRemove: (filter: ActiveFilter) => void;
+    onClearAll: () => void;
+}
+
+const ActiveFilterChips: React.FC<ActiveFilterChipsProps> = ({ filters, onRemove, onClearAll }) => {
+    if (filters.length === 0) return null;
+
+    return (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-sm text-gray-500 dark:text-gray-400">Active filters:</span>
+            {filters.map((filter, idx) => (
+                <span
+                    key={`${filter.type}-${idx}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium"
+                >
+                    {filter.label}
+                    <button
+                        onClick={() => onRemove(filter)}
+                        className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full p-0.5 transition-colors"
+                        aria-label={`Remove ${filter.label} filter`}
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </span>
+            ))}
+            {filters.length > 1 && (
+                <button
+                    onClick={onClearAll}
+                    className="text-sm text-red-600 dark:text-red-400 hover:underline font-medium"
+                >
+                    Clear all
+                </button>
+            )}
+        </div>
+    );
+};
+
+// =====================================================
+// ENHANCED PAGINATION
+// =====================================================
+
+interface PaginationProps {
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+}
+
+const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPageChange }) => {
+    if (totalPages <= 1) return null;
+
+    // Generate page numbers to display
+    const getPageNumbers = () => {
+        const pages: (number | 'ellipsis')[] = [];
+        const showEllipsisThreshold = 7;
+
+        if (totalPages <= showEllipsisThreshold) {
+            // Show all pages
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            // Always show first page
+            pages.push(1);
+
+            if (currentPage > 3) {
+                pages.push('ellipsis');
+            }
+
+            // Show pages around current
+            const start = Math.max(2, currentPage - 1);
+            const end = Math.min(totalPages - 1, currentPage + 1);
+            for (let i = start; i <= end; i++) {
+                if (!pages.includes(i)) pages.push(i);
+            }
+
+            if (currentPage < totalPages - 2) {
+                pages.push('ellipsis');
+            }
+
+            // Always show last page
+            if (!pages.includes(totalPages)) pages.push(totalPages);
+        }
+
+        return pages;
+    };
+
+    const pageNumbers = getPageNumbers();
+
+    return (
+        <div className="mt-8 flex items-center justify-center gap-1">
+            {/* First Page */}
+            <button
+                onClick={() => onPageChange(1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="First page"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+            </button>
+
+            {/* Previous */}
+            <button
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Previous page"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+
+            {/* Page Numbers */}
+            {pageNumbers.map((page, idx) =>
+                page === 'ellipsis' ? (
+                    <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">...</span>
+                ) : (
+                    <button
+                        key={page}
+                        onClick={() => onPageChange(page)}
+                        className={`min-w-[40px] h-10 rounded-lg font-semibold transition-all ${currentPage === page
+                            ? 'bg-blue-600 text-white shadow-lg'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                    >
+                        {page}
+                    </button>
+                )
+            )}
+
+            {/* Next */}
+            <button
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Next page"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+            </button>
+
+            {/* Last Page */}
+            <button
+                onClick={() => onPageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Last page"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+            </button>
+        </div>
+    );
+};
+
+// =====================================================
 // SEARCH RESULT CARD
 // =====================================================
 
@@ -556,9 +808,14 @@ const DiscoveryPage: React.FC = () => {
             isInitialCategoryRender.current = false;
             return;
         }
+        // If nothing is selected, auto-select all (empty selection = show all)
+        if (localCategories.length === 0) {
+            setLocalCategories(allCategoryValues);
+            return; // This will trigger another useEffect call with all selected
+        }
         const isAll = localCategories.length === allCategoryValues.length;
         const currentUrlValue = searchParams.get('category');
-        const newValue = isAll || localCategories.length === 0 ? null : localCategories.join(',');
+        const newValue = isAll ? null : localCategories.join(',');
 
         // Only update URL if the value actually changed
         if (currentUrlValue === newValue) return;
@@ -579,9 +836,14 @@ const DiscoveryPage: React.FC = () => {
             isInitialConditionRender.current = false;
             return;
         }
+        // If nothing is selected, auto-select all (empty selection = show all)
+        if (localConditions.length === 0) {
+            setLocalConditions(allConditionValues);
+            return; // This will trigger another useEffect call with all selected
+        }
         const isAll = localConditions.length === allConditionValues.length;
         const currentUrlValue = searchParams.get('condition');
-        const newValue = isAll || localConditions.length === 0 ? null : localConditions.join(',');
+        const newValue = isAll ? null : localConditions.join(',');
 
         // Only update URL if the value actually changed
         if (currentUrlValue === newValue) return;
@@ -793,30 +1055,55 @@ const DiscoveryPage: React.FC = () => {
                         />
                     </FilterDropdown>
 
-                    {/* Clear all button */}
-                    {activeFilterCount > 0 && (
-                        <button
-                            onClick={clearAllFilters}
-                            className="px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 hover:underline"
-                        >
-                            Reset all filters
-                        </button>
-                    )}
-
                     {/* Spacer */}
                     <div className="flex-1" />
 
-                    {/* Sort */}
-                    <select
+                    {/* Sort Dropdown */}
+                    <SortDropdown
                         value={filters.sortBy || 'newest'}
-                        onChange={e => handleSortChange(e.target.value)}
-                        className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-sm text-gray-700 dark:text-gray-300 font-medium"
-                    >
-                        <option value="newest">Newest First</option>
-                        <option value="price_asc">Price: Low to High</option>
-                        <option value="price_desc">Price: High to Low</option>
-                    </select>
+                        onChange={handleSortChange}
+                        isOpen={openDropdown === 'sort'}
+                        onToggle={() => setOpenDropdown(openDropdown === 'sort' ? null : 'sort')}
+                        onClose={() => setOpenDropdown(null)}
+                    />
                 </div>
+
+                {/* Active Filter Chips */}
+                <ActiveFilterChips
+                    filters={[
+                        // Search query
+                        ...(filters.q ? [{ type: 'search' as const, label: `"${filters.q}"`, value: filters.q }] : []),
+                        // Categories (only if filtered)
+                        ...(isCategoryFiltered ? localCategories.map(c => ({ type: 'category' as const, label: c, value: c })) : []),
+                        // Conditions (only if filtered)
+                        ...(isConditionFiltered ? localConditions.map(c => ({ type: 'condition' as const, label: c.replace('_', ' '), value: c })) : []),
+                        // Price
+                        ...((localMinPrice || localMaxPrice) ? [{ type: 'price' as const, label: `$${localMinPrice || '0'} - $${localMaxPrice || '∞'}`, value: `${localMinPrice}-${localMaxPrice}` }] : []),
+                        // Location
+                        ...((localCity || localState) ? [{ type: 'location' as const, label: [localCity, localState].filter(Boolean).join(', '), value: `${localCity}-${localState}` }] : [])
+                    ]}
+                    onRemove={(filter) => {
+                        if (filter.type === 'search') {
+                            setSearchText('');
+                            applyFilters({ q: undefined });
+                        } else if (filter.type === 'category') {
+                            const newCategories = localCategories.filter(c => c !== filter.value);
+                            setLocalCategories(newCategories.length > 0 ? newCategories : allCategoryValues);
+                        } else if (filter.type === 'condition') {
+                            const newConditions = localConditions.filter(c => c !== filter.value);
+                            setLocalConditions(newConditions.length > 0 ? newConditions : allConditionValues);
+                        } else if (filter.type === 'price') {
+                            setLocalMinPrice('');
+                            setLocalMaxPrice('');
+                            applyFilters({ minPrice: undefined, maxPrice: undefined });
+                        } else if (filter.type === 'location') {
+                            setLocalCity('');
+                            setLocalState('');
+                            applyFilters({ city: undefined, state: undefined });
+                        }
+                    }}
+                    onClearAll={clearAllFilters}
+                />
 
                 {/* Results Count */}
                 <div className="mb-4">
@@ -848,28 +1135,12 @@ const DiscoveryPage: React.FC = () => {
                             ))}
                         </div>
 
-                        {/* Pagination */}
-                        {pagination.totalPages > 1 && (
-                            <div className="mt-8 flex items-center justify-center gap-2">
-                                <button
-                                    onClick={() => handlePageChange(pagination.page - 1)}
-                                    disabled={pagination.page === 1}
-                                    className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
-                                >
-                                    Previous
-                                </button>
-                                <span className="px-4 py-2 text-gray-600 dark:text-gray-400">
-                                    Page {pagination.page} of {pagination.totalPages}
-                                </span>
-                                <button
-                                    onClick={() => handlePageChange(pagination.page + 1)}
-                                    disabled={!pagination.hasMore}
-                                    className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        )}
+                        {/* Enhanced Pagination */}
+                        <Pagination
+                            currentPage={pagination.page}
+                            totalPages={pagination.totalPages}
+                            onPageChange={handlePageChange}
+                        />
                     </>
                 )}
             </div>
