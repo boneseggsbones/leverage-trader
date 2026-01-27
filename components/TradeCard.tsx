@@ -178,24 +178,65 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     return (
         <div className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border-2 border-amber-200/60 dark:border-gray-700/60 shadow-lg hover:shadow-2xl transition-all duration-300">
 
-            {/* Floating decorations - stars, coins, sparkles */}
+
+            {/* Floating decorations - illustrated assets */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                {/* Stars */}
-                <span className="absolute top-8 left-8 text-amber-400/60 text-lg animate-pulse">⭐</span>
-                <span className="absolute top-20 left-16 text-amber-300/40 text-sm" style={{ animationDelay: '0.5s' }}>✦</span>
-                <span className="absolute bottom-32 left-6 text-purple-400/40 text-base">✧</span>
+                {/* Floating stars */}
+                <img
+                    src="/assets/trade-card/sparkle-star.png"
+                    alt=""
+                    className="absolute top-6 left-6 w-8 h-8 opacity-70 animate-pulse"
+                />
+                <img
+                    src="/assets/trade-card/sparkle-star-alt.png"
+                    alt=""
+                    className="absolute top-16 left-14 w-5 h-5 opacity-50 animate-pulse"
+                    style={{ animationDelay: '0.5s' }}
+                />
+                <img
+                    src="/assets/trade-card/sparkle-star.png"
+                    alt=""
+                    className="absolute bottom-28 left-4 w-6 h-6 opacity-40"
+                />
 
                 {/* Floating coins */}
-                <span className="absolute top-12 right-12 text-xl animate-bounce" style={{ animationDuration: '2s' }}>🪙</span>
-                <span className="absolute top-28 right-24 text-lg animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.3s' }}>🪙</span>
-                <span className="absolute bottom-48 right-8 text-base animate-bounce" style={{ animationDuration: '3s', animationDelay: '0.6s' }}>💰</span>
+                <img
+                    src="/assets/trade-card/gold-coin.png"
+                    alt=""
+                    className="absolute top-10 right-10 w-10 h-10 opacity-80 animate-bounce"
+                    style={{ animationDuration: '2s' }}
+                />
+                <img
+                    src="/assets/trade-card/gold-coin.png"
+                    alt=""
+                    className="absolute top-24 right-20 w-7 h-7 opacity-60 animate-bounce"
+                    style={{ animationDuration: '2.5s', animationDelay: '0.3s' }}
+                />
+                <img
+                    src="/assets/trade-card/money-bag.png"
+                    alt=""
+                    className="absolute bottom-36 right-6 w-8 h-8 opacity-50 animate-bounce"
+                    style={{ animationDuration: '3s', animationDelay: '0.6s' }}
+                />
 
-                {/* Confetti when winning */}
+                {/* Confetti/celebration when winning */}
                 {isWinning && (
                     <>
-                        <span className="absolute top-16 right-32 text-red-500/70 text-lg animate-pulse">🎊</span>
-                        <span className="absolute top-8 right-48 text-blue-500/60 rotate-12 text-sm">🎉</span>
-                        <span className="absolute bottom-40 right-16 text-green-500/50 text-base">🎉</span>
+                        <img
+                            src="/assets/trade-card/confetti-burst.png"
+                            alt=""
+                            className="absolute top-0 right-0 w-32 h-32 opacity-60 animate-pulse"
+                        />
+                        <img
+                            src="/assets/trade-card/party-popper.png"
+                            alt=""
+                            className="absolute top-4 right-40 w-12 h-12 opacity-70 rotate-12"
+                        />
+                        <img
+                            src="/assets/trade-card/party-popper.png"
+                            alt=""
+                            className="absolute bottom-32 right-12 w-10 h-10 opacity-50 -rotate-12"
+                        />
                         <div className="absolute top-24 right-20 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
                         <div className="absolute top-32 right-12 w-1.5 h-1.5 bg-pink-400 rounded-full animate-ping" style={{ animationDelay: '0.2s' }} />
                         <div className="absolute top-16 right-36 w-2 h-2 bg-blue-400 rounded-full animate-ping" style={{ animationDelay: '0.4s' }} />
@@ -278,8 +319,8 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                         </div>
                         <div className="relative pt-5 p-4 rounded-2xl bg-gradient-to-br from-rose-100 to-pink-50 dark:from-rose-900/30 dark:to-pink-900/20 border-2 border-rose-300/60 dark:border-rose-700/40 min-h-[120px]">
                             {/* Decorative stars in corner */}
-                            <span className="absolute top-3 right-3 text-rose-300/60 text-xs">✦</span>
-                            <span className="absolute bottom-8 right-6 text-amber-300/50 text-sm">⭐</span>
+                            <img src="/assets/trade-card/sparkle-star-alt.png" alt="" className="absolute top-2 right-2 w-5 h-5 opacity-50" />
+                            <img src="/assets/trade-card/sparkle-star.png" alt="" className="absolute bottom-6 right-4 w-6 h-6 opacity-40" />
 
                             <div className="flex flex-wrap gap-2">
                                 {youGiveItems.map(item => <ItemPill key={item.id} item={item} />)}
@@ -310,13 +351,13 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                             {/* Confetti decorations when winning */}
                             {isWinning && (
                                 <>
-                                    <span className="absolute top-2 right-2 text-lg">🎊</span>
-                                    <span className="absolute top-4 right-8 text-sm rotate-12">🎉</span>
-                                    <span className="absolute bottom-12 right-4 text-base">✨</span>
+                                    <img src="/assets/trade-card/confetti-burst.png" alt="" className="absolute -top-2 -right-2 w-16 h-16 opacity-70" />
+                                    <img src="/assets/trade-card/party-popper.png" alt="" className="absolute top-1 right-12 w-8 h-8 opacity-60 rotate-12" />
+                                    <img src="/assets/trade-card/sparkle-star.png" alt="" className="absolute bottom-10 right-2 w-6 h-6 opacity-50" />
                                 </>
                             )}
-                            <span className="absolute top-3 right-3 text-emerald-300/60 text-xs">✦</span>
-                            <span className="absolute bottom-8 right-6 text-amber-300/50 text-sm">💰</span>
+                            <img src="/assets/trade-card/sparkle-star-alt.png" alt="" className="absolute top-2 right-2 w-5 h-5 opacity-50" />
+                            <img src="/assets/trade-card/gold-coin.png" alt="" className="absolute bottom-6 right-4 w-6 h-6 opacity-40" />
 
                             <div className="flex flex-wrap gap-2">
                                 {youGetItems.map(item => <ItemPill key={item.id} item={item} />)}
@@ -340,9 +381,17 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 {totalValue > 0 && (
                     <div className="mt-5 relative">
                         {/* Treasure chest decorations on the bar */}
-                        <div className="flex h-4 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 relative">
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 text-lg z-10">📦</div>
-                            <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 text-lg z-10">📦</div>
+                        <div className="flex h-5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 relative mx-6">
+                            <img
+                                src="/assets/trade-card/treasure-chest.png"
+                                alt=""
+                                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 z-10"
+                            />
+                            <img
+                                src="/assets/trade-card/treasure-chest.png"
+                                alt=""
+                                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-10 h-10 z-10"
+                            />
                             <div
                                 className="bg-gradient-to-r from-rose-400 via-rose-500 to-rose-400 transition-all duration-500 flex items-center justify-center"
                                 style={{ width: `${givePercent}%` }}
@@ -354,15 +403,17 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                         </div>
 
                         {/* Value difference message - celebratory style */}
-                        <div className={`mt-3 py-3 px-5 rounded-2xl text-center font-bold flex items-center justify-center gap-2 ${valueDiff > 0
+                        <div className={`mt-3 py-3 px-5 rounded-2xl text-center font-bold flex items-center justify-center gap-3 ${valueDiff > 0
                             ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-lg shadow-emerald-500/30'
                             : valueDiff < 0
                                 ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-amber-900 shadow-lg shadow-amber-400/30'
                                 : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                             }`}>
-                            <span className="text-xl">
-                                {valueDiff > 0 ? '💰' : valueDiff < 0 ? '📉' : '⚖️'}
-                            </span>
+                            <img
+                                src={valueDiff > 0 ? '/assets/trade-card/money-bag.png' : valueDiff < 0 ? '/assets/trade-card/gold-coin.png' : '/assets/trade-card/sparkle-star.png'}
+                                alt=""
+                                className="w-8 h-8"
+                            />
                             <span className="text-base">
                                 {valueDiff > 0
                                     ? `+${formatCurrency(valueDiff)} in your favor! Winning!`
@@ -371,7 +422,9 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                                         : 'Perfectly balanced trade'
                                 }
                             </span>
-                            {valueDiff > 0 && <span className="text-xl">🎉</span>}
+                            {valueDiff > 0 && (
+                                <img src="/assets/trade-card/party-popper.png" alt="" className="w-8 h-8" />
+                            )}
                         </div>
                     </div>
                 )}
