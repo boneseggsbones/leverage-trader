@@ -140,23 +140,37 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     const youGivePreview = getFirstItemImage(youGiveItems);
     const youGetPreview = getFirstItemImage(youGetItems);
 
-    // Item pill component for compact display
+    // Item pill component with enhanced display
     const ItemPill: React.FC<{ item: Item }> = ({ item }) => {
         const imageUrl = item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
         return (
-            <div className="flex items-center gap-2 bg-white/80 dark:bg-gray-700/80 backdrop-blur-sm rounded-full pl-1 pr-3 py-1 shadow-sm border border-gray-200/50 dark:border-gray-600/50">
-                <img src={imageUrl} alt={item.name} className="w-6 h-6 rounded-full object-cover" />
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate max-w-[100px]">{item.name}</span>
+            <div
+                className="group/pill flex items-center gap-2 bg-white/90 dark:bg-gray-700/90 backdrop-blur-sm rounded-xl pl-1 pr-3 py-1.5 shadow-sm border border-gray-200/60 dark:border-gray-600/60 hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default"
+                title={`${item.name} - ${formatCurrencyOptional(item.estimatedMarketValue ?? null)}`}
+            >
+                <img src={imageUrl} alt={item.name} className="w-8 h-8 rounded-lg object-cover ring-1 ring-gray-200/50 dark:ring-gray-600/50" />
+                <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate max-w-[90px] leading-tight">{item.name}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{formatCurrencyOptional(item.estimatedMarketValue ?? null)}</span>
+                </div>
             </div>
         );
     };
 
     const CashPill: React.FC<{ amount: number }> = ({ amount }) => (
-        <div className="flex items-center gap-2 bg-emerald-100/80 dark:bg-emerald-900/50 backdrop-blur-sm rounded-full pl-1 pr-3 py-1 shadow-sm border border-emerald-200/50 dark:border-emerald-700/50">
-            <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">$</div>
-            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{formatCurrency(amount)}</span>
+        <div className="group/pill flex items-center gap-2 bg-emerald-50/90 dark:bg-emerald-900/40 backdrop-blur-sm rounded-xl pl-1 pr-3 py-1.5 shadow-sm border border-emerald-200/60 dark:border-emerald-700/50 hover:shadow-md hover:scale-[1.02] transition-all duration-200">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold shadow-inner">$</div>
+            <div className="flex flex-col">
+                <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 leading-tight">Cash</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400">{formatCurrency(amount)}</span>
+            </div>
         </div>
     );
+
+    // Calculate value ratio for visual bar
+    const totalValue = youGiveTotal + youGetTotal;
+    const givePercent = totalValue > 0 ? (youGiveTotal / totalValue) * 100 : 50;
+    const getPercent = totalValue > 0 ? (youGetTotal / totalValue) * 100 : 50;
 
     return (
         <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 shadow-sm hover:shadow-lg transition-all duration-300">
@@ -233,59 +247,85 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 <div className="grid grid-cols-2 gap-3">
                     {/* You Give */}
                     <div className="relative">
-                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10">
+                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
                             SENDING
+                            {(youGiveItems.length + (youGiveCash > 0 ? 1 : 0)) > 0 && (
+                                <span className="bg-white/30 px-1.5 rounded-full text-[9px]">{youGiveItems.length + (youGiveCash > 0 ? 1 : 0)}</span>
+                            )}
                         </div>
-                        <div className="pt-3 p-3 rounded-xl bg-gradient-to-br from-rose-50 to-orange-50 dark:from-rose-900/20 dark:to-orange-900/20 border border-rose-200/50 dark:border-rose-700/30 min-h-[100px]">
-                            <div className="flex flex-wrap gap-1.5">
+                        <div className="pt-4 p-3 rounded-xl bg-gradient-to-br from-rose-50/80 to-orange-50/80 dark:from-rose-900/20 dark:to-orange-900/20 border border-rose-200/50 dark:border-rose-700/30 min-h-[110px] hover:border-rose-300 dark:hover:border-rose-600 transition-colors">
+                            <div className="flex flex-wrap gap-2">
                                 {youGiveItems.map(item => <ItemPill key={item.id} item={item} />)}
                                 {youGiveCash > 0 && <CashPill amount={youGiveCash} />}
                                 {youGiveItems.length === 0 && youGiveCash === 0 && (
-                                    <span className="text-xs text-gray-400 italic">Nothing</span>
+                                    <div className="w-full flex flex-col items-center justify-center py-4 text-gray-400">
+                                        <svg className="w-8 h-8 mb-1 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 12H4" /></svg>
+                                        <span className="text-xs italic">Nothing to send</span>
+                                    </div>
                                 )}
                             </div>
-                            <div className="mt-2 pt-2 border-t border-rose-200/50 dark:border-rose-700/30">
-                                <span className="text-xs text-gray-500 dark:text-gray-400">Value: </span>
-                                <span className="text-sm font-semibold text-gray-800 dark:text-white">{formatCurrency(youGiveTotal)}</span>
+                            <div className="mt-3 pt-2 border-t border-rose-200/50 dark:border-rose-700/30 flex justify-between items-center">
+                                <span className="text-[10px] uppercase tracking-wider text-rose-400 dark:text-rose-500 font-medium">Total Value</span>
+                                <span className="text-sm font-bold text-rose-700 dark:text-rose-300">{formatCurrency(youGiveTotal)}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* You Get */}
                     <div className="relative">
-                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10">
+                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
                             RECEIVING
+                            {(youGetItems.length + (youGetCash > 0 ? 1 : 0)) > 0 && (
+                                <span className="bg-white/30 px-1.5 rounded-full text-[9px]">{youGetItems.length + (youGetCash > 0 ? 1 : 0)}</span>
+                            )}
                         </div>
-                        <div className="pt-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200/50 dark:border-emerald-700/30 min-h-[100px]">
-                            <div className="flex flex-wrap gap-1.5">
+                        <div className="pt-4 p-3 rounded-xl bg-gradient-to-br from-emerald-50/80 to-teal-50/80 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200/50 dark:border-emerald-700/30 min-h-[110px] hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors">
+                            <div className="flex flex-wrap gap-2">
                                 {youGetItems.map(item => <ItemPill key={item.id} item={item} />)}
                                 {youGetCash > 0 && <CashPill amount={youGetCash} />}
                                 {youGetItems.length === 0 && youGetCash === 0 && (
-                                    <span className="text-xs text-gray-400 italic">Nothing</span>
+                                    <div className="w-full flex flex-col items-center justify-center py-4 text-gray-400">
+                                        <svg className="w-8 h-8 mb-1 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 12H4" /></svg>
+                                        <span className="text-xs italic">Nothing to receive</span>
+                                    </div>
                                 )}
                             </div>
-                            <div className="mt-2 pt-2 border-t border-emerald-200/50 dark:border-emerald-700/30">
-                                <span className="text-xs text-gray-500 dark:text-gray-400">Value: </span>
-                                <span className="text-sm font-semibold text-gray-800 dark:text-white">{formatCurrency(youGetTotal)}</span>
+                            <div className="mt-3 pt-2 border-t border-emerald-200/50 dark:border-emerald-700/30 flex justify-between items-center">
+                                <span className="text-[10px] uppercase tracking-wider text-emerald-400 dark:text-emerald-500 font-medium">Total Value</span>
+                                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(youGetTotal)}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Value difference indicator */}
-                {(youGiveTotal > 0 || youGetTotal > 0) && (
-                    <div className={`mt-3 py-2 px-4 rounded-lg text-center text-sm font-medium ${valueDiff > 0
-                            ? 'bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                            : valueDiff < 0
-                                ? 'bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                : 'bg-gray-100/80 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'
-                        }`}>
-                        {valueDiff > 0
-                            ? `📈 You're gaining ${formatCurrency(valueDiff)} in value`
-                            : valueDiff < 0
-                                ? `📉 You're giving ${formatCurrency(Math.abs(valueDiff))} more`
-                                : '⚖️ Fair trade - equal value'
-                        }
+                {/* Visual value balance bar */}
+                {totalValue > 0 && (
+                    <div className="mt-4 space-y-2">
+                        <div className="flex h-2 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
+                            <div
+                                className="bg-gradient-to-r from-rose-400 to-rose-500 transition-all duration-500"
+                                style={{ width: `${givePercent}%` }}
+                            />
+                            <div
+                                className="bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+                                style={{ width: `${getPercent}%` }}
+                            />
+                        </div>
+                        <div className={`text-center py-1.5 px-4 rounded-lg text-xs font-semibold ${valueDiff > 0
+                                ? 'bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                : valueDiff < 0
+                                    ? 'bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                    : 'bg-gray-100/80 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'
+                            }`}>
+                            {valueDiff > 0
+                                ? `📈 +${formatCurrency(valueDiff)} in your favor`
+                                : valueDiff < 0
+                                    ? `📉 ${formatCurrency(Math.abs(valueDiff))} extra from you`
+                                    : '⚖️ Perfectly balanced'
+                            }
+                        </div>
                     </div>
                 )}
 
