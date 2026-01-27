@@ -185,13 +185,12 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 <img
                     src="/assets/trade-card/sparkle-star.png"
                     alt=""
-                    className="absolute top-6 left-6 w-8 h-8 opacity-70 animate-pulse"
+                    className="absolute top-6 left-6 w-8 h-8 opacity-70"
                 />
                 <img
                     src="/assets/trade-card/sparkle-star-alt.png"
                     alt=""
-                    className="absolute top-16 left-14 w-5 h-5 opacity-50 animate-pulse"
-                    style={{ animationDelay: '0.5s' }}
+                    className="absolute top-16 left-14 w-5 h-5 opacity-50"
                 />
                 <img
                     src="/assets/trade-card/sparkle-star.png"
@@ -203,20 +202,17 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 <img
                     src="/assets/trade-card/gold-coin.png"
                     alt=""
-                    className="absolute top-10 right-10 w-10 h-10 opacity-80 animate-bounce"
-                    style={{ animationDuration: '2s' }}
+                    className="absolute top-10 right-10 w-10 h-10 opacity-80"
                 />
                 <img
                     src="/assets/trade-card/gold-coin.png"
                     alt=""
-                    className="absolute top-24 right-20 w-7 h-7 opacity-60 animate-bounce"
-                    style={{ animationDuration: '2.5s', animationDelay: '0.3s' }}
+                    className="absolute top-24 right-20 w-7 h-7 opacity-60"
                 />
                 <img
                     src="/assets/trade-card/money-bag.png"
                     alt=""
-                    className="absolute bottom-36 right-6 w-8 h-8 opacity-50 animate-bounce"
-                    style={{ animationDuration: '3s', animationDelay: '0.6s' }}
+                    className="absolute bottom-36 right-6 w-8 h-8 opacity-50"
                 />
 
                 {/* Confetti/celebration when winning */}
@@ -225,7 +221,7 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                         <img
                             src="/assets/trade-card/confetti-burst.png"
                             alt=""
-                            className="absolute top-0 right-0 w-32 h-32 opacity-60 animate-pulse"
+                            className="absolute top-0 right-0 w-32 h-32 opacity-60"
                         />
                         <img
                             src="/assets/trade-card/party-popper.png"
@@ -237,9 +233,6 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                             alt=""
                             className="absolute bottom-32 right-12 w-10 h-10 opacity-50 -rotate-12"
                         />
-                        <div className="absolute top-24 right-20 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
-                        <div className="absolute top-32 right-12 w-1.5 h-1.5 bg-pink-400 rounded-full animate-ping" style={{ animationDelay: '0.2s' }} />
-                        <div className="absolute top-16 right-36 w-2 h-2 bg-blue-400 rounded-full animate-ping" style={{ animationDelay: '0.4s' }} />
                     </>
                 )}
             </div>
