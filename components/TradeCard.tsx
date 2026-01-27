@@ -173,7 +173,7 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     const getPercent = totalValue > 0 ? (youGetTotal / totalValue) * 100 : 50;
 
     return (
-        <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 shadow-sm hover:shadow-lg transition-all duration-300">
+        <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 shadow-md hover:shadow-xl ring-1 ring-gray-900/5 dark:ring-white/10 transition-all duration-300">
             {/* Decorative background elements */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-full -mr-16 -mt-16" />
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full -ml-12 -mb-12" />
@@ -314,10 +314,10 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                             />
                         </div>
                         <div className={`text-center py-1.5 px-4 rounded-lg text-xs font-semibold ${valueDiff > 0
-                                ? 'bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                : valueDiff < 0
-                                    ? 'bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                    : 'bg-gray-100/80 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'
+                            ? 'bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : valueDiff < 0
+                                ? 'bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-gray-100/80 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'
                             }`}>
                             {valueDiff > 0
                                 ? `📈 +${formatCurrency(valueDiff)} in your favor`
