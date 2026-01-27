@@ -380,26 +380,33 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
 
                 {/* Value balance bar - treasure chest style */}
                 {totalValue > 0 && (
-                    <div className="mt-5 relative">
-                        {/* Treasure chest decorations on the bar */}
-                        <div className="flex h-5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 relative mx-6">
+                    <div className="mt-5">
+                        {/* Bar container with treasure chests */}
+                        <div className="relative flex items-center px-8">
+                            {/* Left treasure chest - outside the bar */}
                             <img
                                 src="/assets/trade-card/treasure-chest.png"
                                 alt=""
-                                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 z-10"
+                                className="absolute left-0 w-12 h-12 z-10 object-contain"
                             />
+
+                            {/* The actual progress bar */}
+                            <div className="flex-1 flex h-4 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
+                                <div
+                                    className="bg-gradient-to-r from-rose-400 via-rose-500 to-rose-400 transition-all duration-500"
+                                    style={{ width: `${givePercent}%` }}
+                                />
+                                <div
+                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400 transition-all duration-500"
+                                    style={{ width: `${getPercent}%` }}
+                                />
+                            </div>
+
+                            {/* Right treasure chest - outside the bar */}
                             <img
                                 src="/assets/trade-card/treasure-chest.png"
                                 alt=""
-                                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-10 h-10 z-10"
-                            />
-                            <div
-                                className="bg-gradient-to-r from-rose-400 via-rose-500 to-rose-400 transition-all duration-500 flex items-center justify-center"
-                                style={{ width: `${givePercent}%` }}
-                            />
-                            <div
-                                className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400 transition-all duration-500"
-                                style={{ width: `${getPercent}%` }}
+                                className="absolute right-0 w-12 h-12 z-10 object-contain"
                             />
                         </div>
 
@@ -413,7 +420,7 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                             <img
                                 src={valueDiff > 0 ? '/assets/trade-card/money-bag.png' : valueDiff < 0 ? '/assets/trade-card/gold-coin.png' : '/assets/trade-card/sparkle-star.png'}
                                 alt=""
-                                className="w-8 h-8"
+                                className="w-10 h-10 object-contain flex-shrink-0"
                             />
                             <span className="text-base">
                                 {valueDiff > 0
@@ -424,7 +431,7 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                                 }
                             </span>
                             {valueDiff > 0 && (
-                                <img src="/assets/trade-card/party-popper.png" alt="" className="w-8 h-8" />
+                                <img src="/assets/trade-card/party-popper.png" alt="" className="w-10 h-10 object-contain flex-shrink-0" />
                             )}
                         </div>
                     </div>
