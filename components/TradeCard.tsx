@@ -125,108 +125,176 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     const yourTracking = wasProposer ? trackingData?.proposer : trackingData?.receiver;
     const theirTracking = wasProposer ? trackingData?.receiver : trackingData?.proposer;
 
-    const OfferColumn: React.FC<{ title: string, items: Item[], cash: number, isGiving: boolean }> = ({ title, items, cash, isGiving }) => (
-        <div className="flex-1">
-            <h4 className={`text-sm font-bold mb-2 ${isGiving ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{title}</h4>
-            <div className={`space-y-2 p-2 rounded-lg ${isGiving ? 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800'}`}>
-                {items.length === 0 && cash === 0 ? (
-                    <p className="text-xs text-gray-400 italic">Nothing offered</p>
-                ) : (
-                    <>
-                        {items.map(item => <CompactItem key={item.id} item={item} />)}
-                        {cash > 0 && <CompactCash amount={cash} />}
-                    </>
-                )}
+    // Calculate total values for each side
+    const youGiveTotal = youGiveItems.reduce((sum, item) => sum + (item.estimatedMarketValue || 0), 0) + youGiveCash;
+    const youGetTotal = youGetItems.reduce((sum, item) => sum + (item.estimatedMarketValue || 0), 0) + youGetCash;
+    const valueDiff = youGetTotal - youGiveTotal;
+
+    // Get first item image for preview or use placeholder
+    const getFirstItemImage = (items: Item[]) => {
+        if (items.length === 0) return null;
+        const img = items[0].imageUrl;
+        return img && img.startsWith('/') ? `http://localhost:4000${img}` : img;
+    };
+
+    const youGivePreview = getFirstItemImage(youGiveItems);
+    const youGetPreview = getFirstItemImage(youGetItems);
+
+    // Item pill component for compact display
+    const ItemPill: React.FC<{ item: Item }> = ({ item }) => {
+        const imageUrl = item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
+        return (
+            <div className="flex items-center gap-2 bg-white/80 dark:bg-gray-700/80 backdrop-blur-sm rounded-full pl-1 pr-3 py-1 shadow-sm border border-gray-200/50 dark:border-gray-600/50">
+                <img src={imageUrl} alt={item.name} className="w-6 h-6 rounded-full object-cover" />
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate max-w-[100px]">{item.name}</span>
             </div>
+        );
+    };
+
+    const CashPill: React.FC<{ amount: number }> = ({ amount }) => (
+        <div className="flex items-center gap-2 bg-emerald-100/80 dark:bg-emerald-900/50 backdrop-blur-sm rounded-full pl-1 pr-3 py-1 shadow-sm border border-emerald-200/50 dark:border-emerald-700/50">
+            <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">$</div>
+            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{formatCurrency(amount)}</span>
         </div>
     );
 
     return (
-        <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 transition-colors">
-            <div className="flex justify-between items-start mb-3">
-                <div>
-                    {/* Visual direction indicator */}
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className={`font-semibold ${wasProposer ? 'text-blue-600 dark:text-blue-400' : 'text-gray-800 dark:text-white'}`}>
-                            {wasProposer ? 'You' : otherUser.name}
-                        </span>
-                        <span className="flex items-center text-gray-400">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                            </svg>
-                        </span>
-                        <span className={`font-semibold ${!wasProposer ? 'text-blue-600 dark:text-blue-400' : 'text-gray-800 dark:text-white'}`}>
-                            {wasProposer ? otherUser.name : 'You'}
-                        </span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {wasProposer ? "You proposed" : `${otherUser.name} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {/* Friendly status badges */}
-                    {trade.status === TradeStatus.ESCROW_FUNDED && (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">
-                            💰 Money Secured
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.PAYMENT_PENDING && (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
-                            {youGiveCash > 0 ? '💳 You Need to Pay' : `⏳ Waiting for ${otherUser.name}`}
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.PENDING_ACCEPTANCE && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            ⏳ Waiting for Response
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.SHIPPING_PENDING && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            📦 Ready to Ship
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.IN_TRANSIT && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            🚚 On Its Way
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.DELIVERED_AWAITING_VERIFICATION && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            📬 Arrived - Check Items
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.COMPLETED && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            ✅ Done!
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.COMPLETED_AWAITING_RATING && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            ⭐ Leave a Rating
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.REJECTED && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            ❌ Declined
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.CANCELLED && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusBadgeClass(trade.status)}`}>
-                            🚫 Cancelled
-                        </span>
-                    )}
-                    {trade.status === TradeStatus.DISPUTE_OPENED && (
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800`}>
-                            ⚠️ Issue Reported
-                        </span>
-                    )}
-                </div>
+        <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 shadow-sm hover:shadow-lg transition-all duration-300">
+            {/* Decorative background elements */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-full -mr-16 -mt-16" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full -ml-12 -mb-12" />
+
+            {/* Status ribbon */}
+            <div className="absolute top-3 right-3 z-10">
+                {trade.status === TradeStatus.PENDING_ACCEPTANCE && (
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-200 shadow-sm">
+                        ⏳ {wasProposer ? `Waiting for ${otherUser.name}` : 'Awaiting your response'}
+                    </span>
+                )}
+                {trade.status === TradeStatus.ESCROW_FUNDED && (
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm">
+                        💰 Funds Secured
+                    </span>
+                )}
+                {trade.status === TradeStatus.COMPLETED && (
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 border border-green-200 shadow-sm">
+                        ✅ Complete
+                    </span>
+                )}
+                {trade.status === TradeStatus.REJECTED && (
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700 border border-red-200 shadow-sm">
+                        ❌ Declined
+                    </span>
+                )}
+                {trade.status === TradeStatus.SHIPPING_PENDING && (
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
+                        📦 Ship Items
+                    </span>
+                )}
+                {trade.status === TradeStatus.IN_TRANSIT && (
+                    <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
+                        🚚 In Transit
+                    </span>
+                )}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 p-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
-                <OfferColumn title="You Give" items={youGiveItems} cash={youGiveCash} isGiving={true} />
-                <div className="border-b sm:border-l sm:border-b-0 border-gray-200 dark:border-gray-600"></div>
-                <OfferColumn title="You Get" items={youGetItems} cash={youGetCash} isGiving={false} />
+            <div className="relative p-5">
+                {/* Header with avatars and swap visualization */}
+                <div className="flex items-center justify-center gap-4 mb-5">
+                    {/* Your side */}
+                    <div className="flex flex-col items-center">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-lg font-bold shadow-lg ring-4 ring-white dark:ring-gray-800">
+                            {currentUser.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">You</span>
+                    </div>
+
+                    {/* Swap icon with animation */}
+                    <div className="relative">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                        </div>
+                        {/* Animated rings */}
+                        <div className="absolute inset-0 rounded-full border-2 border-purple-400/30 animate-ping" style={{ animationDuration: '2s' }} />
+                    </div>
+
+                    {/* Their side */}
+                    <div className="flex flex-col items-center">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-lg font-bold shadow-lg ring-4 ring-white dark:ring-gray-800">
+                            {otherUser.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{otherUser.name}</span>
+                    </div>
+                </div>
+
+                {/* Trade flow visualization */}
+                <div className="grid grid-cols-2 gap-3">
+                    {/* You Give */}
+                    <div className="relative">
+                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10">
+                            SENDING
+                        </div>
+                        <div className="pt-3 p-3 rounded-xl bg-gradient-to-br from-rose-50 to-orange-50 dark:from-rose-900/20 dark:to-orange-900/20 border border-rose-200/50 dark:border-rose-700/30 min-h-[100px]">
+                            <div className="flex flex-wrap gap-1.5">
+                                {youGiveItems.map(item => <ItemPill key={item.id} item={item} />)}
+                                {youGiveCash > 0 && <CashPill amount={youGiveCash} />}
+                                {youGiveItems.length === 0 && youGiveCash === 0 && (
+                                    <span className="text-xs text-gray-400 italic">Nothing</span>
+                                )}
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-rose-200/50 dark:border-rose-700/30">
+                                <span className="text-xs text-gray-500 dark:text-gray-400">Value: </span>
+                                <span className="text-sm font-semibold text-gray-800 dark:text-white">{formatCurrency(youGiveTotal)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* You Get */}
+                    <div className="relative">
+                        <div className="absolute -top-2 left-3 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full shadow-sm z-10">
+                            RECEIVING
+                        </div>
+                        <div className="pt-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200/50 dark:border-emerald-700/30 min-h-[100px]">
+                            <div className="flex flex-wrap gap-1.5">
+                                {youGetItems.map(item => <ItemPill key={item.id} item={item} />)}
+                                {youGetCash > 0 && <CashPill amount={youGetCash} />}
+                                {youGetItems.length === 0 && youGetCash === 0 && (
+                                    <span className="text-xs text-gray-400 italic">Nothing</span>
+                                )}
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-emerald-200/50 dark:border-emerald-700/30">
+                                <span className="text-xs text-gray-500 dark:text-gray-400">Value: </span>
+                                <span className="text-sm font-semibold text-gray-800 dark:text-white">{formatCurrency(youGetTotal)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Value difference indicator */}
+                {(youGiveTotal > 0 || youGetTotal > 0) && (
+                    <div className={`mt-3 py-2 px-4 rounded-lg text-center text-sm font-medium ${valueDiff > 0
+                            ? 'bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : valueDiff < 0
+                                ? 'bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-gray-100/80 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'
+                        }`}>
+                        {valueDiff > 0
+                            ? `📈 You're gaining ${formatCurrency(valueDiff)} in value`
+                            : valueDiff < 0
+                                ? `📉 You're giving ${formatCurrency(Math.abs(valueDiff))} more`
+                                : '⚖️ Fair trade - equal value'
+                        }
+                    </div>
+                )}
+
+                {/* Timestamp */}
+                <div className="mt-3 text-center">
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {wasProposer ? 'You proposed' : `${otherUser.name} proposed`} • {new Date(trade.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                </div>
             </div>
 
             {/* Escrow transaction info */}
