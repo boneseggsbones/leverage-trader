@@ -141,7 +141,7 @@ const CounterOfferModal: React.FC<CounterOfferModalProps> = ({
                                     min="0"
                                     step="0.01"
                                     value={yourCash || ''}
-                                    onChange={e => setYourCash(Math.max(0, parseFloat(e.target.value) || 0))}
+                                    onChange={e => setYourCash(Math.round(Math.max(0, parseFloat(e.target.value) || 0) * 100) / 100)}
                                     className="w-24 px-2 py-1 border rounded text-sm"
                                     placeholder="0.00"
                                 />
@@ -174,7 +174,7 @@ const CounterOfferModal: React.FC<CounterOfferModalProps> = ({
                                     min="0"
                                     step="0.01"
                                     value={theirCash || ''}
-                                    onChange={e => setTheirCash(Math.max(0, parseFloat(e.target.value) || 0))}
+                                    onChange={e => setTheirCash(Math.round(Math.max(0, parseFloat(e.target.value) || 0) * 100) / 100)}
                                     className="w-24 px-2 py-1 border rounded text-sm"
                                     placeholder="0.00"
                                 />

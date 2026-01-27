@@ -604,7 +604,7 @@ const TradeDesk: React.FC = () => {
                                     type="number"
                                     step="0.01"
                                     value={currentUserCash || ''}
-                                    onChange={(e) => setCurrentUserCash(Math.max(0, parseFloat(e.target.value) || 0))}
+                                    onChange={(e) => setCurrentUserCash(Math.round(Math.max(0, parseFloat(e.target.value) || 0) * 100) / 100)}
                                     onBlur={(e) => {
                                         if (parseFloat(e.target.value) > currentUserCashInDollars) {
                                             setCurrentUserCash(Math.floor(currentUserCashInDollars * 100) / 100);
