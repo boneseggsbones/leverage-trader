@@ -125,10 +125,13 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
     const yourTracking = wasProposer ? trackingData?.proposer : trackingData?.receiver;
     const theirTracking = wasProposer ? trackingData?.receiver : trackingData?.proposer;
 
-    const OfferColumn: React.FC<{ title: string, items: Item[], cash: number }> = ({ title, items, cash }) => (
+    const OfferColumn: React.FC<{ title: string, items: Item[], cash: number, isGiving: boolean }> = ({ title, items, cash, isGiving }) => (
         <div className="flex-1">
-            <h4 className="text-sm font-bold text-gray-600 dark:text-gray-300 mb-2">{title}</h4>
-            <div className="space-y-2">
+            <div className={`flex items-center gap-2 mb-2 ${isGiving ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                <span className="text-lg">{isGiving ? '↗️' : '↙️'}</span>
+                <h4 className="text-sm font-bold">{title}</h4>
+            </div>
+            <div className={`space-y-2 p-2 rounded-lg ${isGiving ? 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800'}`}>
                 {items.length === 0 && cash === 0 ? (
                     <p className="text-xs text-gray-400 italic">Nothing offered</p>
                 ) : (
@@ -211,9 +214,21 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 p-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
-                <OfferColumn title="You Give" items={youGiveItems} cash={youGiveCash} />
-                <div className="border-b sm:border-l sm:border-b-0 border-gray-200 dark:border-gray-600"></div>
-                <OfferColumn title="You Get" items={youGetItems} cash={youGetCash} />
+                <OfferColumn title="You Give" items={youGiveItems} cash={youGiveCash} isGiving={true} />
+
+                {/* Direction arrow separator */}
+                <div className="flex items-center justify-center py-2 sm:py-0 sm:px-2">
+                    <div className="hidden sm:flex flex-col items-center gap-1 text-gray-400">
+                        <span className="text-2xl">→</span>
+                    </div>
+                    <div className="sm:hidden flex items-center gap-2 text-gray-400">
+                        <div className="flex-1 border-t border-gray-300 dark:border-gray-500"></div>
+                        <span className="text-xl">↓</span>
+                        <div className="flex-1 border-t border-gray-300 dark:border-gray-500"></div>
+                    </div>
+                </div>
+
+                <OfferColumn title="You Get" items={youGetItems} cash={youGetCash} isGiving={false} />
             </div>
 
             {/* Escrow transaction info */}
