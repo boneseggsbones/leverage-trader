@@ -602,16 +602,17 @@ const TradeDesk: React.FC = () => {
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
                                 <input
                                     type="number"
+                                    step="0.01"
                                     value={currentUserCash || ''}
-                                    onChange={(e) => setCurrentUserCash(Math.max(0, parseInt(e.target.value) || 0))}
+                                    onChange={(e) => setCurrentUserCash(Math.max(0, parseFloat(e.target.value) || 0))}
                                     onBlur={(e) => {
-                                        if (parseInt(e.target.value) > currentUserCashInDollars) {
-                                            setCurrentUserCash(Math.floor(currentUserCashInDollars));
+                                        if (parseFloat(e.target.value) > currentUserCashInDollars) {
+                                            setCurrentUserCash(Math.floor(currentUserCashInDollars * 100) / 100);
                                             addNotification(`You only have ${formatCurrency(currentUser.balance)} available.`, 'warning');
                                         }
                                     }}
                                     className="w-28 pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    placeholder="0"
+                                    placeholder="0.00"
                                     min="0"
                                     max={currentUserCashInDollars}
                                 />
