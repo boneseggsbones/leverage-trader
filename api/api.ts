@@ -1215,3 +1215,118 @@ export const fetchUnreadMessageCount = async (userId: string | number): Promise<
     const data = await response.json();
     return data.unreadCount;
 };
+
+// =====================================================
+// SEARCH API
+// =====================================================
+
+export interface SearchFilters {
+    q?: string;
+    category?: string;
+    condition?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    city?: string;
+    state?: string;
+    sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'relevance';
+    page?: number;
+    limit?: number;
+    excludeUserId?: string;
+}
+
+export interface SearchResultItem {
+    id: string;
+    name: string;
+    description?: string;
+    category: string;
+    condition: string;
+    estimatedMarketValue?: number;
+    imageUrl?: string;
+    valuationSource?: string;
+    owner: {
+        id: string;
+        name: string;
+        city?: string;
+        state?: string;
+        valuationReputationScore?: number;
+        profilePictureUrl?: string;
+    };
+}
+
+export interface SearchResult {
+    items: SearchResultItem[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+    };
+    filters: SearchFilters;
+}
+
+export interface SearchSuggestion {
+    type: 'item' | 'category';
+    text: string;
+}
+
+export interface SearchStats {
+    categories: { category: string; count: number }[];
+    conditions: { condition: string; count: number }[];
+    priceRange: { min: number; max: number };
+}
+
+export const searchItems = async (filters: SearchFilters): Promise<SearchResult> => {
+    const params = new URLSearchParams();
+
+    if (filters.q) params.append('q', filters.q);
+    if (filters.category) params.append('category', filters.category);
+    if (filters.condition) params.append('condition', filters.condition);
+    if (filters.minPrice !== undefined) params.append('minPrice', String(filters.minPrice));
+    if (filters.maxPrice !== undefined) params.append('maxPrice', String(filters.maxPrice));
+    if (filters.city) params.append('city', filters.city);
+    if (filters.state) params.append('state', filters.state);
+    if (filters.sortBy) params.append('sortBy', filters.sortBy);
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.limit) params.append('limit', String(filters.limit));
+    if (filters.excludeUserId) params.append('excludeUserId', filters.excludeUserId);
+
+    const response = await fetch(`${API_URL}/search/items?${params.toString()}`);
+    if (!response.ok) {
+        throw new Error('Search failed');
+    }
+    const data = await response.json();
+
+    // Normalize item IDs to strings
+    return {
+        ...data,
+        items: data.items.map((item: any) => ({
+            ...item,
+            id: String(item.id),
+            owner: {
+                ...item.owner,
+                id: String(item.owner.id)
+            }
+        }))
+    };
+};
+
+export const getSearchSuggestions = async (query: string): Promise<SearchSuggestion[]> => {
+    if (!query || query.length < 2) return [];
+
+    const response = await fetch(`${API_URL}/search/suggestions?q=${encodeURIComponent(query)}`);
+    if (!response.ok) {
+        return [];
+    }
+    const data = await response.json();
+    return data.suggestions || [];
+};
+
+export const getSearchStats = async (excludeUserId?: string): Promise<SearchStats> => {
+    const params = excludeUserId ? `?excludeUserId=${excludeUserId}` : '';
+    const response = await fetch(`${API_URL}/search/stats${params}`);
+    if (!response.ok) {
+        throw new Error('Failed to get search stats');
+    }
+    return response.json();
+};

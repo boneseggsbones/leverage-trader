@@ -38,6 +38,7 @@ import {
   getUnreadMessageCount,
   archiveConversation
 } from './messaging/messagingService';
+import searchRoutes from './routes/searchRoutes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -101,6 +102,9 @@ app.get('/api/auth-status', (req, res) => {
 
 // Mount email preferences routes
 app.use('/api/email-preferences', emailPreferencesRoutes);
+
+// Mount search routes
+app.use('/api/search', searchRoutes);
 
 // Get current user from OAuth session (creates Leverage user if needed)
 app.get('/api/session', async (req, res) => {

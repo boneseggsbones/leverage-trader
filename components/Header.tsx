@@ -37,7 +37,8 @@ const Header: React.FC = () => {
     if (!currentUser) return null;
 
     const navItems = [
-        { path: '/', label: 'Discover' },
+        { path: '/dashboard', label: 'Dashboard' },
+        { path: '/discover', label: 'Discover' },
         { path: '/inventory', label: 'Inventory' },
         { path: '/trades', label: 'Trades' },
         { path: '/analytics', label: 'Analytics' },

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import authRoutes from './authRoutes';
 import itemRoutes from './itemRoutes';
 import userRoutes from './userRoutes';
+import searchRoutes from './searchRoutes';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ const router = Router();
 router.use(authRoutes);           // /api/auth-status, /api/session, /api/auth/*
 router.use('/items', itemRoutes); // /api/items/*
 router.use('/users', userRoutes); // /api/users/*
+router.use('/search', searchRoutes); // /api/search/*
 
 // Future route modules will be added here:
 // router.use('/trades', tradeRoutes);

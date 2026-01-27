@@ -19,6 +19,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DatabaseVisualizer from './src/components/DatabaseVisualizer';
 import LandingPage from './components/LandingPage';
 import MessagesPage from './components/MessagesPage';
+import DiscoveryPage from './components/DiscoveryPage';
 import { useAuth } from './context/AuthContext';
 
 const AppRoutes = () => {
@@ -48,6 +49,7 @@ const AppRoutes = () => {
 
             <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/discover" element={<DiscoveryPage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
                 <Route path="/trades" element={<TradesPage />} />
                 <Route path="/start-trade" element={<StartTradePage />} />
