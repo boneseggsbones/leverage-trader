@@ -267,16 +267,16 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
             </div>
 
             <div className="relative p-6">
-                {/* Avatar header with illustrated style */}
+                {/* Avatar header */}
                 <div className="flex items-center justify-center gap-6 mb-6">
                     {/* Your avatar */}
                     <div className="flex flex-col items-center">
-                        <div className="relative">
-                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-sky-300">
-                                {currentUser.name.charAt(0).toUpperCase()}
-                            </div>
-                            {/* Decorative ring */}
-                            <div className="absolute -inset-1 rounded-full border-2 border-dashed border-sky-300/50 animate-spin" style={{ animationDuration: '10s' }} />
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-sky-300 overflow-hidden">
+                            {currentUser.profilePictureUrl ? (
+                                <img src={currentUser.profilePictureUrl} alt={currentUser.name} className="w-full h-full object-cover" />
+                            ) : (
+                                currentUser.name.charAt(0).toUpperCase()
+                            )}
                         </div>
                         <span className="mt-2 text-sm font-bold text-gray-700 dark:text-white">You</span>
                     </div>
@@ -297,11 +297,12 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
 
                     {/* Their avatar */}
                     <div className="flex flex-col items-center">
-                        <div className="relative">
-                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-orange-300">
-                                {otherUser.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="absolute -inset-1 rounded-full border-2 border-dashed border-orange-300/50 animate-spin" style={{ animationDuration: '10s', animationDirection: 'reverse' }} />
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-orange-300 overflow-hidden">
+                            {otherUser.profilePictureUrl ? (
+                                <img src={otherUser.profilePictureUrl} alt={otherUser.name} className="w-full h-full object-cover" />
+                            ) : (
+                                otherUser.name.charAt(0).toUpperCase()
+                            )}
                         </div>
                         <span className="mt-2 text-sm font-bold text-gray-700 dark:text-white">{otherUser.name}</span>
                     </div>
