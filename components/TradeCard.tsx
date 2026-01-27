@@ -264,40 +264,49 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 <div className="flex items-center justify-center gap-6 mb-6">
                     {/* Your avatar */}
                     <div className="flex flex-col items-center">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-sky-300 overflow-hidden">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-300 to-yellow-400 flex items-center justify-center text-3xl shadow-lg ring-2 ring-white dark:ring-gray-700 overflow-hidden">
                             {currentUser.profilePictureUrl ? (
                                 <img src={currentUser.profilePictureUrl} alt={currentUser.name} className="w-full h-full object-cover" />
                             ) : (
-                                currentUser.name.charAt(0).toUpperCase()
+                                '😊'
                             )}
                         </div>
-                        <span className="mt-2 text-sm font-bold text-gray-700 dark:text-white">You</span>
+                        <span className="mt-1 text-xs font-semibold text-gray-600 dark:text-gray-300">You</span>
                     </div>
 
-                    {/* Swap arrow - playful curved arrow */}
-                    <div className="relative flex items-center">
-                        <svg className="w-10 h-10 text-emerald-500" viewBox="0 0 40 40" fill="none">
-                            <path d="M8 20 Q 20 8, 32 20" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" className="drop-shadow-sm" />
-                            <path d="M28 14 L32 20 L26 22" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    {/* Simple horizontal arrows */}
+                    <div className="flex items-center gap-1">
+                        <div className="w-16 h-0.5 bg-gradient-to-r from-rose-400 to-rose-500 rounded-full" />
+                        <svg className="w-4 h-4 text-rose-500" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M13.172 12l-4.95-4.95 1.414-1.414L16 12l-6.364 6.364-1.414-1.414z" />
                         </svg>
-                        {/* Circular refresh arrows behind */}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-30">
-                            <svg className="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none">
-                                <path d="M4 12a8 8 0 018-8m8 8a8 8 0 01-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                        </div>
+                    </div>
+
+                    {/* Swap icon in center */}
+                    <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-700 shadow-md flex items-center justify-center">
+                        <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M7 16l-4-4m0 0l4-4m-4 4h18M17 8l4 4m0 0l-4 4m4-4H3" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </div>
+
+                    {/* Arrow to receiving */}
+                    <div className="flex items-center gap-1">
+                        <div className="w-16 h-0.5 bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full" />
+                        <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M13.172 12l-4.95-4.95 1.414-1.414L16 12l-6.364 6.364-1.414-1.414z" />
+                        </svg>
                     </div>
 
                     {/* Their avatar */}
                     <div className="flex flex-col items-center">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white dark:ring-gray-700 border-2 border-orange-300 overflow-hidden">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-300 to-yellow-400 flex items-center justify-center text-3xl shadow-lg ring-2 ring-white dark:ring-gray-700 overflow-hidden">
                             {otherUser.profilePictureUrl ? (
                                 <img src={otherUser.profilePictureUrl} alt={otherUser.name} className="w-full h-full object-cover" />
                             ) : (
-                                otherUser.name.charAt(0).toUpperCase()
+                                '😊'
                             )}
                         </div>
-                        <span className="mt-2 text-sm font-bold text-gray-700 dark:text-white">{otherUser.name}</span>
+                        <span className="mt-1 text-xs font-semibold text-gray-600 dark:text-gray-300">{otherUser.name}</span>
                     </div>
                 </div>
 
