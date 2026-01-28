@@ -436,16 +436,9 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                                     <p className="font-medium text-slate-800 truncate">{product.name}</p>
                                                                     <p className="text-xs text-slate-500">{product.platform}</p>
                                                                 </div>
-                                                                <div className="flex items-center gap-2 ml-2">
-                                                                    {product.loosePrice ? (
-                                                                        <span className="text-emerald-600 font-bold text-sm">
-                                                                            ${(product.loosePrice / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                                        </span>
-                                                                    ) : null}
-                                                                    <span className="bg-violet-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg">
-                                                                        {linking ? '...' : 'Link'}
-                                                                    </span>
-                                                                </div>
+                                                                <span className="bg-violet-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg ml-2">
+                                                                    {linking ? '...' : 'This one'}
+                                                                </span>
                                                             </button>
                                                         ))}
                                                     </div>
