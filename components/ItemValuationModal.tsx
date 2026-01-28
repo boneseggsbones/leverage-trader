@@ -406,9 +406,25 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                         ) : !showManualSearch ? (
                                             /* Auto-matched results view */
                                             <>
-                                                {/* Simple prompt - less clutter */}
-                                                <p className="text-sm text-slate-600 mb-3">
-                                                    Which product is this?
+                                                {/* Visual explanation of Auto-Price */}
+                                                <div className="bg-gradient-to-r from-slate-50 to-violet-50 rounded-xl p-4 mb-4">
+                                                    <div className="flex items-center justify-center gap-3 text-2xl mb-2">
+                                                        <span>📦</span>
+                                                        <span className="text-violet-400">→</span>
+                                                        <span>📚</span>
+                                                        <span className="text-violet-400">→</span>
+                                                        <span>💰</span>
+                                                    </div>
+                                                    <p className="text-center text-sm text-slate-700 font-medium">
+                                                        Match your item to our price database
+                                                    </p>
+                                                    <p className="text-center text-xs text-slate-500 mt-1">
+                                                        We'll track its value automatically
+                                                    </p>
+                                                </div>
+
+                                                <p className="text-sm text-slate-600 font-medium mb-2">
+                                                    Which one matches?
                                                 </p>
 
                                                 {autoMatchedResults.length > 0 ? (
