@@ -84,6 +84,23 @@
   animation: pulse-glow 2s infinite;
 }
 
+/* Subtle bounce for NEW badge */
+@keyframes bounce-subtle {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 1.5s ease-in-out infinite;
+}
+
 /* Card hover effects */
 .card-hover {
   transition: transform 0.2s ease, box-shadow 0.2s ease;

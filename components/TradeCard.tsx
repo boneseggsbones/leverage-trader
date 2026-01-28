@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trade, User, Item, TradeStatus } from '../types.ts';
 import { formatCurrencyOptional, formatCurrency } from '../utils/currency.ts';
 import { DisputeStatusCard } from './DisputeStatusCard.tsx';
+import { ShippingLabelModal } from './ShippingLabelModal.tsx';
 
 // Tracking info from the API
 export interface TrackingDisplayInfo {
@@ -37,8 +38,76 @@ interface TradeCardProps {
     trackingData?: TradeTrackingData;
     escrowInfo?: EscrowDisplayInfo | null;
     onOpenDisputeResponse?: () => void;
+    isNew?: boolean;
+    onMarkSeen?: (tradeId: string) => void;
     children?: React.ReactNode;
 }
+
+// Helper to manage seen trades in localStorage
+// We store tradeId:updatedAt to detect counteroffers (updatedAt changes on counter)
+const SEEN_TRADES_KEY = 'leverage_seen_trades';
+const SESSION_SEEN_KEY = 'leverage_session_seen_trades'; // Session storage for current view
+
+export const getSeenTrades = (): Set<string> => {
+    try {
+        const stored = localStorage.getItem(SEEN_TRADES_KEY);
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+        return new Set();
+    }
+};
+
+// Get trades seen in this session (persists across page refreshes within same tab)
+const getSessionSeenTrades = (): Set<string> => {
+    try {
+        const stored = sessionStorage.getItem(SESSION_SEEN_KEY);
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+        return new Set();
+    }
+};
+
+// Generate a unique key for a trade version (includes updatedAt to detect counteroffers)
+export const getTradeVersionKey = (tradeId: string, updatedAt: string): string => {
+    return `${tradeId}:${updatedAt}`;
+};
+
+export const markTradeAsSeen = (tradeId: string, updatedAt: string): void => {
+    try {
+        const key = getTradeVersionKey(tradeId, updatedAt);
+
+        // Mark in localStorage (persists forever)
+        const seen = getSeenTrades();
+        seen.add(key);
+        const arr = Array.from(seen).slice(-500);
+        localStorage.setItem(SEEN_TRADES_KEY, JSON.stringify(arr));
+
+        // Also mark in sessionStorage (so we don't glow again on same page)
+        const sessionSeen = getSessionSeenTrades();
+        sessionSeen.add(key);
+        sessionStorage.setItem(SESSION_SEEN_KEY, JSON.stringify(Array.from(sessionSeen)));
+    } catch {
+        // Ignore storage errors
+    }
+};
+
+// Trade is "new" if it wasn't seen in localStorage before this session started
+// (trades marked "seen" during this session were genuinely new and should glow once)
+export const isTradeNew = (tradeId: string, updatedAt: string): boolean => {
+    const key = getTradeVersionKey(tradeId, updatedAt);
+    const inLocalStorage = getSeenTrades().has(key);
+    const inSessionStorage = getSessionSeenTrades().has(key);
+
+    // If it's in sessionStorage, we already showed the glow this session - don't show again
+    if (inSessionStorage) return false;
+
+    // If it's NOT in localStorage, it's genuinely new and should glow
+    if (!inLocalStorage) return true;
+
+    // If it's in localStorage but not sessionStorage, it was seen in a previous session
+    // Don't show glow for old seen trades
+    return false;
+};
 
 const getStatusBadgeClass = (status: TradeStatus) => {
     switch (status) {
@@ -109,8 +178,26 @@ const ShippingTracker: React.FC<{ tracking: TrackingDisplayInfo; label: string }
 };
 
 
-const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, allItems, trackingData, escrowInfo, onOpenDisputeResponse, children }) => {
+const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, allItems, trackingData, escrowInfo, onOpenDisputeResponse, isNew = false, onMarkSeen, children }) => {
     const wasProposer = trade.proposerId === currentUser.id;
+    const [showShippingModal, setShowShippingModal] = useState(false);
+    const [showNewGlow, setShowNewGlow] = useState(isNew);
+
+    // Mark trade as seen after first render and fade out glow
+    useEffect(() => {
+        if (isNew) {
+            // Mark as seen immediately (using updatedAt so counteroffers show as new)
+            markTradeAsSeen(trade.id, trade.updatedAt);
+            onMarkSeen?.(trade.id);
+
+            // Keep the glow visible for 3 seconds then fade out
+            const timer = setTimeout(() => {
+                setShowNewGlow(false);
+            }, 3000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [trade.id, trade.updatedAt, isNew, onMarkSeen]);
 
     const youGiveItemIds = wasProposer ? trade.proposerItemIds : trade.receiverItemIds;
     const youGiveCash = wasProposer ? trade.proposerCash : trade.receiverCash;
@@ -157,26 +244,39 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
         );
     };
 
-    const CashPill: React.FC<{ amount: number }> = ({ amount }) => (
+    const CashPill: React.FC<{ amount: number; label?: string }> = ({ amount, label = 'Cash' }) => (
         <div className="group/pill flex items-center gap-2 bg-emerald-50/90 dark:bg-emerald-900/40 backdrop-blur-sm rounded-xl pl-1 pr-3 py-1.5 shadow-sm border border-emerald-200/60 dark:border-emerald-700/50 hover:shadow-md hover:scale-[1.02] transition-all duration-200">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold shadow-inner">$</div>
             <div className="flex flex-col">
-                <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 leading-tight">Cash</span>
+                <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 leading-tight">{label}</span>
                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400">{formatCurrency(amount)}</span>
             </div>
         </div>
     );
 
-    // Calculate value ratio for visual bar
+    // Calculate value ratio for visual bar - show as "your contribution" vs "their contribution"
     const totalValue = youGiveTotal + youGetTotal;
-    const givePercent = totalValue > 0 ? (youGiveTotal / totalValue) * 100 : 50;
-    const getPercent = totalValue > 0 ? (youGetTotal / totalValue) * 100 : 50;
+    // When you give more, you contribute more to the trade
+    const yourContributionPercent = totalValue > 0 ? (youGiveTotal / totalValue) * 100 : 50;
+    const theirContributionPercent = totalValue > 0 ? (youGetTotal / totalValue) * 100 : 50;
+
+    // Calculate the cash contribution needed to balance - this appears as a sub-item
+    const cashContributionNeeded = valueDiff < 0 ? Math.abs(valueDiff) : 0;
 
     // Determine if this is a "winning" trade for celebration effects
     const isWinning = valueDiff > 50; // More than $50 in your favor triggers celebration
 
     return (
-        <div className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border-2 border-amber-200/60 dark:border-gray-700/60 shadow-lg hover:shadow-2xl transition-all duration-300">
+        <div className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 border-2 shadow-lg hover:shadow-2xl transition-all duration-300 ${showNewGlow ? 'border-sky-400 dark:border-sky-500 ring-4 ring-sky-400/40 dark:ring-sky-500/30 animate-pulse-glow' : 'border-amber-200/60 dark:border-gray-700/60'}`}>
+            {/* NEW badge for unseen trades */}
+            {showNewGlow && (
+                <div className="absolute top-4 left-4 z-20">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-lg shadow-sky-400/40 animate-bounce-subtle">
+                        <span className="text-sm">✨</span>
+                        NEW
+                    </span>
+                </div>
+            )}
 
 
             {/* Floating decorations - illustrated assets */}
@@ -257,6 +357,12 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                         Complete
                     </span>
                 )}
+                {trade.status === TradeStatus.COUNTERED && (
+                    <span className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-bold rounded-full bg-orange-400 text-orange-900 shadow-lg shadow-orange-400/30 border-2 border-orange-500">
+                        <span className="text-base">🔄</span>
+                        Countered
+                    </span>
+                )}
             </div>
 
             <div className="relative p-6">
@@ -329,13 +435,28 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                             <div className="flex flex-wrap gap-2">
                                 {youGiveItems.map(item => <ItemPill key={item.id} item={item} />)}
                                 {youGiveCash > 0 && <CashPill amount={youGiveCash} />}
-                                {youGiveItems.length === 0 && youGiveCash === 0 && (
+                                {youGiveItems.length === 0 && youGiveCash === 0 && cashContributionNeeded === 0 && (
                                     <div className="w-full flex flex-col items-center justify-center py-6 text-gray-400">
                                         <span className="text-2xl mb-1">📭</span>
                                         <span className="text-xs font-medium">Nothing to send</span>
                                     </div>
                                 )}
                             </div>
+                            {/* Cash contribution sub-item when you're adding money to balance */}
+                            {cashContributionNeeded > 0 && (
+                                <div className="mt-2 pt-2 border-t border-rose-200/60 border-dashed">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 bg-amber-50/90 backdrop-blur-sm rounded-xl pl-1 pr-3 py-1.5 shadow-sm border border-amber-200/60">
+                                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm font-bold shadow-inner">+$</div>
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-semibold text-amber-800 leading-tight">Your Cash</span>
+                                                <span className="text-[10px] text-amber-600">{formatCurrency(cashContributionNeeded)}</span>
+                                            </div>
+                                        </div>
+                                        <span className="text-[10px] text-rose-500 italic">to balance trade</span>
+                                    </div>
+                                </div>
+                            )}
                             <div className="mt-3 pt-2 border-t border-rose-300/40 flex justify-between items-center">
                                 <span className="text-[11px] uppercase tracking-wider text-rose-500 font-bold">Total Value</span>
                                 <span className="text-base font-bold text-rose-600 dark:text-rose-400">{formatCurrency(youGiveTotal)}</span>
@@ -403,15 +524,15 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                                 className="absolute left-0 w-12 h-12 z-10 object-contain"
                             />
 
-                            {/* The actual progress bar */}
+                            {/* The actual progress bar - rose = your contribution, green = their contribution */}
                             <div className="flex-1 flex h-4 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
                                 <div
                                     className="bg-gradient-to-r from-rose-400 via-rose-500 to-rose-400 transition-all duration-500"
-                                    style={{ width: `${givePercent}%` }}
+                                    style={{ width: `${yourContributionPercent}%` }}
                                 />
                                 <div
                                     className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400 transition-all duration-500"
-                                    style={{ width: `${getPercent}%` }}
+                                    style={{ width: `${theirContributionPercent}%` }}
                                 />
                             </div>
 
@@ -437,9 +558,9 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                             />
                             <span className="text-base">
                                 {valueDiff > 0
-                                    ? `+${formatCurrency(valueDiff)} in your favor! Winning!`
+                                    ? `+${formatCurrency(valueDiff)} in your favor!`
                                     : valueDiff < 0
-                                        ? `${formatCurrency(Math.abs(valueDiff))} extra from you`
+                                        ? `You're adding ${formatCurrency(Math.abs(valueDiff))} to balance`
                                         : 'Perfectly balanced trade'
                                 }
                             </span>
@@ -450,10 +571,30 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                     </div>
                 )}
 
+                {/* Counter-offer indicator */}
+                {trade.parentTradeId && (
+                    <div className="mt-4 flex justify-center">
+                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/30 rounded-xl border border-orange-200 dark:border-orange-700">
+                            <span className="text-lg">🔄</span>
+                            <span className="text-sm font-semibold text-orange-700 dark:text-orange-300">Counter-Offer</span>
+                        </span>
+                    </div>
+                )}
+
+                {/* Counter message */}
+                {trade.counterMessage && (
+                    <div className="mt-3 mx-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-700">
+                        <p className="text-sm text-amber-800 dark:text-amber-200 italic">"{trade.counterMessage}"</p>
+                    </div>
+                )}
+
                 {/* Timestamp */}
                 <div className="mt-4 text-center">
                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {wasProposer ? 'You proposed' : `${otherUser.name} proposed`} • {new Date(trade.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {trade.parentTradeId
+                            ? (wasProposer ? 'You counter-offered' : `${otherUser.name} counter-offered`)
+                            : (wasProposer ? 'You proposed' : `${otherUser.name} proposed`)
+                        } • {new Date(trade.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                 </div>
             </div>
@@ -490,6 +631,44 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                 </div>
             )}
 
+            {/* Shipping CTA - show when escrow funded but not shipped yet */}
+            {trade.status === TradeStatus.ESCROW_FUNDED && !yourTracking && (
+                <div className="mx-6 mt-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl border-2 border-indigo-200 dark:border-indigo-700">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <span className="text-3xl">📦</span>
+                            <div>
+                                <p className="font-semibold text-gray-800 dark:text-white">Ready to Ship!</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    Funds secured. Buy a shipping label to send your items to {otherUser.name}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowShippingModal(true)}
+                            className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-[1.02] transition-all duration-200"
+                        >
+                            🏷️ Buy Label
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Already shipped indicator */}
+            {trade.status === TradeStatus.ESCROW_FUNDED && yourTracking && !theirTracking && (
+                <div className="mx-6 mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl">✅</span>
+                        <div>
+                            <p className="font-semibold text-blue-800 dark:text-blue-200">You've shipped!</p>
+                            <p className="text-sm text-blue-600 dark:text-blue-300">
+                                Waiting for {otherUser.name} to ship their items...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Shipping tracking section */}
             {(yourTracking || theirTracking) && (
                 <div className="mt-3 space-y-2">
@@ -518,6 +697,16 @@ const TradeCard: React.FC<TradeCardProps> = ({ trade, currentUser, otherUser, al
                     {children}
                 </div>
             )}
+
+            {/* Shipping Label Modal */}
+            <ShippingLabelModal
+                isOpen={showShippingModal}
+                onClose={() => setShowShippingModal(false)}
+                tradeId={trade.id}
+                userId={typeof currentUser.id === 'string' ? parseInt(currentUser.id, 10) : currentUser.id}
+                recipientName={otherUser.name}
+                itemCategory={youGiveItems[0]?.category}
+            />
         </div>
     );
 };

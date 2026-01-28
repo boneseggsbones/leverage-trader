@@ -416,3 +416,394 @@ export async function checkBothDelivered(tradeId: string): Promise<boolean> {
 
     return proposerDelivered && receiverDelivered;
 }
+
+// =====================================================
+// SHIPPO ADDRESS VALIDATION, RATE QUOTES, AND LABELS
+// =====================================================
+
+export interface ShippoAddress {
+    name: string;
+    street1: string;
+    street2?: string;
+    city: string;
+    state: string;
+    zip: string;
+    country?: string;
+    phone?: string;
+    email?: string;
+}
+
+export interface AddressValidationResult {
+    isValid: boolean;
+    validatedAddress?: ShippoAddress;
+    messages?: string[];
+    objectId?: string; // Shippo address ID for reuse
+}
+
+export interface Parcel {
+    length: number; // inches
+    width: number;  // inches
+    height: number; // inches
+    weight: number; // oz
+    massUnit?: 'oz' | 'lb' | 'g' | 'kg';
+    distanceUnit?: 'in' | 'cm';
+}
+
+export interface ShippingRate {
+    rateId: string;
+    carrier: string;
+    carrierAccount: string;
+    servicelevel: {
+        name: string;
+        token: string;
+    };
+    amount: string; // e.g., "7.50"
+    currency: string;
+    estimatedDays: number | null;
+    durationTerms: string | null;
+}
+
+export interface ShipmentResult {
+    shipmentId: string;
+    rates: ShippingRate[];
+    status: string;
+    messages?: any[];
+}
+
+export interface LabelResult {
+    success: boolean;
+    transactionId?: string;
+    trackingNumber?: string;
+    labelUrl?: string;
+    carrier?: string;
+    servicelevel?: string;
+    error?: string;
+}
+
+/**
+ * Validate a shipping address via Shippo API
+ */
+export async function validateAddress(address: ShippoAddress): Promise<AddressValidationResult> {
+    if (!SHIPPO_API_KEY) {
+        console.log('[Shipping] Shippo API not configured, skipping address validation');
+        return { isValid: true, validatedAddress: address, messages: ['Validation skipped (dev mode)'] };
+    }
+
+    try {
+        console.log(`[Shipping] Validating address: ${address.street1}, ${address.city}, ${address.state}`);
+
+        const response = await fetch(`${SHIPPO_API_URL}/addresses/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: address.name,
+                street1: address.street1,
+                street2: address.street2 || '',
+                city: address.city,
+                state: address.state,
+                zip: address.zip,
+                country: address.country || 'US',
+                phone: address.phone || '',
+                email: address.email || '',
+                validate: true,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Shipping] Address validation API error: ${response.status} - ${errorText}`);
+            return { isValid: false, messages: ['API error during validation'] };
+        }
+
+        const data = await response.json();
+
+        // Check validation result
+        const isValid = data.validation_results?.is_valid === true;
+        const messages = data.validation_results?.messages?.map((m: any) => m.text) || [];
+
+        console.log(`[Shipping] Address validation result: ${isValid ? 'VALID' : 'INVALID'}`);
+
+        return {
+            isValid,
+            objectId: data.object_id,
+            validatedAddress: isValid ? {
+                name: data.name,
+                street1: data.street1,
+                street2: data.street2,
+                city: data.city,
+                state: data.state,
+                zip: data.zip,
+                country: data.country,
+                phone: data.phone,
+                email: data.email,
+            } : undefined,
+            messages,
+        };
+
+    } catch (error: any) {
+        console.error(`[Shipping] Address validation error:`, error.message);
+        return { isValid: false, messages: [error.message] };
+    }
+}
+
+/**
+ * Get shipping rates for a shipment
+ */
+export async function getRates(
+    fromAddress: ShippoAddress,
+    toAddress: ShippoAddress,
+    parcel: Parcel
+): Promise<{ success: boolean; shipmentId?: string; rates?: ShippingRate[]; error?: string }> {
+    if (!SHIPPO_API_KEY) {
+        console.log('[Shipping] Shippo API not configured, returning mock rates');
+        return {
+            success: true,
+            shipmentId: 'mock-shipment-id',
+            rates: [
+                { rateId: 'mock-usps-priority', carrier: 'USPS', carrierAccount: 'mock', servicelevel: { name: 'Priority Mail', token: 'usps_priority' }, amount: '8.50', currency: 'USD', estimatedDays: 2, durationTerms: '1-3 days' },
+                { rateId: 'mock-usps-ground', carrier: 'USPS', carrierAccount: 'mock', servicelevel: { name: 'Ground Advantage', token: 'usps_ground_advantage' }, amount: '5.25', currency: 'USD', estimatedDays: 5, durationTerms: '3-5 days' },
+                { rateId: 'mock-ups-ground', carrier: 'UPS', carrierAccount: 'mock', servicelevel: { name: 'UPS Ground', token: 'ups_ground' }, amount: '12.00', currency: 'USD', estimatedDays: 5, durationTerms: '1-5 days' },
+            ],
+        };
+    }
+
+    try {
+        console.log(`[Shipping] Fetching rates from ${fromAddress.city}, ${fromAddress.state} to ${toAddress.city}, ${toAddress.state}`);
+
+        const response = await fetch(`${SHIPPO_API_URL}/shipments/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                address_from: {
+                    name: fromAddress.name,
+                    street1: fromAddress.street1,
+                    street2: fromAddress.street2 || '',
+                    city: fromAddress.city,
+                    state: fromAddress.state,
+                    zip: fromAddress.zip,
+                    country: fromAddress.country || 'US',
+                    phone: fromAddress.phone || '',
+                    email: fromAddress.email || '',
+                },
+                address_to: {
+                    name: toAddress.name,
+                    street1: toAddress.street1,
+                    street2: toAddress.street2 || '',
+                    city: toAddress.city,
+                    state: toAddress.state,
+                    zip: toAddress.zip,
+                    country: toAddress.country || 'US',
+                    phone: toAddress.phone || '',
+                    email: toAddress.email || '',
+                },
+                parcels: [{
+                    length: String(parcel.length),
+                    width: String(parcel.width),
+                    height: String(parcel.height),
+                    distance_unit: parcel.distanceUnit || 'in',
+                    weight: String(parcel.weight),
+                    mass_unit: parcel.massUnit || 'oz',
+                }],
+                async: false, // Get rates synchronously
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Shipping] Get rates API error: ${response.status} - ${errorText}`);
+            return { success: false, error: `API error: ${response.status}` };
+        }
+
+        const data = await response.json();
+
+        // Map rates to our format
+        const rates: ShippingRate[] = (data.rates || []).map((rate: any) => ({
+            rateId: rate.object_id,
+            carrier: rate.provider,
+            carrierAccount: rate.carrier_account,
+            servicelevel: {
+                name: rate.servicelevel?.name || 'Standard',
+                token: rate.servicelevel?.token || '',
+            },
+            amount: rate.amount,
+            currency: rate.currency,
+            estimatedDays: rate.estimated_days,
+            durationTerms: rate.duration_terms,
+        }));
+
+        console.log(`[Shipping] Got ${rates.length} rates for shipment ${data.object_id}`);
+
+        return {
+            success: true,
+            shipmentId: data.object_id,
+            rates,
+        };
+
+    } catch (error: any) {
+        console.error(`[Shipping] Get rates error:`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Purchase a shipping label using a rate ID
+ */
+export async function purchaseLabel(rateId: string): Promise<LabelResult> {
+    if (!SHIPPO_API_KEY) {
+        console.log('[Shipping] Shippo API not configured, returning mock label');
+        return {
+            success: true,
+            transactionId: 'mock-transaction-' + Date.now(),
+            trackingNumber: 'MOCK' + Date.now(),
+            labelUrl: 'https://shippo-delivery-east.s3.amazonaws.com/mock-label.pdf',
+            carrier: 'USPS',
+            servicelevel: 'Priority Mail',
+        };
+    }
+
+    try {
+        console.log(`[Shipping] Purchasing label for rate: ${rateId}`);
+
+        const response = await fetch(`${SHIPPO_API_URL}/transactions/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                rate: rateId,
+                label_file_type: 'PDF',
+                async: false,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Shipping] Purchase label API error: ${response.status} - ${errorText}`);
+            return { success: false, error: `API error: ${response.status}` };
+        }
+
+        const data = await response.json();
+
+        if (data.status !== 'SUCCESS') {
+            console.error(`[Shipping] Label purchase failed:`, data.messages);
+            return {
+                success: false,
+                error: data.messages?.map((m: any) => m.text).join(', ') || 'Unknown error',
+            };
+        }
+
+        console.log(`[Shipping] Label purchased: ${data.tracking_number}`);
+
+        return {
+            success: true,
+            transactionId: data.object_id,
+            trackingNumber: data.tracking_number,
+            labelUrl: data.label_url,
+            carrier: data.rate?.provider,
+            servicelevel: data.rate?.servicelevel?.name,
+        };
+
+    } catch (error: any) {
+        console.error(`[Shipping] Purchase label error:`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Create a return label for an existing shipment
+ */
+export async function createReturnLabel(
+    originalFromAddress: ShippoAddress,
+    originalToAddress: ShippoAddress,
+    parcel: Parcel
+): Promise<LabelResult> {
+    // Swap from and to for return
+    const result = await getRates(originalToAddress, originalFromAddress, parcel);
+
+    if (!result.success || !result.rates || result.rates.length === 0) {
+        return { success: false, error: result.error || 'No rates available for return' };
+    }
+
+    // Pick cheapest rate
+    const cheapestRate = result.rates.reduce((min, rate) =>
+        parseFloat(rate.amount) < parseFloat(min.amount) ? rate : min
+    );
+
+    return await purchaseLabel(cheapestRate.rateId);
+}
+
+/**
+ * Store a purchased label in the database
+ */
+export async function storeLabelRecord(
+    tradeId: string,
+    userId: number,
+    label: LabelResult,
+    rateInfo: { carrier: string; servicelevel: string; amountCents: number }
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        db.run(`
+            INSERT INTO shippo_shipments 
+            (trade_id, user_id, shippo_transaction_id, carrier, service_level, amount_cents, label_url, tracking_number, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PURCHASED')`,
+            [
+                tradeId,
+                userId,
+                label.transactionId,
+                rateInfo.carrier,
+                rateInfo.servicelevel,
+                rateInfo.amountCents,
+                label.labelUrl,
+                label.trackingNumber,
+            ],
+            (err) => {
+                if (err) reject(err);
+                else resolve();
+            }
+        );
+    });
+}
+
+/**
+ * Get label info for a trade/user
+ */
+export async function getLabelForTrade(tradeId: string, userId: number): Promise<LabelResult | null> {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT * FROM shippo_shipments WHERE trade_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1`,
+            [tradeId, userId],
+            (err, row: any) => {
+                if (err) {
+                    reject(err);
+                } else if (!row) {
+                    resolve(null);
+                } else {
+                    resolve({
+                        success: true,
+                        transactionId: row.shippo_transaction_id,
+                        trackingNumber: row.tracking_number,
+                        labelUrl: row.label_url,
+                        carrier: row.carrier,
+                        servicelevel: row.service_level,
+                    });
+                }
+            }
+        );
+    });
+}
+
+// Default parcel sizes for common item categories
+export const DEFAULT_PARCELS: Record<string, Parcel> = {
+    'VIDEO_GAMES': { length: 8, width: 6, height: 2, weight: 8 },
+    'TCG': { length: 6, width: 4, height: 1, weight: 4 },
+    'SNEAKERS': { length: 14, width: 10, height: 6, weight: 48 },
+    'ELECTRONICS': { length: 12, width: 10, height: 4, weight: 32 },
+    'OTHER': { length: 10, width: 8, height: 4, weight: 16 },
+};

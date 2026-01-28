@@ -268,3 +268,32 @@ export interface TradeRating {
     createdAt: string;
     isRevealed: boolean;
 }
+
+
+// --- Trade Event History System ---
+
+export type TradeEventType =
+    | 'PROPOSED'
+    | 'COUNTER_OFFER'
+    | 'ACCEPTED'
+    | 'REJECTED'
+    | 'CANCELLED'
+    | 'PAYMENT_FUNDED'
+    | 'SHIPPED'
+    | 'DELIVERED'
+    | 'COMPLETED'
+    | 'DISPUTE_OPENED'
+    | 'DISPUTE_RESOLVED';
+
+export interface TradeEvent {
+    id: number;
+    tradeId: string;
+    eventType: TradeEventType;
+    actorId: string;
+    proposerItemIds?: string[];
+    receiverItemIds?: string[];
+    proposerCash?: number;
+    receiverCash?: number;
+    message?: string | null;
+    createdAt: string;
+}

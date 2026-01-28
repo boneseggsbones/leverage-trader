@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { fetchAllUsers } from '../api/mockApi.ts';
+import { fetchAllUsers } from '../api/api.ts';
 import { User } from '../types.ts';
 import { TraderCardSkeleton } from './Skeleton.tsx';
 

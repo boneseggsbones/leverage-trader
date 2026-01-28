@@ -1,0 +1,251 @@
+.shipping-rate-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.rates-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.rates-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary, #1f2937);
+}
+
+.rates-count {
+    font-size: 0.75rem;
+    color: var(--text-muted, #9ca3af);
+}
+
+.rates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.rate-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary, #f9fafb);
+    border: 2px solid transparent;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.rate-card:hover {
+    background: var(--bg-tertiary, #f3f4f6);
+    border-color: var(--border-color, #e5e7eb);
+}
+
+.rate-card.selected {
+    background: rgba(99, 102, 241, 0.05);
+    border-color: var(--primary, #6366f1);
+}
+
+.rate-carrier {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 140px;
+}
+
+.carrier-logo {
+    font-size: 1.5rem;
+}
+
+.carrier-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.carrier-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.service-level {
+    font-size: 0.75rem;
+    color: var(--text-muted, #9ca3af);
+}
+
+.rate-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.delivery-time {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary, #1f2937);
+}
+
+.duration-terms {
+    font-size: 0.75rem;
+    color: var(--text-muted, #9ca3af);
+}
+
+.rate-price-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    min-width: 80px;
+}
+
+.rate-price {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary, #1f2937);
+}
+
+.rate-badges {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.badge {
+    padding: 0.125rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.badge.cheapest {
+    background: rgba(34, 197, 94, 0.15);
+    color: #16a34a;
+}
+
+.badge.fastest {
+    background: rgba(59, 130, 246, 0.15);
+    color: #2563eb;
+}
+
+.rate-radio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.radio-circle {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid var(--border-color, #d1d5db);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.radio-circle.checked {
+    border-color: var(--primary, #6366f1);
+}
+
+.radio-dot {
+    width: 0.625rem;
+    height: 0.625rem;
+    background: var(--primary, #6366f1);
+    border-radius: 50%;
+}
+
+.purchase-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.purchase-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.purchase-summary span:first-child {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #6b7280);
+}
+
+.purchase-total {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary, #1f2937);
+}
+
+.btn-purchase {
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, var(--primary, #6366f1) 0%, #8b5cf6 100%);
+    border: none;
+    border-radius: 0.5rem;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-purchase:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+.btn-purchase:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+    .rate-card {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .rate-carrier {
+        min-width: unset;
+        flex: 1;
+    }
+
+    .rate-details {
+        order: 3;
+        width: 100%;
+    }
+
+    .rate-price-section {
+        align-items: flex-start;
+    }
+
+    .rate-radio {
+        order: 0;
+    }
+
+    .purchase-section {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .purchase-summary {
+        text-align: center;
+    }
+
+    .btn-purchase {
+        width: 100%;
+    }
+}

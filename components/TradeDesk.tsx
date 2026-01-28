@@ -35,7 +35,8 @@ const TradeDesk: React.FC = () => {
     // Trade state
     const [currentUserItems, setCurrentUserItems] = useState<Item[]>([]);
     const [otherUserItems, setOtherUserItems] = useState<Item[]>([]);
-    const [currentUserCash, setCurrentUserCash] = useState<number>(0);
+    const [currentUserCash, setCurrentUserCash] = useState<number>(0);  // Cash proposer is offering
+    const [otherUserCash, setOtherUserCash] = useState<number>(0);      // Cash proposer is requesting
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -177,8 +178,10 @@ const TradeDesk: React.FC = () => {
     const handleProposeTrade = async () => {
         if (!otherUser || isSubmitting || !currentUser) return;
 
-        if (currentUserItems.length === 0 && currentUserCash === 0) {
-            addNotification("You must offer at least one item or some cash.", 'warning');
+        // Require at least something to be exchanged
+        const hasAnything = currentUserItems.length > 0 || otherUserItems.length > 0 || currentUserCash > 0 || otherUserCash > 0;
+        if (!hasAnything) {
+            addNotification("You must include at least one item or cash in the trade.", 'warning');
             return;
         }
 
@@ -189,7 +192,8 @@ const TradeDesk: React.FC = () => {
                 otherUser.id,
                 currentUserItems.map(item => item.id),
                 otherUserItems.map(item => item.id),
-                dollarsToCents(currentUserCash)
+                dollarsToCents(currentUserCash),
+                dollarsToCents(otherUserCash)
             );
             updateUser(updatedProposer);
             addNotification("Trade proposed successfully!", 'success');
@@ -209,9 +213,8 @@ const TradeDesk: React.FC = () => {
     };
 
     const yourOfferValue = calculateValue(currentUserItems, currentUserCash);
-    const theirOfferValue = calculateValue(otherUserItems, 0);
+    const theirOfferValue = calculateValue(otherUserItems, otherUserCash);
     const valueDifference = yourOfferValue - theirOfferValue;
-    const currentUserCashInDollars = currentUser.balance / 100;
 
     const getItemImageUrl = (item: Item) => {
         return item.imageUrl && item.imageUrl.startsWith('/') ? `http://localhost:4000${item.imageUrl}` : item.imageUrl;
@@ -313,8 +316,17 @@ const TradeDesk: React.FC = () => {
                             <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-green-200">
                                 <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center font-bold text-green-700">$</div>
                                 <div>
-                                    <p className="text-sm font-medium text-slate-700">Cash</p>
+                                    <p className="text-sm font-medium text-slate-700">Cash Offering</p>
                                     <p className="text-xs text-green-600">{formatCurrency(dollarsToCents(currentUserCash))}</p>
+                                </div>
+                            </div>
+                        )}
+                        {!isYours && otherUserCash > 0 && (
+                            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-amber-200">
+                                <div className="w-8 h-8 rounded bg-amber-100 flex items-center justify-center font-bold text-amber-700">$</div>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-700">Cash Requested</p>
+                                    <p className="text-xs text-amber-600">{formatCurrency(dollarsToCents(otherUserCash))}</p>
                                 </div>
                             </div>
                         )}
@@ -595,35 +607,47 @@ const TradeDesk: React.FC = () => {
                 {/* Floating Action Bar */}
                 <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 shadow-lg">
                     <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
-                        {/* Cash Input */}
-                        <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-600">Add cash:</span>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={currentUserCash || ''}
-                                    onChange={(e) => setCurrentUserCash(Math.round(Math.max(0, parseFloat(e.target.value) || 0) * 100) / 100)}
-                                    onBlur={(e) => {
-                                        if (parseFloat(e.target.value) > currentUserCashInDollars) {
-                                            setCurrentUserCash(Math.floor(currentUserCashInDollars * 100) / 100);
-                                            addNotification(`You only have ${formatCurrency(currentUser.balance)} available.`, 'warning');
-                                        }
-                                    }}
-                                    className="w-28 pl-7 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    placeholder="0.00"
-                                    min="0"
-                                    max={currentUserCashInDollars}
-                                />
+                        {/* Cash Inputs */}
+                        <div className="flex items-center gap-6">
+                            {/* Offer Cash */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-slate-600">Offer cash:</span>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={currentUserCash || ''}
+                                        onChange={(e) => setCurrentUserCash(Math.round(Math.max(0, parseFloat(e.target.value) || 0) * 100) / 100)}
+                                        className="w-24 pl-7 pr-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                                        placeholder="0.00"
+                                        min="0"
+                                    />
+                                </div>
                             </div>
-                            <span className="text-xs text-slate-400">/ {formatCurrency(currentUser.balance)} available</span>
+
+                            {/* Request Cash */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-amber-600">Request cash:</span>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 font-medium">$</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={otherUserCash || ''}
+                                        onChange={(e) => setOtherUserCash(Math.round(Math.max(0, parseFloat(e.target.value) || 0) * 100) / 100)}
+                                        className="w-24 pl-7 pr-2 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm bg-amber-50"
+                                        placeholder="0.00"
+                                        min="0"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         {/* Propose Button */}
                         <button
                             onClick={() => setIsModalOpen(true)}
-                            disabled={isSubmitting || (currentUserItems.length === 0 && currentUserCash === 0)}
+                            disabled={isSubmitting || (currentUserItems.length === 0 && otherUserItems.length === 0 && currentUserCash === 0 && otherUserCash === 0)}
                             className="px-8 py-3 text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-violet-600 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-md disabled:cursor-not-allowed"
                         >
                             {isSubmitting ? "Submitting..." : "Propose Trade"}
@@ -703,7 +727,13 @@ const TradeDesk: React.FC = () => {
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-xs text-slate-400">No items</p>
+                                    <p className="text-xs text-slate-400">{otherUserCash > 0 ? '' : 'No items'}</p>
+                                )}
+                                {otherUserCash > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-green-200 flex items-center justify-between text-xs">
+                                        <span className="text-amber-600 font-medium">+ Cash Requested</span>
+                                        <span className="text-amber-600 font-medium">{formatCurrency(dollarsToCents(otherUserCash))}</span>
+                                    </div>
                                 )}
                                 <div className="mt-2 pt-2 border-t border-green-200 flex items-center justify-between text-sm font-semibold">
                                     <span className="text-green-700">Total</span>

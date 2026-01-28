@@ -1,5 +1,4 @@
 
-// Fix: Implemented the TradeHistory component.
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +6,7 @@ import { fetchTradesForUser, fetchAllUsers, fetchAllItems, submitRating } from '
 import { Trade, User, TradeStatus, Item, TradeRating } from '../types.ts';
 import { useNotification } from '../context/NotificationContext.tsx';
 import RatingModal from './RatingModal.tsx';
+import TradeTimeline from './TradeTimeline.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
 const TradeHistory: React.FC = () => {
@@ -24,6 +24,8 @@ const TradeHistory: React.FC = () => {
     const [ratingTrade, setRatingTrade] = useState<Trade | null>(null);
     const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // State for expanded trade timeline
+    const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
 
     const loadHistory = useCallback(async () => {
         if (!currentUser) {
@@ -195,34 +197,63 @@ const TradeHistory: React.FC = () => {
                                 const formattedNetValue = formatCurrency(netValue);
 
                                 return (
-                                    <div key={trade.id} className="p-4 hover:bg-gray-50 transition-colors">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-bold text-gray-800 text-lg">
-                                                    Trade with {otherPartyName}
-                                                </p>
-                                                <div className="text-sm text-gray-500 mt-1 space-y-1">
-                                                    <p>
-                                                        <span className="font-semibold text-gray-600">Proposed:</span> {wasProposer ? 'You proposed' : `${otherPartyName} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
+                                    <div key={trade.id} className="hover:bg-gray-50 transition-colors">
+                                        <div className="p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-bold text-gray-800 text-lg">
+                                                        Trade with {otherPartyName}
                                                     </p>
-                                                    <p>
-                                                        <span className="font-semibold text-gray-600">Finalized:</span> {new Date(trade.updatedAt).toLocaleDateString()}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right flex-shrink-0 ml-4">
-                                                {renderStatusBadge(trade)}
-                                                {(trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED || trade.status === TradeStatus.COMPLETED_AWAITING_RATING) &&
-                                                    <div className="mt-2">
-                                                        <p className="text-xs text-gray-500">Net Value</p>
-                                                        <p className={`font-bold text-lg ${netValue > 0 ? 'text-green-600' : netValue < 0 ? 'text-red-600' : 'text-gray-700'
-                                                            }`}>
-                                                            {netValue > 0 ? `+${formattedNetValue}` : formattedNetValue}
+                                                    <div className="text-sm text-gray-500 mt-1 space-y-1">
+                                                        <p>
+                                                            <span className="font-semibold text-gray-600">Proposed:</span> {wasProposer ? 'You proposed' : `${otherPartyName} proposed`} on {new Date(trade.createdAt).toLocaleDateString()}
+                                                        </p>
+                                                        <p>
+                                                            <span className="font-semibold text-gray-600">Finalized:</span> {new Date(trade.updatedAt).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                }
+                                                </div>
+                                                <div className="text-right flex-shrink-0 ml-4">
+                                                    {renderStatusBadge(trade)}
+                                                    {(trade.status === TradeStatus.COMPLETED || trade.status === TradeStatus.DISPUTE_RESOLVED || trade.status === TradeStatus.COMPLETED_AWAITING_RATING) &&
+                                                        <div className="mt-2">
+                                                            <p className="text-xs text-gray-500">Net Value</p>
+                                                            <p className={`font-bold text-lg ${netValue > 0 ? 'text-green-600' : netValue < 0 ? 'text-red-600' : 'text-gray-700'
+                                                                }`}>
+                                                                {netValue > 0 ? `+${formattedNetValue}` : formattedNetValue}
+                                                            </p>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                            {/* Details button */}
+                                            <div className="mt-3">
+                                                <button
+                                                    onClick={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
+                                                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                                                >
+                                                    <svg
+                                                        className={`w-4 h-4 transition-transform duration-200 ${expandedTradeId === trade.id ? 'rotate-180' : ''}`}
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                    {expandedTradeId === trade.id ? 'Hide Details' : 'Show Details'}
+                                                </button>
                                             </div>
                                         </div>
+                                        {/* Expandable Timeline */}
+                                        {expandedTradeId === trade.id && (
+                                            <div className="border-t border-gray-200 bg-gray-50 px-4">
+                                                <TradeTimeline
+                                                    tradeId={trade.id}
+                                                    allItems={allItems}
+                                                    currentUserId={currentUser.id}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             })

@@ -18,7 +18,7 @@ import {
     fetchEscrowStatus
 } from '../api/api.ts';
 import { Trade, User, Item, TradeStatus, DisputeType } from '../types.ts';
-import TradeCard, { TradeTrackingData, EscrowDisplayInfo } from './TradeCard.tsx';
+import TradeCard, { TradeTrackingData, EscrowDisplayInfo, isTradeNew } from './TradeCard.tsx';
 import ConfirmationModal from './ConfirmationModal.tsx';
 import DisputeModal from './DisputeModal.tsx';
 import CounterOfferModal from './CounterOfferModal.tsx';
@@ -32,6 +32,8 @@ const TradesPage: React.FC = () => {
     const { addNotification } = useNotification();
 
     const [trades, setTrades] = useState<Trade[]>([]);
+    const [recentlyCancelledTrades, setRecentlyCancelledTrades] = useState<Trade[]>([]);
+    const [dismissedCancelledIds, setDismissedCancelledIds] = useState<Set<string>>(new Set());
     const [users, setUsers] = useState<Record<string, User>>({});
     const [allItems, setAllItems] = useState<Map<string, Item>>(new Map());
     const [trackingData, setTrackingData] = useState<Record<string, TradeTrackingData>>({});
@@ -108,6 +110,20 @@ const TradesPage: React.FC = () => {
                 .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
             setTrades(activeTrades);
+
+            // Load recently cancelled trades (cancelled by others within last 5 minutes)
+            const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+            const recentlyCancelled = userTrades.filter(t => {
+                if (t.status !== TradeStatus.CANCELLED && t.status !== TradeStatus.REJECTED) return false;
+                const updatedTime = new Date(t.updatedAt).getTime();
+                if (updatedTime < fiveMinutesAgo) return false;
+                // Only show if cancelled by the OTHER party (not by current user)
+                // We can't directly know who cancelled, so show all recent cancellations
+                // User can dismiss ones they cancelled themselves
+                return true;
+            }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+            setRecentlyCancelledTrades(recentlyCancelled);
 
             // Fetch tracking data for trades in shipping phase
             const shippingStatuses = [TradeStatus.SHIPPING_PENDING, TradeStatus.IN_TRANSIT, TradeStatus.DELIVERED_AWAITING_VERIFICATION];
@@ -351,7 +367,7 @@ const TradesPage: React.FC = () => {
                                     : ''
                                     }`}
                             >
-                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
+                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]} isNew={isTradeNew(trade.id, trade.updatedAt)}>
                                     {renderActionButtons(trade)}
                                 </TradeCard>
                             </div>
@@ -439,6 +455,77 @@ const TradesPage: React.FC = () => {
                     </div>
                 ) : (
                     <>
+                        {/* Recently Cancelled Section - shows trades cancelled by the other party */}
+                        {(() => {
+                            const visibleCancelled = recentlyCancelledTrades.filter(t => !dismissedCancelledIds.has(t.id));
+                            if (visibleCancelled.length === 0) return null;
+
+                            return (
+                                <div className="mb-6">
+                                    <h2 className="text-xl font-bold text-gray-700 dark:text-white mb-4 flex items-center gap-2">
+                                        <span className="text-red-500">🚫</span>
+                                        Recently Cancelled
+                                    </h2>
+                                    <div className="space-y-3">
+                                        {visibleCancelled.map(trade => {
+                                            const otherUserId = trade.proposerId === currentUser?.id ? trade.receiverId : trade.proposerId;
+                                            const otherUser = users[otherUserId];
+                                            const otherPartyName = otherUser?.name || 'Unknown User';
+                                            const wasProposer = trade.proposerId === currentUser?.id;
+                                            const isCancelled = trade.status === TradeStatus.CANCELLED;
+
+                                            return (
+                                                <div
+                                                    key={trade.id}
+                                                    className="bg-gradient-to-r from-red-50 to-gray-50 dark:from-red-900/20 dark:to-gray-800 border border-red-200 dark:border-red-800/50 rounded-xl p-4 relative animate-in slide-in-from-top-2 duration-300"
+                                                >
+                                                    <button
+                                                        onClick={() => setDismissedCancelledIds(prev => new Set([...prev, trade.id]))}
+                                                        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                                        title="Dismiss"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isCancelled ? 'bg-gray-200 dark:bg-gray-700' : 'bg-red-200 dark:bg-red-900/50'}`}>
+                                                            <span className="text-lg">{isCancelled ? '🚫' : '❌'}</span>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className="font-semibold text-gray-800 dark:text-white">
+                                                                Trade with <span className="text-blue-600 dark:text-blue-400">{otherPartyName}</span>
+                                                            </p>
+                                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                                {isCancelled ? (
+                                                                    wasProposer
+                                                                        ? 'You cancelled this trade'
+                                                                        : `${otherPartyName} cancelled this trade`
+                                                                ) : (
+                                                                    `${otherPartyName} rejected your offer`
+                                                                )}
+                                                                <span className="mx-2">•</span>
+                                                                {new Date(trade.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${isCancelled
+                                                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                                            : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                                                            }`}>
+                                                            {trade.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="mt-2 text-xs text-gray-400 dark:text-gray-500 text-center">
+                                        These notifications will disappear when you refresh the page
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {/* Action Required Section */}
                         <div>
                             <h2 className="text-xl font-bold text-gray-700 dark:text-white mb-4">Action Required</h2>
@@ -458,7 +545,7 @@ const TradesPage: React.FC = () => {
                                                     : ''
                                                     }`}
                                             >
-                                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
+                                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]} isNew={isTradeNew(trade.id, trade.updatedAt)}>
                                                     {renderActionButtons(trade)}
                                                 </TradeCard>
                                             </div>
@@ -493,7 +580,7 @@ const TradesPage: React.FC = () => {
                                                     : ''
                                                     }`}
                                             >
-                                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]}>
+                                                <TradeCard trade={trade} currentUser={currentUser} otherUser={otherUser} allItems={allItems} trackingData={trackingData[trade.id]} escrowInfo={escrowData[trade.id]} isNew={isTradeNew(trade.id, trade.updatedAt)}>
                                                     {renderActionButtons(trade)}
                                                 </TradeCard>
                                             </div>

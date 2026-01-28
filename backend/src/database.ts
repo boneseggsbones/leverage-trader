@@ -590,6 +590,79 @@ const init = () => {
       CREATE INDEX IF NOT EXISTS idx_payouts_trade ON payouts(trade_id);
       CREATE INDEX IF NOT EXISTS idx_payouts_recipient ON payouts(recipient_user_id);
       CREATE INDEX IF NOT EXISTS idx_payouts_status ON payouts(status);
+
+      -- =====================================================
+      -- SHIPPO SHIPPING INTEGRATION TABLES
+      -- =====================================================
+      
+      -- User saved shipping addresses
+      CREATE TABLE IF NOT EXISTS user_addresses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        name TEXT NOT NULL,
+        street1 TEXT NOT NULL,
+        street2 TEXT,
+        city TEXT NOT NULL,
+        state TEXT NOT NULL,
+        zip TEXT NOT NULL,
+        country TEXT DEFAULT 'US',
+        phone TEXT,
+        is_default INTEGER DEFAULT 0,
+        is_validated INTEGER DEFAULT 0,
+        shippo_object_id TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_addresses_user ON user_addresses(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_addresses_default ON user_addresses(user_id, is_default);
+
+      -- Shippo shipments and labels
+      CREATE TABLE IF NOT EXISTS shippo_shipments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES User(id),
+        shippo_shipment_id TEXT,
+        shippo_transaction_id TEXT,
+        rate_id TEXT,
+        carrier TEXT,
+        service_level TEXT,
+        amount_cents INTEGER,
+        label_url TEXT,
+        tracking_number TEXT,
+        from_address_id INTEGER REFERENCES user_addresses(id),
+        to_address_id INTEGER REFERENCES user_addresses(id),
+        parcel_length REAL,
+        parcel_width REAL,
+        parcel_height REAL,
+        parcel_weight REAL,
+        status TEXT DEFAULT 'PENDING',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_shippo_shipments_trade ON shippo_shipments(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_shippo_shipments_user ON shippo_shipments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_shippo_shipments_tracking ON shippo_shipments(tracking_number);
+
+      -- =====================================================
+      -- TRADE EVENTS LOG TABLE (for trade history timeline)
+      -- =====================================================
+      
+      -- Track all trade lifecycle events for detailed history
+      CREATE TABLE IF NOT EXISTS trade_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,  -- PROPOSED, COUNTER_OFFER, ACCEPTED, REJECTED, CANCELLED, PAYMENT_FUNDED, SHIPPED, DELIVERED, COMPLETED, DISPUTE_OPENED
+        actor_id INTEGER NOT NULL REFERENCES User(id),
+        -- Snapshot of offer at this point in time
+        proposer_item_ids TEXT,  -- JSON array
+        receiver_item_ids TEXT,  -- JSON array
+        proposer_cash INTEGER,
+        receiver_cash INTEGER,
+        message TEXT,  -- Counter-offer message or note
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_trade_events_trade ON trade_events(trade_id);
+      CREATE INDEX IF NOT EXISTS idx_trade_events_created ON trade_events(trade_id, created_at);
     `, (err) => {
       if (err) {
         reject(err);
@@ -694,6 +767,10 @@ const migrate = () => {
       // Store original API value when user overrides
       if (!itemColumns.includes('original_api_value_cents')) {
         tasks.push(addColumnIfMissing('Item', 'original_api_value_cents', 'INTEGER'));
+      }
+      // Store linked product name for transparency (anti-gaming measure)
+      if (!itemColumns.includes('linked_product_name')) {
+        tasks.push(addColumnIfMissing('Item', 'linked_product_name', 'TEXT'));
       }
 
       // User table migrations

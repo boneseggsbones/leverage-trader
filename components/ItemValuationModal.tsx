@@ -40,6 +40,11 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
     const [linking, setLinking] = useState(false);
     const [linkSuccess, setLinkSuccess] = useState(false);
 
+    // Auto-match state (prevents gaming by auto-searching item name)
+    const [autoMatchedResults, setAutoMatchedResults] = useState<ExternalProduct[]>([]);
+    const [autoSearching, setAutoSearching] = useState(false);
+    const [showManualSearch, setShowManualSearch] = useState(false);
+
     // PSA state
     const [psaCertNumber, setPsaCertNumber] = useState('');
     const [psaVerifying, setPsaVerifying] = useState(false);
@@ -74,8 +79,31 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
             setActivePanel(null);
             setLinkSuccess(false);
             setSubmitSuccess(false);
+            setAutoMatchedResults([]);
+            setShowManualSearch(false);
         }
     }, [show, item]);
+
+    // Auto-search when autoPrice panel opens
+    useEffect(() => {
+        if (activePanel === 'autoPrice' && item && !linkSuccess) {
+            const doAutoSearch = async () => {
+                setAutoSearching(true);
+                setAutoMatchedResults([]);
+                setShowManualSearch(false);
+                try {
+                    const result = await searchExternalProducts(item.name);
+                    setAutoMatchedResults(result.products.slice(0, 3)); // Top 3 matches
+                } catch (err) {
+                    console.error('Auto-search failed:', err);
+                    setAutoMatchedResults([]);
+                } finally {
+                    setAutoSearching(false);
+                }
+            };
+            doAutoSearch();
+        }
+    }, [activePanel, item?.id, linkSuccess]);
 
     const loadData = async () => {
         if (!item) return;
@@ -191,7 +219,8 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                 </span>
                                 <ValuationBadge
                                     source={valuationData?.item?.emv_source}
-                                    confidence={valuationData?.item?.emv_confidence}
+                                    lastUpdated={(valuationData?.item as any)?.emv_updated_at}
+                                    condition={(valuationData?.item as any)?.condition}
                                     size="sm"
                                     itemName={item?.name}
                                 />
@@ -215,7 +244,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                             className="mt-3 text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
                         >
                             <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-                            {refreshing ? 'Updating...' : 'Refresh price'}
+                            {refreshing ? 'Updating...' : 'Refresh price from API'}
                         </button>
                     </div>
 
@@ -291,16 +320,90 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                         <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                                             🔗 Auto-Price
                                         </h3>
-                                        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
-                                            Search for your item below. Once linked, we'll automatically keep the price up-to-date from price guides.
-                                        </p>
+
                                         {linkSuccess ? (
                                             <div className="text-center py-6">
                                                 <p className="text-4xl mb-2">✓</p>
                                                 <p className="text-green-600 font-medium">Connected!</p>
                                             </div>
-                                        ) : (
+                                        ) : autoSearching ? (
+                                            <div className="text-center py-8">
+                                                <div className="animate-spin text-3xl mb-2">🔍</div>
+                                                <p className="text-sm text-slate-500">Finding matches for "{item?.name}"...</p>
+                                            </div>
+                                        ) : !showManualSearch ? (
+                                            /* Auto-matched results view */
                                             <>
+                                                <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+                                                    We found these matches for your item. Select one to link pricing.
+                                                </p>
+
+                                                {autoMatchedResults.length > 0 ? (
+                                                    <div className="space-y-2">
+                                                        {autoMatchedResults.map(product => (
+                                                            <button
+                                                                key={product.id}
+                                                                onClick={async () => {
+                                                                    if (!item) return;
+                                                                    setLinking(true);
+                                                                    try {
+                                                                        await linkItemToProductApi(item.id, product.id, product.name, product.platform);
+                                                                        setLinkSuccess(true);
+                                                                        loadData();
+                                                                        if (onValuationUpdated) onValuationUpdated();
+                                                                    } finally {
+                                                                        setLinking(false);
+                                                                    }
+                                                                }}
+                                                                disabled={linking}
+                                                                className="w-full flex justify-between items-center p-3 bg-violet-50 hover:bg-violet-100 border-2 border-violet-200 rounded-xl text-left text-sm transition-all disabled:opacity-50"
+                                                            >
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-medium text-slate-800 truncate">{product.name}</p>
+                                                                    <p className="text-xs text-slate-500">{product.platform}</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 ml-2">
+                                                                    {product.loosePrice ? (
+                                                                        <span className="text-emerald-600 font-bold text-sm">
+                                                                            ${(product.loosePrice / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    <span className="bg-violet-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg">
+                                                                        {linking ? '...' : 'Link'}
+                                                                    </span>
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-6 bg-slate-50 rounded-xl">
+                                                        <p className="text-3xl mb-2">🤔</p>
+                                                        <p className="text-sm text-slate-600 font-medium">No matches found</p>
+                                                        <p className="text-xs text-slate-400 mt-1">Try searching manually below</p>
+                                                    </div>
+                                                )}
+
+                                                <button
+                                                    onClick={() => setShowManualSearch(true)}
+                                                    className="w-full text-center text-xs text-slate-400 hover:text-violet-600 py-2"
+                                                >
+                                                    None of these? Search manually →
+                                                </button>
+                                            </>
+                                        ) : (
+                                            /* Manual search mode */
+                                            <>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <button
+                                                        onClick={() => setShowManualSearch(false)}
+                                                        className="text-xs text-slate-500 hover:text-slate-700"
+                                                    >
+                                                        ← Back to matches
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">
+                                                    ⚠️ Manual search lets you link to any product. Choose carefully.
+                                                </p>
                                                 <div className="relative">
                                                     <input
                                                         type="text"
@@ -335,13 +438,20 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                                 disabled={linking}
                                                                 className="w-full flex justify-between items-center p-3 bg-slate-50 hover:bg-violet-50 rounded-lg text-left text-sm disabled:opacity-50"
                                                             >
-                                                                <div>
-                                                                    <p className="font-medium text-slate-800">{product.name}</p>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-medium text-slate-800 truncate">{product.name}</p>
                                                                     <p className="text-xs text-slate-500">{product.platform}</p>
                                                                 </div>
-                                                                <span className="text-violet-600 text-xs font-medium">
-                                                                    {linking ? '...' : 'Link'}
-                                                                </span>
+                                                                <div className="flex items-center gap-2 ml-2">
+                                                                    {product.loosePrice ? (
+                                                                        <span className="text-emerald-600 font-medium text-sm">
+                                                                            ${(product.loosePrice / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    <span className="text-violet-600 text-xs font-medium">
+                                                                        {linking ? '...' : 'Link'}
+                                                                    </span>
+                                                                </div>
                                                             </button>
                                                         ))}
                                                     </div>

@@ -1203,9 +1203,94 @@ app.delete('/api/users/:id/stripe-connect', async (req, res) => {
   }
 });
 
+// =====================================================
+// TRADE EVENT LOGGING
+// =====================================================
+
+type TradeEventType = 'PROPOSED' | 'COUNTER_OFFER' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'PAYMENT_FUNDED' | 'SHIPPED' | 'DELIVERED' | 'COMPLETED' | 'DISPUTE_OPENED' | 'DISPUTE_RESOLVED';
+
+interface TradeEventSnapshot {
+  proposerItemIds?: string[];
+  receiverItemIds?: string[];
+  proposerCash?: number;
+  receiverCash?: number;
+}
+
+// Helper function to log trade events for history timeline
+const logTradeEvent = (
+  tradeId: string,
+  eventType: TradeEventType,
+  actorId: string | number,
+  snapshot?: TradeEventSnapshot,
+  message?: string | null
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO trade_events (trade_id, event_type, actor_id, proposer_item_ids, receiver_item_ids, proposer_cash, receiver_cash, message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tradeId,
+        eventType,
+        actorId,
+        snapshot?.proposerItemIds ? JSON.stringify(snapshot.proposerItemIds) : null,
+        snapshot?.receiverItemIds ? JSON.stringify(snapshot.receiverItemIds) : null,
+        snapshot?.proposerCash ?? null,
+        snapshot?.receiverCash ?? null,
+        message ?? null
+      ],
+      function (err) {
+        if (err) {
+          console.error(`[TradeEvents] Failed to log ${eventType} for trade ${tradeId}:`, err);
+          reject(err);
+        } else {
+          console.log(`[TradeEvents] Logged ${eventType} for trade ${tradeId} by user ${actorId}`);
+          resolve();
+        }
+      }
+    );
+  });
+};
+
+// Get trade events for timeline
+app.get('/api/trades/:id/events', (req, res) => {
+  const tradeId = req.params.id;
+
+  db.all(
+    `SELECT te.*, u.name as actor_name 
+     FROM trade_events te 
+     LEFT JOIN User u ON te.actor_id = u.id 
+     WHERE te.trade_id = ? 
+     ORDER BY te.created_at ASC`,
+    [tradeId],
+    (err, rows: any[]) => {
+      if (err) {
+        console.error('[TradeEvents] Error fetching events:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      // Parse JSON arrays and format response
+      const events = (rows || []).map(row => ({
+        id: row.id,
+        tradeId: row.trade_id,
+        eventType: row.event_type,
+        actorId: String(row.actor_id),
+        actorName: row.actor_name || 'Unknown User',
+        proposerItemIds: row.proposer_item_ids ? JSON.parse(row.proposer_item_ids) : [],
+        receiverItemIds: row.receiver_item_ids ? JSON.parse(row.receiver_item_ids) : [],
+        proposerCash: row.proposer_cash,
+        receiverCash: row.receiver_cash,
+        message: row.message,
+        createdAt: row.created_at
+      }));
+
+      res.json(events);
+    }
+  );
+});
+
 // Propose a new trade
 app.post('/api/trades', async (req, res) => {
-  const { proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash } = req.body;
+  const { proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash } = req.body;
 
   if (!proposerId || !receiverId) {
     return res.status(400).json({ error: 'proposerId and receiverId are required' });
@@ -1226,7 +1311,7 @@ app.post('/api/trades', async (req, res) => {
       proposerItemIds: Array.isArray(proposerItemIds) ? proposerItemIds : [],
       receiverItemIds: Array.isArray(receiverItemIds) ? receiverItemIds : [],
       proposerCash: typeof proposerCash === 'number' ? proposerCash : 0,
-      receiverCash: 0,
+      receiverCash: typeof receiverCash === 'number' ? receiverCash : 0,
       status: 'PENDING_ACCEPTANCE',
       createdAt: now,
       updatedAt: now,
@@ -1310,6 +1395,14 @@ app.post('/api/trades', async (req, res) => {
               notifyTradeEvent(NotificationType.TRADE_PROPOSED, receiverId, tradeId, proposerName)
                 .catch(err => console.error('Failed to send trade proposal notification:', err));
             });
+
+            // Log trade event for history timeline
+            logTradeEvent(tradeId, 'PROPOSED', proposerId, {
+              proposerItemIds: newTrade.proposerItemIds,
+              receiverItemIds: newTrade.receiverItemIds,
+              proposerCash: newTrade.proposerCash,
+              receiverCash: newTrade.receiverCash
+            }).catch(err => console.error('Failed to log trade event:', err));
 
             // Include fee info in response
             res.json({
@@ -1425,6 +1518,19 @@ app.post('/api/trades/:id/cancel', async (req, res) => {
       });
     });
 
+    // Log trade event for history timeline
+    await logTradeEvent(tradeId, 'CANCELLED', userId).catch(err =>
+      console.error('Failed to log trade event:', err)
+    );
+
+    // Notify the other party about the cancellation
+    const otherUserId = isProposer ? tradeRow.receiverId : tradeRow.proposerId;
+    db.get('SELECT name FROM User WHERE id = ?', [userId], (err, userRow: any) => {
+      const userName = userRow?.name || 'The other trader';
+      notifyTradeEvent(NotificationType.TRADE_CANCELLED, otherUserId, tradeId, userName)
+        .catch(err => console.error('Failed to send cancellation notification:', err));
+    });
+
     res.json({ id: tradeId, status: 'CANCELLED', escrowRefunded: refunded });
   } catch (err: any) {
     console.error('Error cancelling trade:', err);
@@ -1461,6 +1567,10 @@ app.post('/api/trades/:id/respond', (req, res) => {
             .catch(err => console.error('Failed to send rejection notification:', err));
         });
 
+        // Log trade event for history timeline
+        logTradeEvent(tradeId, 'REJECTED', tradeRow.receiverId)
+          .catch(err => console.error('Failed to log trade event:', err));
+
         return res.json({ id: tradeId, status: 'REJECTED' });
       });
       return;
@@ -1491,6 +1601,10 @@ app.post('/api/trades/:id/respond', (req, res) => {
                   notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
                     .catch(err => console.error('Failed to send acceptance notification:', err));
                 });
+
+                // Log trade event for history timeline
+                logTradeEvent(tradeId, 'ACCEPTED', tradeRow.receiverId)
+                  .catch(err => console.error('Failed to log trade event:', err));
 
                 return res.json({ id: tradeId, status: 'PAYMENT_PENDING' });
               });
@@ -1526,6 +1640,10 @@ app.post('/api/trades/:id/respond', (req, res) => {
               notifyTradeEvent(NotificationType.TRADE_ACCEPTED, tradeRow.proposerId, tradeId, receiverName)
                 .catch(err => console.error('Failed to send acceptance notification:', err));
             });
+
+            // Log trade event for history timeline
+            logTradeEvent(tradeId, 'ACCEPTED', tradeRow.receiverId)
+              .catch(err => console.error('Failed to log trade event:', err));
 
             return res.json({ id: tradeId, status: 'COMPLETED_AWAITING_RATING' });
           });
@@ -1564,72 +1682,110 @@ app.post('/api/trades/:id/counter', (req, res) => {
       return res.status(400).json({ error: 'Can only counter pending trades' });
     }
 
-    const now = new Date().toISOString();
-    const counterTradeId = `trade-${Date.now()}`;
-
-    // Mark original trade as countered
-    db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COUNTERED', now, originalTradeId], (err2: Error | null) => {
-      if (err2) return res.status(500).json({ error: err2.message });
-
-      // Create new counter trade (swap proposer/receiver)
-      const counterTrade = {
-        id: counterTradeId,
-        proposerId: originalTrade.receiverId,  // Receiver becomes proposer
-        receiverId: originalTrade.proposerId,  // Proposer becomes receiver
-        proposerItemIds: JSON.stringify(proposerItemIds || []),
-        receiverItemIds: JSON.stringify(receiverItemIds || []),
-        proposerCash: proposerCash || 0,
-        receiverCash: receiverCash || 0,
-        status: 'PENDING_ACCEPTANCE',
-        createdAt: now,
-        updatedAt: now,
-        disputeTicketId: null,
-        proposerSubmittedTracking: 0,
-        receiverSubmittedTracking: 0,
-        proposerTrackingNumber: null,
-        receiverTrackingNumber: null,
-        proposerVerifiedSatisfaction: 0,
-        receiverVerifiedSatisfaction: 0,
-        proposerRated: 0,
-        receiverRated: 0,
-        ratingDeadline: null,
-        parentTradeId: originalTradeId,
-        counterMessage: message || null
+    // Count counter-offer chain depth (limit to 3 counter-offers)
+    const MAX_COUNTER_OFFERS = 3;
+    const countChainDepth = (tradeId: string, callback: (err: Error | null, depth: number) => void) => {
+      let depth = 0;
+      const traverse = (currentId: string) => {
+        db.get('SELECT parentTradeId FROM trades WHERE id = ?', [currentId], (err: Error | null, row: any) => {
+          if (err) return callback(err, 0);
+          if (row && row.parentTradeId) {
+            depth++;
+            traverse(row.parentTradeId);
+          } else {
+            callback(null, depth);
+          }
+        });
       };
+      traverse(tradeId);
+    };
 
-      db.run(
-        `INSERT INTO trades (id, proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, status, createdAt, updatedAt, disputeTicketId, proposerSubmittedTracking, receiverSubmittedTracking, proposerTrackingNumber, receiverTrackingNumber, proposerVerifiedSatisfaction, receiverVerifiedSatisfaction, proposerRated, receiverRated, ratingDeadline, parentTradeId, counterMessage) 
+    countChainDepth(originalTradeId, (chainErr, depth) => {
+      if (chainErr) return res.status(500).json({ error: chainErr.message });
+
+      if (depth >= MAX_COUNTER_OFFERS) {
+        return res.status(400).json({
+          error: `Maximum of ${MAX_COUNTER_OFFERS} counter-offers reached. Please accept or reject this offer.`,
+          counterOfferCount: depth
+        });
+      }
+
+      const now = new Date().toISOString();
+      const counterTradeId = `trade-${Date.now()}`;
+
+      // Mark original trade as countered
+      db.run('UPDATE trades SET status = ?, updatedAt = ? WHERE id = ?', ['COUNTERED', now, originalTradeId], (err2: Error | null) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        // Create new counter trade (swap proposer/receiver)
+        const counterTrade = {
+          id: counterTradeId,
+          proposerId: originalTrade.receiverId,  // Receiver becomes proposer
+          receiverId: originalTrade.proposerId,  // Proposer becomes receiver
+          proposerItemIds: JSON.stringify(proposerItemIds || []),
+          receiverItemIds: JSON.stringify(receiverItemIds || []),
+          proposerCash: proposerCash || 0,
+          receiverCash: receiverCash || 0,
+          status: 'PENDING_ACCEPTANCE',
+          createdAt: now,
+          updatedAt: now,
+          disputeTicketId: null,
+          proposerSubmittedTracking: 0,
+          receiverSubmittedTracking: 0,
+          proposerTrackingNumber: null,
+          receiverTrackingNumber: null,
+          proposerVerifiedSatisfaction: 0,
+          receiverVerifiedSatisfaction: 0,
+          proposerRated: 0,
+          receiverRated: 0,
+          ratingDeadline: null,
+          parentTradeId: originalTradeId,
+          counterMessage: message || null
+        };
+
+        db.run(
+          `INSERT INTO trades (id, proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash, status, createdAt, updatedAt, disputeTicketId, proposerSubmittedTracking, receiverSubmittedTracking, proposerTrackingNumber, receiverTrackingNumber, proposerVerifiedSatisfaction, receiverVerifiedSatisfaction, proposerRated, receiverRated, ratingDeadline, parentTradeId, counterMessage) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          counterTrade.id, counterTrade.proposerId, counterTrade.receiverId,
-          counterTrade.proposerItemIds, counterTrade.receiverItemIds,
-          counterTrade.proposerCash, counterTrade.receiverCash,
-          counterTrade.status, counterTrade.createdAt, counterTrade.updatedAt,
-          counterTrade.disputeTicketId, counterTrade.proposerSubmittedTracking,
-          counterTrade.receiverSubmittedTracking, counterTrade.proposerTrackingNumber,
-          counterTrade.receiverTrackingNumber, counterTrade.proposerVerifiedSatisfaction,
-          counterTrade.receiverVerifiedSatisfaction, counterTrade.proposerRated,
-          counterTrade.receiverRated, counterTrade.ratingDeadline,
-          counterTrade.parentTradeId, counterTrade.counterMessage
-        ],
-        function (err3: Error | null) {
-          if (err3) return res.status(500).json({ error: err3.message });
+          [
+            counterTrade.id, counterTrade.proposerId, counterTrade.receiverId,
+            counterTrade.proposerItemIds, counterTrade.receiverItemIds,
+            counterTrade.proposerCash, counterTrade.receiverCash,
+            counterTrade.status, counterTrade.createdAt, counterTrade.updatedAt,
+            counterTrade.disputeTicketId, counterTrade.proposerSubmittedTracking,
+            counterTrade.receiverSubmittedTracking, counterTrade.proposerTrackingNumber,
+            counterTrade.receiverTrackingNumber, counterTrade.proposerVerifiedSatisfaction,
+            counterTrade.receiverVerifiedSatisfaction, counterTrade.proposerRated,
+            counterTrade.receiverRated, counterTrade.ratingDeadline,
+            counterTrade.parentTradeId, counterTrade.counterMessage
+          ],
+          function (err3: Error | null) {
+            if (err3) return res.status(500).json({ error: err3.message });
 
-          res.json({
-            originalTradeId,
-            originalStatus: 'COUNTERED',
-            counterTrade: {
-              id: counterTradeId,
-              status: 'PENDING_ACCEPTANCE',
-              proposerId: counterTrade.proposerId,
-              receiverId: counterTrade.receiverId,
-              parentTradeId: originalTradeId,
-              message: counterTrade.counterMessage
-            }
-          });
-        }
-      );
-    });
+            // Log trade event for history timeline on the ORIGINAL trade
+            logTradeEvent(originalTradeId, 'COUNTER_OFFER', userId, {
+              proposerItemIds: proposerItemIds || [],
+              receiverItemIds: receiverItemIds || [],
+              proposerCash: proposerCash || 0,
+              receiverCash: receiverCash || 0
+            }, message || null)
+              .catch(err => console.error('Failed to log trade event:', err));
+
+            res.json({
+              originalTradeId,
+              originalStatus: 'COUNTERED',
+              counterTrade: {
+                id: counterTradeId,
+                status: 'PENDING_ACCEPTANCE',
+                proposerId: counterTrade.proposerId,
+                receiverId: counterTrade.receiverId,
+                parentTradeId: originalTradeId,
+                message: counterTrade.counterMessage
+              }
+            });
+          }
+        );
+      });
+    }); // end countChainDepth callback
   });
 });
 
@@ -2204,6 +2360,375 @@ app.get('/api/trades/:id/tracking', async (req, res) => {
       });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// =====================================================
+// SHIPPO SHIPPING INTEGRATION ENDPOINTS
+// =====================================================
+
+import {
+  validateAddress,
+  getRates,
+  purchaseLabel,
+  createReturnLabel,
+  storeLabelRecord,
+  getLabelForTrade,
+  DEFAULT_PARCELS,
+  ShippoAddress,
+  Parcel
+} from './shippingService';
+
+// Get user's saved addresses
+app.get('/api/users/:userId/addresses', (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  db.all('SELECT * FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC',
+    [userId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows || []);
+    }
+  );
+});
+
+// Get user's shipping history
+app.get('/api/users/:userId/shipments', (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const limit = parseInt(req.query.limit as string, 10) || 20;
+
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  db.all(`
+    SELECT * FROM shippo_shipments 
+    WHERE user_id = ? 
+    ORDER BY created_at DESC 
+    LIMIT ?`,
+    [userId, limit],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows || []);
+    }
+  );
+});
+
+// Create a new address
+app.post('/api/users/:userId/addresses', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  const { name, street1, street2, city, state, zip, country, phone, isDefault, validate } = req.body;
+
+  if (!name || !street1 || !city || !state || !zip) {
+    return res.status(400).json({ error: 'name, street1, city, state, and zip are required' });
+  }
+
+  try {
+    // Optionally validate address via Shippo
+    let isValidated = 0;
+    let shippoObjectId = null;
+
+    if (validate) {
+      const validationResult = await validateAddress({ name, street1, street2, city, state, zip, country, phone });
+      isValidated = validationResult.isValid ? 1 : 0;
+      shippoObjectId = validationResult.objectId || null;
+
+      if (!validationResult.isValid) {
+        return res.status(400).json({
+          error: 'Address validation failed',
+          messages: validationResult.messages
+        });
+      }
+    }
+
+    // If setting as default, clear existing default
+    if (isDefault) {
+      await new Promise<void>((resolve) => {
+        db.run('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [userId], () => resolve());
+      });
+    }
+
+    db.run(`
+      INSERT INTO user_addresses (user_id, name, street1, street2, city, state, zip, country, phone, is_default, is_validated, shippo_object_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, name, street1, street2 || null, city, state, zip, country || 'US', phone || null, isDefault ? 1 : 0, isValidated, shippoObjectId],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({
+          id: this.lastID,
+          isValidated: isValidated === 1,
+          message: 'Address saved successfully'
+        });
+      }
+    );
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update an address
+app.put('/api/users/:userId/addresses/:addressId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const addressId = parseInt(req.params.addressId, 10);
+  if (isNaN(userId) || isNaN(addressId)) return res.status(400).json({ error: 'Invalid IDs' });
+
+  const { name, street1, street2, city, state, zip, country, phone, isDefault, validate } = req.body;
+
+  try {
+    let isValidated = 0;
+    let shippoObjectId = null;
+
+    if (validate) {
+      const validationResult = await validateAddress({ name, street1, street2, city, state, zip, country, phone });
+      isValidated = validationResult.isValid ? 1 : 0;
+      shippoObjectId = validationResult.objectId || null;
+    }
+
+    if (isDefault) {
+      await new Promise<void>((resolve) => {
+        db.run('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [userId], () => resolve());
+      });
+    }
+
+    db.run(`
+      UPDATE user_addresses 
+      SET name = ?, street1 = ?, street2 = ?, city = ?, state = ?, zip = ?, country = ?, phone = ?, 
+          is_default = ?, is_validated = ?, shippo_object_id = ?, updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?`,
+      [name, street1, street2 || null, city, state, zip, country || 'US', phone || null,
+        isDefault ? 1 : 0, isValidated, shippoObjectId, addressId, userId],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'Address not found' });
+        res.json({ message: 'Address updated', isValidated: isValidated === 1 });
+      }
+    );
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete an address
+app.delete('/api/users/:userId/addresses/:addressId', (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const addressId = parseInt(req.params.addressId, 10);
+  if (isNaN(userId) || isNaN(addressId)) return res.status(400).json({ error: 'Invalid IDs' });
+
+  db.run('DELETE FROM user_addresses WHERE id = ? AND user_id = ?',
+    [addressId, userId],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: 'Address not found' });
+      res.json({ message: 'Address deleted' });
+    }
+  );
+});
+
+// Validate an address directly
+app.post('/api/addresses/validate', async (req, res) => {
+  const { name, street1, street2, city, state, zip, country, phone } = req.body;
+
+  if (!name || !street1 || !city || !state || !zip) {
+    return res.status(400).json({ error: 'name, street1, city, state, and zip are required' });
+  }
+
+  try {
+    const result = await validateAddress({ name, street1, street2, city, state, zip, country, phone });
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get shipping rates for a trade
+app.post('/api/shipping/rates', async (req, res) => {
+  const { fromAddress, toAddress, parcel, itemCategory } = req.body;
+
+  if (!fromAddress || !toAddress) {
+    return res.status(400).json({ error: 'fromAddress and toAddress are required' });
+  }
+
+  try {
+    // Use provided parcel or default based on category
+    const shipmentParcel: Parcel = parcel || DEFAULT_PARCELS[itemCategory || 'OTHER'];
+
+    const result = await getRates(fromAddress, toAddress, shipmentParcel);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({
+      shipmentId: result.shipmentId,
+      rates: result.rates,
+      parcelUsed: shipmentParcel
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Purchase a shipping label
+app.post('/api/shipping/purchase', async (req, res) => {
+  const { rateId, tradeId, userId, carrier, servicelevel, amountCents } = req.body;
+
+  if (!rateId) {
+    return res.status(400).json({ error: 'rateId is required' });
+  }
+
+  try {
+    const result = await purchaseLabel(rateId);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    // Store label in database if trade context provided
+    if (tradeId && userId) {
+      await storeLabelRecord(tradeId, parseInt(userId), result, {
+        carrier: carrier || result.carrier || 'Unknown',
+        servicelevel: servicelevel || result.servicelevel || 'Standard',
+        amountCents: amountCents || 0
+      });
+
+      // Also create tracking record
+      if (result.trackingNumber) {
+        await createTrackingRecord(tradeId, parseInt(userId), result.trackingNumber);
+      }
+    }
+
+    res.json({
+      success: true,
+      transactionId: result.transactionId,
+      trackingNumber: result.trackingNumber,
+      labelUrl: result.labelUrl,
+      carrier: result.carrier,
+      servicelevel: result.servicelevel
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get label for a trade
+app.get('/api/trades/:tradeId/label/:userId', async (req, res) => {
+  const { tradeId, userId } = req.params;
+
+  try {
+    const label = await getLabelForTrade(tradeId, parseInt(userId));
+    if (!label) {
+      return res.status(404).json({ error: 'No label found for this trade/user' });
+    }
+    res.json(label);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create return label (for disputes)
+app.post('/api/shipping/return', async (req, res) => {
+  const { fromAddress, toAddress, parcel, itemCategory } = req.body;
+
+  if (!fromAddress || !toAddress) {
+    return res.status(400).json({ error: 'fromAddress and toAddress are required' });
+  }
+
+  try {
+    const shipmentParcel: Parcel = parcel || DEFAULT_PARCELS[itemCategory || 'OTHER'];
+    const result = await createReturnLabel(fromAddress, toAddress, shipmentParcel);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Shippo Webhook endpoint for tracking updates
+app.post('/api/webhooks/shippo', express.json(), async (req, res) => {
+  console.log('[Shippo Webhook] Received event');
+
+  try {
+    const event = req.body;
+
+    // Handle track_updated events
+    if (event.event === 'track_updated' || req.body.tracking_number) {
+      const trackingNumber = event.data?.tracking_number || event.tracking_number;
+      const status = event.data?.tracking_status?.status || event.tracking_status?.status;
+      const statusDetail = event.data?.tracking_status?.status_details || event.tracking_status?.status_details;
+      const location = event.data?.tracking_status?.location?.city || event.tracking_status?.location?.city;
+
+      console.log(`[Shippo Webhook] Track update: ${trackingNumber} -> ${status}`);
+
+      if (trackingNumber && status) {
+        // Map Shippo status to our TrackingStatus
+        let mappedStatus = 'UNKNOWN';
+        switch (status.toUpperCase()) {
+          case 'PRE_TRANSIT': mappedStatus = 'LABEL_CREATED'; break;
+          case 'TRANSIT': mappedStatus = 'IN_TRANSIT'; break;
+          case 'DELIVERED': mappedStatus = 'DELIVERED'; break;
+          case 'RETURNED':
+          case 'FAILURE': mappedStatus = 'EXCEPTION'; break;
+          default: mappedStatus = 'IN_TRANSIT';
+        }
+
+        // Update shipment_tracking table
+        db.run(`
+          UPDATE shipment_tracking 
+          SET status = ?, status_detail = ?, location = ?, last_updated = datetime('now')
+          WHERE tracking_number = ?`,
+          [mappedStatus, statusDetail, location, trackingNumber],
+          async function (err) {
+            if (err) {
+              console.error('[Shippo Webhook] DB error:', err);
+            }
+
+            // Check if both parties' shipments are delivered -> auto-complete trade
+            if (mappedStatus === 'DELIVERED') {
+              const trade: any = await new Promise((resolve) => {
+                db.get(`
+                  SELECT t.id, t.status FROM trades t
+                  JOIN shipment_tracking st ON st.trade_id = t.id
+                  WHERE st.tracking_number = ?`,
+                  [trackingNumber],
+                  (err, row) => resolve(row)
+                );
+              });
+
+              if (trade && trade.status === 'IN_TRANSIT') {
+                const { checkBothDelivered } = await import('./shippingService');
+                const bothDelivered = await checkBothDelivered(trade.id);
+
+                if (bothDelivered) {
+                  console.log(`[Shippo Webhook] Both shipments delivered for trade ${trade.id}, transitioning to DELIVERED_AWAITING_VERIFICATION`);
+                  db.run(
+                    `UPDATE trades SET status = 'DELIVERED_AWAITING_VERIFICATION', updatedAt = datetime('now') WHERE id = ?`,
+                    [trade.id]
+                  );
+
+                  // Notify both parties
+                  await notifyTradeEvent(
+                    trade.id,
+                    NotificationType.ESCROW_FUNDED, // reuse for "items delivered"
+                    'Items Delivered',
+                    'Both shipments have been delivered! Please verify and complete the trade.'
+                  );
+                }
+              }
+            }
+          }
+        );
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error: any) {
+    console.error('[Shippo Webhook] Error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -2876,7 +3401,10 @@ app.get('/api/external/products/search', async (req, res) => {
         id: p.id,
         name: p['product-name'],
         platform: p['console-name'],
-        provider: 'pricecharting'
+        provider: 'pricecharting',
+        loosePrice: p['loose-price'] || 0,
+        cibPrice: p['cib-price'] || 0,
+        newPrice: p['new-price'] || 0
       })),
       apiConfigured: isApiConfigured()
     });

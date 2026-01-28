@@ -80,7 +80,12 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect, isSelected, isCompa
 
             {/* Valuation Badge */}
             <div className="mt-1">
-                <ValuationBadge source={emvSource} size="sm" />
+                <ValuationBadge
+                    source={emvSource}
+                    condition={item.condition}
+                    lastUpdated={(item as any).emv_updated_at}
+                    size="sm"
+                />
             </div>
 
             {/* Only show action buttons if handlers are provided */}

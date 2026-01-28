@@ -43,6 +43,9 @@ interface PriceChartingSearchResult {
         id: string;
         'product-name': string;
         'console-name': string;
+        'loose-price'?: number;
+        'cib-price'?: number;
+        'new-price'?: number;
     }>;
 }
 
@@ -158,6 +161,11 @@ export const refreshItemValuation = async (itemId: number): Promise<{
                         ORDER BY fetched_at DESC LIMIT 1`,
                     [itemId, now], async (err2: Error | null, cached: any) => {
                         if (cached && !err2) {
+                            // Also update the Item to reflect the cached valuation
+                            db.run(`UPDATE Item SET estimatedMarketValue = ?, emv_source = 'api', 
+                                    emv_confidence = ?, emv_updated_at = ? WHERE id = ? AND (emv_source IS NULL OR emv_source != 'api')`,
+                                [cached.value_cents, cached.confidence_score, now, itemId]);
+
                             // Return cached value
                             resolve({
                                 success: true,
@@ -241,43 +249,54 @@ export const linkItemToProduct = async (
     consoleName: string
 ): Promise<{ success: boolean; productId: number | null; message: string }> => {
     return new Promise((resolve) => {
-        // First, check if this product already exists in our catalog
-        db.get('SELECT id FROM product_catalog WHERE pricecharting_id = ?',
-            [pricechartingId], (err: Error | null, existing: any) => {
-                if (existing) {
-                    // Product exists, just link the item
-                    db.run('UPDATE Item SET product_id = ? WHERE id = ?',
-                        [existing.id, itemId], (err2: Error | null) => {
-                            if (err2) {
-                                resolve({ success: false, productId: null, message: err2.message });
-                            } else {
-                                resolve({ success: true, productId: existing.id, message: 'Linked to existing product' });
-                            }
-                        });
-                } else {
-                    // Create new product in catalog
-                    db.run(`INSERT INTO product_catalog (pricecharting_id, name, brand, model, created_at)
-                            VALUES (?, ?, ?, ?, ?)`,
-                        [pricechartingId, productName, consoleName, null, new Date().toISOString()],
-                        function (this: any, err3: Error | null) {
-                            if (err3) {
-                                resolve({ success: false, productId: null, message: err3.message });
-                                return;
-                            }
-                            const productId = this.lastID;
+        // First, clear any existing cached valuations for this item (stale cache from old product)
+        db.run('DELETE FROM api_valuations WHERE item_id = ?', [itemId], () => {
+            // Then check if this product already exists in our catalog
+            db.get('SELECT id FROM product_catalog WHERE pricecharting_id = ?',
+                [pricechartingId], (err: Error | null, existing: any) => {
+                    if (existing) {
+                        // Product exists, just link the item and clear any user override
+                        db.run(`UPDATE Item SET 
+                                product_id = ?, 
+                                emv_source = NULL,
+                                linked_product_name = ?
+                                WHERE id = ?`,
+                            [existing.id, productName, itemId], (err2: Error | null) => {
+                                if (err2) {
+                                    resolve({ success: false, productId: null, message: err2.message });
+                                } else {
+                                    resolve({ success: true, productId: existing.id, message: 'Linked to existing product' });
+                                }
+                            });
+                    } else {
+                        // Create new product in catalog
+                        db.run(`INSERT INTO product_catalog (pricecharting_id, name, brand, model, created_at)
+                                VALUES (?, ?, ?, ?, ?)`,
+                            [pricechartingId, productName, consoleName, null, new Date().toISOString()],
+                            function (this: any, err3: Error | null) {
+                                if (err3) {
+                                    resolve({ success: false, productId: null, message: err3.message });
+                                    return;
+                                }
+                                const productId = this.lastID;
 
-                            // Link item to new product
-                            db.run('UPDATE Item SET product_id = ? WHERE id = ?',
-                                [productId, itemId], (err4: Error | null) => {
-                                    if (err4) {
-                                        resolve({ success: false, productId: null, message: err4.message });
-                                    } else {
-                                        resolve({ success: true, productId, message: 'Created and linked to new product' });
-                                    }
-                                });
-                        });
-                }
-            });
+                                // Link item to new product and clear any user override
+                                db.run(`UPDATE Item SET 
+                                        product_id = ?, 
+                                        emv_source = NULL,
+                                        linked_product_name = ?
+                                        WHERE id = ?`,
+                                    [productId, productName, itemId], (err4: Error | null) => {
+                                        if (err4) {
+                                            resolve({ success: false, productId: null, message: err4.message });
+                                        } else {
+                                            resolve({ success: true, productId, message: 'Created and linked to new product' });
+                                        }
+                                    });
+                            });
+                    }
+                });
+        });
     });
 };
 

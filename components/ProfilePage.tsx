@@ -13,9 +13,10 @@ import AccountSection from './AccountSection.tsx';
 import PaymentMethodsSection from './PaymentMethodsSection.tsx';
 import PayoutHistorySection from './PayoutHistorySection.tsx';
 import ReviewsSection from './ReviewsSection.tsx';
+import { ShippingHistory } from './ShippingHistory.tsx';
 import { formatCurrency } from '../utils/currency.ts';
 
-type ProfileTab = 'overview' | 'account' | 'payments' | 'notifications';
+type ProfileTab = 'overview' | 'account' | 'payments' | 'shipping' | 'notifications';
 
 const ProfilePage: React.FC = () => {
     const { currentUser, oauthProfile } = useAuth();
@@ -160,6 +161,7 @@ const ProfilePage: React.FC = () => {
             { id: 'overview', label: 'Overview', icon: '📊' },
             { id: 'account', label: 'Account', icon: '👤' },
             { id: 'payments', label: 'Payment Methods', icon: '💳' },
+            { id: 'shipping', label: 'Shipping', icon: '📦' },
             { id: 'notifications', label: 'Notifications', icon: '🔔' },
         ];
 
@@ -342,6 +344,12 @@ const ProfilePage: React.FC = () => {
                         <div className="space-y-6">
                             <PaymentMethodsSection userId={profileUser.id} />
                             <PayoutHistorySection userId={profileUser.id} />
+                        </div>
+                    )}
+
+                    {activeTab === 'shipping' && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                            <ShippingHistory userId={typeof profileUser.id === 'string' ? parseInt(profileUser.id, 10) : profileUser.id} limit={20} />
                         </div>
                     )}
 

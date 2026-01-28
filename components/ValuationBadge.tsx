@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 
 interface ValuationBadgeProps {
     source: string | null | undefined;
-    confidence?: number | null;
+    lastUpdated?: string | null; // ISO date string
+    condition?: string | null;
     size?: 'sm' | 'md';
     itemName?: string;
 }
@@ -12,14 +13,53 @@ interface SourceConfig {
     bgColor: string;
     textColor: string;
     icon: string;
-    eli5Title: string;
-    eli5Description: string;
-    eli5Source: string;
-    eli5Calculation: string;
-    eli5Next: string;
+    title: string;
+    description: string;
+    dataSource: string;
+    methodology: string;
+    nextSteps: string;
 }
 
-const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, size = 'sm', itemName }) => {
+// Format relative time (e.g., "2 hours ago", "3 days ago")
+const formatRelativeTime = (dateString: string | null | undefined): string => {
+    if (!dateString) return 'Unknown';
+
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+};
+
+// Format condition for display
+const formatCondition = (condition: string | null | undefined): string => {
+    if (!condition) return 'Standard';
+    const conditionMap: Record<string, string> = {
+        'LOOSE': 'Loose (no box/manual)',
+        'CIB': 'Complete in Box',
+        'NEW_SEALED': 'New/Sealed',
+        'GRADED': 'Professionally Graded',
+        'GOOD': 'Good Condition',
+        'OTHER': 'Other',
+    };
+    return conditionMap[condition] || condition;
+};
+
+const ValuationBadge: React.FC<ValuationBadgeProps> = ({
+    source,
+    lastUpdated,
+    condition,
+    size = 'sm',
+    itemName
+}) => {
     const [showModal, setShowModal] = useState(false);
 
     const getEbaySearchUrl = (name: string) => {
@@ -31,90 +71,77 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
         switch (src) {
             case 'api':
             case 'API_VERIFIED':
+            case 'consolidated':
                 return {
                     label: 'API Verified',
                     bgColor: 'bg-blue-100',
                     textColor: 'text-blue-800',
-                    icon: '🔷',
-                    eli5Title: 'API Verified Price',
-                    eli5Description: 'This price is pulled automatically from a trusted price guide that tracks real completed sales — not just listings.',
-                    eli5Source: 'PriceCharting.com is a video game price database used by collectors and retailers. It aggregates completed sales from eBay, Amazon, and game stores, updated daily.',
-                    eli5Calculation: 'We look at sales from the last 90 days, weight recent sales higher, and adjust for condition. For PSA graded cards, we apply a multiplier (PSA 10 = 3x, PSA 9 = 1.8x, PSA 7 = 1.2x). 85%+ = strong data.',
-                    eli5Next: 'Think it\'s wrong? Use "Set Value" to override with your own price.',
+                    icon: '✓',
+                    title: 'API Verified Price',
+                    description: 'This price comes from PriceCharting.com, a trusted price guide used by collectors and retailers.',
+                    dataSource: 'PriceCharting aggregates completed sales from eBay, Amazon, and game stores. Their database is updated daily with real transaction data.',
+                    methodology: 'We pull the price for your item\'s condition directly from PriceCharting. No additional calculations are performed — you see exactly what they report.',
+                    nextSteps: 'Tap "Refresh Price" anytime to get the latest data. If you think the price is wrong, use "Set Value" to override it.',
                 };
             case 'user_override':
             case 'USER_DEFINED_UNIQUE':
-                return {
-                    label: 'User Defined',
-                    bgColor: 'bg-yellow-100',
-                    textColor: 'text-yellow-800',
-                    icon: '📝',
-                    eli5Title: 'User Defined Price',
-                    eli5Description: 'The owner believes this item is worth more (or less) than the automatic price and set a custom value.',
-                    eli5Source: 'Set manually by the item owner through the "Set Value" option.',
-                    eli5Calculation: 'No algorithm — this is the owner\'s personal opinion. They may know something the price guides don\'t (rare variant, signed copy, etc).',
-                    eli5Next: 'Want automatic pricing? Use "Auto-Price" to link to a price guide.',
-                };
             case 'user_defined':
             case 'USER_DEFINED_GENERIC':
                 return {
-                    label: 'User Defined',
-                    bgColor: 'bg-yellow-100',
-                    textColor: 'text-yellow-800',
-                    icon: '📝',
-                    eli5Title: 'User Defined Price',
-                    eli5Description: 'The owner entered this price when they added the item. It hasn\'t been verified against any price guide yet.',
-                    eli5Source: 'Entered by the item owner during item creation.',
-                    eli5Calculation: 'No algorithm — this is the owner\'s best guess at value.',
-                    eli5Next: 'Want more accuracy? Use "Auto-Price" to link to a price database.',
+                    label: 'User Set',
+                    bgColor: 'bg-amber-100',
+                    textColor: 'text-amber-800',
+                    icon: '✎',
+                    title: 'User Set Price',
+                    description: 'You set this price manually. It may be higher or lower than market value based on your knowledge of the item.',
+                    dataSource: 'This price was entered by the item owner, not pulled from any external database.',
+                    methodology: 'No algorithm — this is entirely the owner\'s valuation. They may know something price guides don\'t (rare variant, autographed, etc.)',
+                    nextSteps: 'Want market pricing? Use "Auto-Price" to link this item to PriceCharting and get automatic updates.',
                 };
             case 'trade_history':
                 return {
                     label: 'Trade Verified',
                     bgColor: 'bg-green-100',
                     textColor: 'text-green-800',
-                    icon: '📈',
-                    eli5Title: 'Trade History Price',
-                    eli5Description: 'This price is based on what people actually paid for similar items in completed Leverage trades — the most reliable source.',
-                    eli5Source: 'Leverage\'s internal trade database. We only count completed trades where both parties confirmed receipt.',
-                    eli5Calculation: 'We find items with similar names/categories, average their trade values, and weight recent trades higher. 10+ trades = high confidence.',
-                    eli5Next: 'Trade more items to help improve pricing accuracy for everyone!',
+                    icon: '↔',
+                    title: 'Trade Verified Price',
+                    description: 'This price is based on actual completed trades on Leverage — the most reliable source.',
+                    dataSource: 'Leverage\'s internal trade database. Only completed trades where both parties confirmed receipt are counted.',
+                    methodology: 'We average what similar items traded for on Leverage, weighting recent trades more heavily.',
+                    nextSteps: 'Trade more items to help improve pricing accuracy for everyone!',
                 };
             case 'ai_estimate':
                 return {
                     label: 'AI Estimate',
                     bgColor: 'bg-purple-100',
                     textColor: 'text-purple-800',
-                    icon: '🤖',
-                    eli5Title: 'AI Estimate',
-                    eli5Description: 'Our AI analyzed similar items and estimated a price. Useful for rare items with limited sales data.',
-                    eli5Source: 'Leverage AI model trained on millions of collectible sales and item characteristics.',
-                    eli5Calculation: 'Machine learning finds items with similar names, conditions, and categories, then estimates value based on their prices. Less reliable than API or trade data.',
-                    eli5Next: 'For better accuracy, use "Auto-Price" to link to a known product.',
+                    icon: '◈',
+                    title: 'AI Estimated Price',
+                    description: 'Our AI analyzed similar items and estimated a price. Less reliable than API or trade data.',
+                    dataSource: 'Leverage AI model analyzing item characteristics and similar sales.',
+                    methodology: 'Machine learning finds items with similar names, conditions, and categories, then estimates value based on their prices.',
+                    nextSteps: 'For better accuracy, use "Auto-Price" to link to a known product in PriceCharting.',
                 };
             default:
                 return {
                     label: 'Unverified',
                     bgColor: 'bg-gray-100',
                     textColor: 'text-gray-600',
-                    icon: '❓',
-                    eli5Title: 'Unverified Price',
-                    eli5Description: 'We couldn\'t find pricing data for this item yet. The current value is just a placeholder.',
-                    eli5Source: 'No data source connected. This item isn\'t linked to any price guide or trade history.',
-                    eli5Calculation: 'No calculation performed. The displayed price may be a default or owner estimate.',
-                    eli5Next: 'Fix this: Open the item, tap "Auto-Price" to search for it in price guides, or use "Set Value" to add your own price.',
+                    icon: '?',
+                    title: 'Unverified Price',
+                    description: 'This item isn\'t linked to any price database yet. The displayed value may be inaccurate.',
+                    dataSource: 'No external data source connected.',
+                    methodology: 'No calculation performed — the price shown may be a default or placeholder.',
+                    nextSteps: 'Use "Auto-Price" to search for this item in price guides, or "Set Value" to enter your own price.',
                 };
         }
     };
 
     const config = getSourceConfig(source);
+    const isApiSource = source === 'api' || source === 'API_VERIFIED' || source === 'consolidated';
     const sizeClasses = size === 'sm'
         ? 'text-xs px-2 py-0.5'
         : 'text-sm px-3 py-1';
-
-    const confidenceLevel = confidence !== null && confidence !== undefined
-        ? confidence >= 85 ? 'High' : confidence >= 70 ? 'Good' : confidence >= 50 ? 'Fair' : 'Low'
-        : null;
 
     return (
         <>
@@ -125,14 +152,11 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
                 }}
                 className={`inline-flex items-center gap-1 rounded-full font-medium cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition-all ${config.bgColor} ${config.textColor} ${sizeClasses}`}
             >
-                <span>{config.icon}</span>
+                <span className="font-bold">{config.icon}</span>
                 <span>{config.label}</span>
-                {confidence !== null && confidence !== undefined && (
-                    <span className="opacity-70">({confidence}%)</span>
-                )}
             </button>
 
-            {/* ELI5 Modal */}
+            {/* Info Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -144,8 +168,8 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
                         <div className={`${config.bgColor} px-5 py-4`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-2xl">{config.icon}</span>
-                                    <h3 className={`font-bold ${config.textColor}`}>{config.eli5Title}</h3>
+                                    <span className="text-2xl font-bold">{config.icon}</span>
+                                    <h3 className={`font-bold ${config.textColor}`}>{config.title}</h3>
                                 </div>
                                 <button
                                     onClick={() => setShowModal(false)}
@@ -154,17 +178,20 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
                                     ✕
                                 </button>
                             </div>
-                            {confidence !== null && confidence !== undefined && (
-                                <div className="mt-2 flex items-center gap-2">
-                                    <div className="flex-1 h-2 bg-white/50 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full ${confidence >= 85 ? 'bg-green-500' : confidence >= 70 ? 'bg-blue-500' : confidence >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                            style={{ width: `${confidence}%` }}
-                                        />
-                                    </div>
-                                    <span className={`text-xs font-medium ${config.textColor}`}>
-                                        {confidence}% {confidenceLevel}
-                                    </span>
+
+                            {/* Quick stats for API verified */}
+                            {isApiSource && (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {lastUpdated && (
+                                        <span className="text-xs bg-white/50 rounded-full px-2 py-1">
+                                            🕒 Updated {formatRelativeTime(lastUpdated)}
+                                        </span>
+                                    )}
+                                    {condition && (
+                                        <span className="text-xs bg-white/50 rounded-full px-2 py-1">
+                                            📦 {formatCondition(condition)}
+                                        </span>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -177,7 +204,7 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
                                     What This Means
                                 </h4>
                                 <p className="text-sm text-slate-700">
-                                    {config.eli5Description}
+                                    {config.description}
                                 </p>
                             </div>
 
@@ -187,17 +214,17 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
                                     📊 Data Source
                                 </h4>
                                 <p className="text-sm text-slate-700">
-                                    {config.eli5Source}
+                                    {config.dataSource}
                                 </p>
                             </div>
 
                             {/* How it's calculated */}
                             <div>
                                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                                    🧮 How It's Calculated
+                                    🧮 Methodology
                                 </h4>
                                 <p className="text-sm text-slate-700">
-                                    {config.eli5Calculation}
+                                    {config.methodology}
                                 </p>
                             </div>
 
@@ -207,7 +234,7 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({ source, confidence, siz
                                     👉 What You Can Do
                                 </h4>
                                 <p className="text-sm text-slate-600">
-                                    {config.eli5Next}
+                                    {config.nextSteps}
                                 </p>
                             </div>
                         </div>

@@ -1,4 +1,4 @@
-import { User, Item, Trade } from '../types';
+import { User, Item, Trade, TradeEventType } from '../types';
 
 const API_URL = 'http://localhost:4000/api';
 
@@ -220,14 +220,15 @@ export const proposeTrade = async (
     receiverId: number | string,
     proposerItemIds: (number | string)[],
     receiverItemIds: (number | string)[],
-    proposerCash: number
+    proposerCash: number,
+    receiverCash: number = 0
 ): Promise<{ trade: Trade; updatedProposer: User }> => {
     const response = await fetch(`${API_URL}/trades`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash }),
+        body: JSON.stringify({ proposerId, receiverId, proposerItemIds, receiverItemIds, proposerCash, receiverCash }),
     });
 
     if (!response.ok) {
@@ -371,6 +372,9 @@ export interface ExternalProduct {
     name: string;
     platform: string;
     provider: string;
+    loosePrice?: number; // Price in cents
+    cibPrice?: number;
+    newPrice?: number;
 }
 
 export interface ExternalSearchResult {
@@ -633,6 +637,34 @@ export const submitCounterOffer = async (
     if (!response.ok) {
         const text = await response.text();
         throw new Error(`Failed to submit counter-offer: ${text}`);
+    }
+    return response.json();
+};
+
+// =====================================================
+// TRADE EVENTS API (Trade History Timeline)
+// =====================================================
+
+
+
+export interface TradeEventData {
+    id: number;
+    tradeId: string;
+    eventType: TradeEventType;
+    actorId: string;
+    actorName: string;
+    proposerItemIds: string[];
+    receiverItemIds: string[];
+    proposerCash: number | null;
+    receiverCash: number | null;
+    message: string | null;
+    createdAt: string;
+}
+
+export const fetchTradeEvents = async (tradeId: string): Promise<TradeEventData[]> => {
+    const response = await fetch(`${API_URL}/trades/${tradeId}/events`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch trade events');
     }
     return response.json();
 };

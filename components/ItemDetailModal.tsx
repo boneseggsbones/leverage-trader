@@ -125,7 +125,13 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                         <div className="flex items-start justify-between gap-4 mb-4">
                             <div className="flex-1">
                                 <h2 className="text-xl font-bold text-slate-800">{item.name}</h2>
-                                <ValuationBadge source={emvSource} size="sm" />
+                                <ValuationBadge
+                                    source={emvSource}
+                                    condition={item.condition}
+                                    lastUpdated={(item as any).emv_updated_at}
+                                    itemName={item.name}
+                                    size="sm"
+                                />
                             </div>
                             <div className="text-right">
                                 <div className="text-2xl font-bold text-slate-800">
