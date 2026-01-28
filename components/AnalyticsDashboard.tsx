@@ -30,13 +30,28 @@ const AnalyticsDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // API Call Statistics
+    const [apiStats, setApiStats] = useState<Array<{
+        api_name: string;
+        call_count: number;
+        last_called_at: string | null;
+        error_count: number;
+        last_error: string | null;
+    }>>([]);
+
     useEffect(() => {
         if (!currentUser) return;
 
         setLoading(true);
-        fetchUserAnalytics(currentUser.id)
-            .then(data => {
+        Promise.all([
+            fetchUserAnalytics(currentUser.id),
+            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/analytics/api-stats`)
+                .then(res => res.json())
+                .catch(() => [])
+        ])
+            .then(([data, stats]) => {
                 setAnalytics(data);
+                setApiStats(stats || []);
                 setError(null);
             })
             .catch(err => setError(err.message))
@@ -235,6 +250,56 @@ const AnalyticsDashboard: React.FC = () => {
                     <div className="text-center text-gray-400 py-8">
                         No trading partners yet. Start trading to see your partners here!
                     </div>
+                )}
+            </div>
+
+            {/* API Usage Statistics */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm mt-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span className="text-xl">🔌</span> API Usage Statistics
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    {apiStats.map((stat) => {
+                        const icons: Record<string, string> = {
+                            'PriceCharting': '📊',
+                            'eBay (Official)': '🛒',
+                            'RapidAPI eBay': '⚡',
+                            'JustTCG': '🃏',
+                            'StockX': '👟',
+                            'PSA': '🏆'
+                        };
+                        return (
+                            <div
+                                key={stat.api_name}
+                                className={`rounded-xl p-3 text-center ${stat.call_count > 0
+                                        ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700'
+                                        : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
+                                    }`}
+                            >
+                                <div className="text-2xl mb-1">{icons[stat.api_name] || '🔗'}</div>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 font-medium truncate">{stat.api_name}</p>
+                                <p className={`text-xl font-bold ${stat.call_count > 0
+                                        ? 'text-violet-600 dark:text-violet-400'
+                                        : 'text-gray-400 dark:text-gray-500'
+                                    }`}>
+                                    {stat.call_count.toLocaleString()}
+                                </p>
+                                {stat.error_count > 0 && (
+                                    <p className="text-xs text-amber-500 mt-1" title={stat.last_error || ''}>
+                                        ⚠️ {stat.error_count} errors
+                                    </p>
+                                )}
+                                {stat.last_called_at && (
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        {new Date(stat.last_called_at).toLocaleDateString()}
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+                {apiStats.length === 0 && (
+                    <p className="text-center text-gray-400 py-4">No API calls recorded yet</p>
                 )}
             </div>
         </div>

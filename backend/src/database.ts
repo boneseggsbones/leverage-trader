@@ -663,6 +663,20 @@ const init = () => {
       );
       CREATE INDEX IF NOT EXISTS idx_trade_events_trade ON trade_events(trade_id);
       CREATE INDEX IF NOT EXISTS idx_trade_events_created ON trade_events(trade_id, created_at);
+
+      -- =====================================================
+      -- API CALL STATISTICS TABLE
+      -- =====================================================
+      
+      -- Track API calls for analytics and rate limiting
+      CREATE TABLE IF NOT EXISTS api_call_stats (
+        api_name TEXT PRIMARY KEY,
+        call_count INTEGER DEFAULT 0,
+        last_called_at TEXT,
+        last_error TEXT,
+        error_count INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
     `, (err) => {
       if (err) {
         reject(err);
@@ -953,4 +967,58 @@ const seedValuationData = () => {
   });
 };
 
-export { db, init, migrate, seedValuationData };
+// =====================================================
+// API CALL TRACKING HELPERS
+// =====================================================
+
+/**
+ * Record an API call (increment counter)
+ */
+const recordApiCall = (apiName: string, error?: string): Promise<void> => {
+  return new Promise((resolve) => {
+    const now = new Date().toISOString();
+    if (error) {
+      db.run(`
+        INSERT INTO api_call_stats (api_name, call_count, last_called_at, error_count, last_error, created_at)
+        VALUES (?, 1, ?, 1, ?, ?)
+        ON CONFLICT(api_name) DO UPDATE SET 
+          call_count = call_count + 1,
+          last_called_at = ?,
+          error_count = error_count + 1,
+          last_error = ?
+      `, [apiName, now, error, now, now, error], () => resolve());
+    } else {
+      db.run(`
+        INSERT INTO api_call_stats (api_name, call_count, last_called_at, created_at)
+        VALUES (?, 1, ?, ?)
+        ON CONFLICT(api_name) DO UPDATE SET 
+          call_count = call_count + 1,
+          last_called_at = ?
+      `, [apiName, now, now, now], () => resolve());
+    }
+  });
+};
+
+/**
+ * Get all API call statistics
+ */
+const getApiCallStats = (): Promise<Array<{
+  api_name: string;
+  call_count: number;
+  last_called_at: string | null;
+  error_count: number;
+  last_error: string | null;
+}>> => {
+  return new Promise((resolve) => {
+    db.all('SELECT api_name, call_count, last_called_at, error_count, last_error FROM api_call_stats ORDER BY call_count DESC', (err, rows: any[]) => {
+      if (err) {
+        console.error('Error getting API call stats:', err);
+        resolve([]);
+      } else {
+        resolve(rows || []);
+      }
+    });
+  });
+};
+
+export { db, init, migrate, seedValuationData, recordApiCall, getApiCallStats };

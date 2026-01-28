@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { db, init, migrate, seedValuationData } from './database';
+import { db, init, migrate, seedValuationData, getApiCallStats } from './database';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
@@ -4797,6 +4797,45 @@ app.get('/api/items/:itemId/psa', async (req, res) => {
   } catch (err: any) {
     console.error('[PSA] Get data error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================================
+// API CALL STATISTICS ENDPOINT
+// =============================================================================
+
+/**
+ * @route GET /api/analytics/api-stats
+ * @desc Get API call statistics for all external APIs
+ * @access Public (for now - consider adding auth later)
+ */
+app.get('/api/analytics/api-stats', async (_req, res) => {
+  try {
+    const stats = await getApiCallStats();
+
+    // Add known APIs that may not have been called yet
+    const knownApis = [
+      'PriceCharting',
+      'eBay (Official)',
+      'RapidAPI eBay',
+      'JustTCG',
+      'StockX',
+      'PSA'
+    ];
+
+    const statsMap = new Map(stats.map(s => [s.api_name, s]));
+    const result = knownApis.map(api => ({
+      api_name: api,
+      call_count: statsMap.get(api)?.call_count || 0,
+      last_called_at: statsMap.get(api)?.last_called_at || null,
+      error_count: statsMap.get(api)?.error_count || 0,
+      last_error: statsMap.get(api)?.last_error || null
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error('Error getting API stats:', err);
+    res.status(500).json({ error: 'Failed to get API statistics' });
   }
 });
 

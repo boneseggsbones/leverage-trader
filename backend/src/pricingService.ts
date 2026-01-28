@@ -1,4 +1,4 @@
-import { db } from './database';
+import { db, recordApiCall } from './database';
 import { getEbayPricing, isEbayConfigured, EbayPriceData } from './ebayService';
 import { getEbaySoldPrice, isRapidApiConfigured, optimizeQueryForEbay } from './rapidApiEbayService';
 import { searchTcgCards, isJustTcgConfigured, isTcgItem, TcgPriceData } from './justTcgService';
@@ -444,9 +444,19 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
 
                 console.log(`[Pricing] All sources responded in ${Date.now() - startTime}ms`);
 
-                // Process results
+                // Process results and track API calls
                 results.forEach((result, index) => {
                     const sourceName = apiPromises[index].name;
+
+                    // Track the API call
+                    const apiNameMap: Record<string, string> = {
+                        'pricecharting': 'PriceCharting',
+                        'ebay': 'eBay (Official)',
+                        'rapidapi_ebay': 'RapidAPI eBay',
+                        'justtcg': 'JustTCG',
+                        'stockx': 'StockX'
+                    };
+                    recordApiCall(apiNameMap[sourceName] || sourceName, result === null ? 'API returned null' : undefined);
 
                     if (sourceName === 'pricecharting' && result) {
                         const priceField = CONDITION_TO_PRICE_FIELD[condition] || 'loose-price';
