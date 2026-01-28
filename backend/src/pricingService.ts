@@ -368,126 +368,148 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                 const searchQuery = item.product_name || item.name;
                 const condition = item.condition || 'GOOD';
 
-                // Fetch from PriceCharting if configured and linked
+                // ===== RUN ALL API CALLS IN PARALLEL =====
+                // This reduces total time from sum of all calls to max of any single call
+
+                const apiPromises: Array<{ name: string; promise: Promise<any> }> = [];
+
+                // PriceCharting (only if linked)
                 if (item.pricecharting_id && isApiConfigured()) {
-                    try {
-                        const product = await getPriceChartingProduct(item.pricecharting_id);
-                        if (product) {
-                            const priceField = CONDITION_TO_PRICE_FIELD[condition] || 'loose-price';
-                            const valueCents = (product[priceField] as number) || (product['loose-price'] as number) || 0;
-
-                            if (valueCents > 0) {
-                                sources.push({
-                                    provider: 'pricecharting',
-                                    price: valueCents,
-                                    weight: 0.4,  // Base weight
-                                    confidence: 85, // Curated database = high base confidence
-                                    dataPoints: 1,
-                                    lastUpdated: now
-                                });
-                            }
-                        }
-                    } catch (e) {
-                        console.error('PriceCharting fetch error:', e);
-                    }
+                    apiPromises.push({
+                        name: 'pricecharting',
+                        promise: getPriceChartingProduct(item.pricecharting_id).catch(e => {
+                            console.error('PriceCharting fetch error:', e);
+                            return null;
+                        })
+                    });
                 }
 
-                // Fetch from eBay if configured
+                // eBay Marketplace Insights
                 if (isEbayConfigured() && searchQuery) {
-                    try {
-                        const ebayData = await getEbayPricing(searchQuery, { condition });
-                        if (ebayData && ebayData.sampleSize > 0) {
-                            // Higher weight if more data points
-                            const ebayWeight = ebayData.sampleSize >= 5 ? 0.6 : 0.4;
-                            // Higher confidence with more sales
-                            const ebayConfidence = Math.min(95, 60 + (ebayData.sampleSize * 3));
-
-                            sources.push({
-                                provider: 'ebay',
-                                price: ebayData.averagePrice,
-                                weight: ebayWeight,
-                                confidence: ebayConfidence,
-                                dataPoints: ebayData.sampleSize,
-                                lastUpdated: ebayData.lastUpdated
-                            });
-                        }
-                    } catch (e) {
-                        console.error('eBay fetch error:', e);
-                    }
+                    apiPromises.push({
+                        name: 'ebay',
+                        promise: getEbayPricing(searchQuery, { condition }).catch(e => {
+                            console.error('eBay fetch error:', e);
+                            return null;
+                        })
+                    });
                 }
 
-                // Fetch from RapidAPI eBay (fallback for items not in PriceCharting or when we need more data)
-                // This uses completed/sold listings scraped from eBay
+                // RapidAPI eBay (sold listings)
                 if (isRapidApiConfigured() && searchQuery) {
-                    try {
-                        const optimizedQuery = optimizeQueryForEbay(searchQuery, item.category);
-                        const rapidApiData = await getEbaySoldPrice(optimizedQuery, {
+                    const optimizedQuery = optimizeQueryForEbay(searchQuery, item.category);
+                    apiPromises.push({
+                        name: 'rapidapi_ebay',
+                        promise: getEbaySoldPrice(optimizedQuery, {
                             excludeKeywords: 'lot bundle broken parts',
                             maxResults: 50
-                        });
-
-                        if (rapidApiData && rapidApiData.sampleSize > 0) {
-                            // Weight based on sample size - more sales = higher confidence
-                            const rapidWeight = rapidApiData.sampleSize >= 10 ? 0.5 :
-                                rapidApiData.sampleSize >= 5 ? 0.4 : 0.3;
-                            // Confidence scales with sample size
-                            const rapidConfidence = Math.min(90, 50 + (rapidApiData.sampleSize * 2));
-
-                            sources.push({
-                                provider: 'rapidapi_ebay',
-                                price: rapidApiData.averagePrice,
-                                weight: rapidWeight,
-                                confidence: rapidConfidence,
-                                dataPoints: rapidApiData.sampleSize,
-                                lastUpdated: rapidApiData.lastUpdated
-                            });
-                        }
-                    } catch (e) {
-                        console.error('RapidAPI eBay fetch error:', e);
-                    }
+                        }).catch(e => {
+                            console.error('RapidAPI eBay fetch error:', e);
+                            return null;
+                        })
+                    });
                 }
 
-                // Fetch from JustTCG for trading cards (higher priority than PriceCharting for TCG)
+                // JustTCG (for trading cards)
                 if (isJustTcgConfigured() && searchQuery && isTcgItem(searchQuery, item.category)) {
-                    try {
-                        const tcgCards = await searchTcgCards(searchQuery, { limit: 5 });
-                        if (tcgCards.length > 0) {
-                            // Use the best match (first result)
-                            const bestMatch = tcgCards[0];
-                            sources.push({
-                                provider: 'justtcg',
-                                price: bestMatch.marketPrice,
-                                weight: 0.7, // High weight for TCG-specific source
-                                confidence: 90,
-                                dataPoints: 1,
-                                lastUpdated: bestMatch.lastUpdated
-                            });
-                        }
-                    } catch (e) {
-                        console.error('JustTCG fetch error:', e);
-                    }
+                    apiPromises.push({
+                        name: 'justtcg',
+                        promise: searchTcgCards(searchQuery, { limit: 5 }).catch(e => {
+                            console.error('JustTCG fetch error:', e);
+                            return [];
+                        })
+                    });
                 }
 
-                // Fetch from StockX for sneakers
+                // StockX (for sneakers)
                 if (isStockxConfigured() && searchQuery && isSneakerItem(searchQuery, item.category)) {
-                    try {
-                        const sneakers = await searchSneakers(searchQuery, { limit: 5 });
-                        if (sneakers.length > 0) {
-                            // Use the best match
-                            const bestMatch = sneakers[0];
+                    apiPromises.push({
+                        name: 'stockx',
+                        promise: searchSneakers(searchQuery, { limit: 5 }).catch(e => {
+                            console.error('StockX fetch error:', e);
+                            return [];
+                        })
+                    });
+                }
+
+                console.log(`[Pricing] Fetching from ${apiPromises.length} sources in parallel...`);
+                const startTime = Date.now();
+
+                // Execute all API calls in parallel
+                const results = await Promise.all(apiPromises.map(p => p.promise));
+
+                console.log(`[Pricing] All sources responded in ${Date.now() - startTime}ms`);
+
+                // Process results
+                results.forEach((result, index) => {
+                    const sourceName = apiPromises[index].name;
+
+                    if (sourceName === 'pricecharting' && result) {
+                        const priceField = CONDITION_TO_PRICE_FIELD[condition] || 'loose-price';
+                        const valueCents = (result[priceField] as number) || (result['loose-price'] as number) || 0;
+                        if (valueCents > 0) {
                             sources.push({
-                                provider: 'stockx',
-                                price: bestMatch.lastSale,
-                                weight: 0.8, // Very high weight - StockX is authoritative for sneakers
-                                confidence: 95,
+                                provider: 'pricecharting',
+                                price: valueCents,
+                                weight: 0.4,
+                                confidence: 85,
                                 dataPoints: 1,
-                                lastUpdated: bestMatch.lastUpdated
+                                lastUpdated: now
                             });
                         }
-                    } catch (e) {
-                        console.error('StockX fetch error:', e);
                     }
-                }
+
+                    if (sourceName === 'ebay' && result && result.sampleSize > 0) {
+                        const ebayWeight = result.sampleSize >= 5 ? 0.6 : 0.4;
+                        const ebayConfidence = Math.min(95, 60 + (result.sampleSize * 3));
+                        sources.push({
+                            provider: 'ebay',
+                            price: result.averagePrice,
+                            weight: ebayWeight,
+                            confidence: ebayConfidence,
+                            dataPoints: result.sampleSize,
+                            lastUpdated: result.lastUpdated
+                        });
+                    }
+
+                    if (sourceName === 'rapidapi_ebay' && result && result.sampleSize > 0) {
+                        const rapidWeight = result.sampleSize >= 10 ? 0.5 :
+                            result.sampleSize >= 5 ? 0.4 : 0.3;
+                        const rapidConfidence = Math.min(90, 50 + (result.sampleSize * 2));
+                        sources.push({
+                            provider: 'rapidapi_ebay',
+                            price: result.averagePrice,
+                            weight: rapidWeight,
+                            confidence: rapidConfidence,
+                            dataPoints: result.sampleSize,
+                            lastUpdated: result.lastUpdated
+                        });
+                    }
+
+                    if (sourceName === 'justtcg' && Array.isArray(result) && result.length > 0) {
+                        const bestMatch = result[0];
+                        sources.push({
+                            provider: 'justtcg',
+                            price: bestMatch.marketPrice,
+                            weight: 0.7,
+                            confidence: 90,
+                            dataPoints: 1,
+                            lastUpdated: bestMatch.lastUpdated
+                        });
+                    }
+
+                    if (sourceName === 'stockx' && Array.isArray(result) && result.length > 0) {
+                        const bestMatch = result[0];
+                        sources.push({
+                            provider: 'stockx',
+                            price: bestMatch.lastSale,
+                            weight: 0.8,
+                            confidence: 95,
+                            dataPoints: 1,
+                            lastUpdated: bestMatch.lastUpdated
+                        });
+                    }
+                });
 
                 // If no sources, return current item value
                 if (sources.length === 0) {
