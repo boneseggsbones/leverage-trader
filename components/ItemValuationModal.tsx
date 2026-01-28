@@ -376,9 +376,32 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                         ) : !showManualSearch ? (
                                             /* Auto-matched results view */
                                             <>
-                                                <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
-                                                    We found these matches for your item. Select one to link pricing.
-                                                </p>
+                                                {/* Source breakdown - explain current price */}
+                                                <div className="bg-slate-50 rounded-lg p-3 mb-3">
+                                                    <p className="text-xs text-slate-600">
+                                                        <span className="font-medium">Current estimate</span> is based on eBay sold listings.
+                                                    </p>
+                                                    <p className="text-xs text-violet-600 mt-1">
+                                                        👇 <span className="font-medium">Link to exact product below</span> for more accurate pricing.
+                                                    </p>
+                                                </div>
+
+                                                {/* Price Range Display */}
+                                                {autoMatchedResults.length > 1 && (
+                                                    <div className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl p-3 mb-3 border border-violet-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-xs text-violet-700 font-medium">Price Range</span>
+                                                            <span className="text-sm font-bold text-violet-800">
+                                                                ${Math.min(...autoMatchedResults.map(p => p.loosePrice || 0).filter(p => p > 0) as number[]) / 100 | 0}
+                                                                {' - '}
+                                                                ${Math.max(...autoMatchedResults.map(p => p.loosePrice || 0)) / 100 | 0}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-violet-500 mt-1">
+                                                            Which variant do you have?
+                                                        </p>
+                                                    </div>
+                                                )}
 
                                                 {autoMatchedResults.length > 0 ? (
                                                     <div className="space-y-2">
@@ -420,7 +443,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                 ) : (
                                                     <div className="text-center py-6 bg-slate-50 rounded-xl">
                                                         <p className="text-3xl mb-2">🤔</p>
-                                                        <p className="text-sm text-slate-600 font-medium">No matches found</p>
+                                                        <p className="text-sm text-slate-600 font-medium">No exact matches found</p>
                                                         <p className="text-xs text-slate-400 mt-1">Try searching manually below</p>
                                                     </div>
                                                 )}
