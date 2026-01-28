@@ -42,6 +42,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
     const [searching, setSearching] = useState(false);
     const [linking, setLinking] = useState(false);
     const [linkSuccess, setLinkSuccess] = useState(false);
+    const [linkedProductInfo, setLinkedProductInfo] = useState<{ name: string; price: number } | null>(null);
 
     // Auto-match state (prevents gaming by auto-searching item name)
     const [autoMatchedResults, setAutoMatchedResults] = useState<ExternalProduct[]>([]);
@@ -81,6 +82,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
             loadData();
             setActivePanel(null);
             setLinkSuccess(false);
+            setLinkedProductInfo(null);
             setSubmitSuccess(false);
             setAutoMatchedResults([]);
             setShowManualSearch(false);
@@ -364,9 +366,22 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                         </h3>
 
                                         {linkSuccess ? (
-                                            <div className="text-center py-6">
+                                            <div className="text-center py-6 bg-green-50 rounded-xl">
                                                 <p className="text-4xl mb-2">✓</p>
-                                                <p className="text-green-600 font-medium">Connected!</p>
+                                                <p className="text-green-600 font-medium text-lg">Connected!</p>
+                                                {linkedProductInfo && (
+                                                    <>
+                                                        <p className="text-sm text-slate-600 mt-2">
+                                                            Linked to <span className="font-medium">{linkedProductInfo.name}</span>
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 mt-1">
+                                                            Catalog price: ${(linkedProductInfo.price / 100).toLocaleString()}
+                                                        </p>
+                                                    </>
+                                                )}
+                                                <p className="text-xs text-slate-400 mt-3 bg-slate-100 rounded-lg p-2 mx-4">
+                                                    💡 Your item's value now blends this catalog price with recent eBay sales for extra accuracy.
+                                                </p>
                                             </div>
                                         ) : autoSearching ? (
                                             <div className="text-center py-8">
@@ -413,6 +428,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                                     setLinking(true);
                                                                     try {
                                                                         await linkItemToProductApi(item.id, product.id, product.name, product.platform);
+                                                                        setLinkedProductInfo({ name: product.name, price: product.loosePrice || 0 });
                                                                         setLinkSuccess(true);
                                                                         loadData();
                                                                         if (onValuationUpdated) onValuationUpdated();
@@ -491,6 +507,7 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                                     setLinking(true);
                                                                     try {
                                                                         await linkItemToProductApi(item.id, product.id, product.name, product.platform);
+                                                                        setLinkedProductInfo({ name: product.name, price: product.loosePrice || 0 });
                                                                         setLinkSuccess(true);
                                                                         setSearchQuery('');
                                                                         setSearchResults([]);
