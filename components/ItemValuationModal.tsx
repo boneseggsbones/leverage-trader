@@ -49,6 +49,10 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
     const [autoSearching, setAutoSearching] = useState(false);
     const [showManualSearch, setShowManualSearch] = useState(false);
 
+    // Editable item name
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editedName, setEditedName] = useState('');
+
     // PSA state
     const [psaCertNumber, setPsaCertNumber] = useState('');
     const [psaVerifying, setPsaVerifying] = useState(false);
@@ -212,7 +216,48 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                     {/* Header - Compact */}
                     <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 px-6 pt-6 pb-8">
                         <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
-                        <p className="text-slate-400 text-sm truncate pr-8">{item.name}</p>
+
+                        {/* Editable Item Name */}
+                        {isEditingName ? (
+                            <div className="flex items-center gap-2 pr-8">
+                                <input
+                                    type="text"
+                                    value={editedName}
+                                    onChange={e => setEditedName(e.target.value)}
+                                    autoFocus
+                                    className="flex-1 bg-white/10 text-white text-sm rounded px-2 py-1 border border-white/20 focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                    onKeyDown={async e => {
+                                        if (e.key === 'Enter' && editedName.trim()) {
+                                            // Save the name
+                                            try {
+                                                await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/items/${item.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ name: editedName.trim() })
+                                                });
+                                                loadData();
+                                                if (onValuationUpdated) onValuationUpdated();
+                                            } catch (err) {
+                                                console.error('Failed to update name:', err);
+                                            }
+                                            setIsEditingName(false);
+                                        } else if (e.key === 'Escape') {
+                                            setIsEditingName(false);
+                                        }
+                                    }}
+                                    onBlur={() => setIsEditingName(false)}
+                                />
+                                <span className="text-xs text-white/50">Enter to save</span>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => { setEditedName(valuationData?.item?.name || item.name); setIsEditingName(true); }}
+                                className="text-slate-400 text-sm truncate pr-8 hover:text-white transition-colors flex items-center gap-1 group"
+                            >
+                                {valuationData?.item?.name || item.name}
+                                <span className="text-xs opacity-0 group-hover:opacity-100 text-white/50">✏️</span>
+                            </button>
+                        )}
 
                         {/* Hero Value */}
                         {loading ? (

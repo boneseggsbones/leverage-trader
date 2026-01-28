@@ -295,12 +295,14 @@ export const linkItemToProduct = async (
                 [pricechartingId], (err: Error | null, existing: any) => {
                     if (existing) {
                         // Product exists, just link the item and clear any user override
+                        // Also rename the item to the product name for clarity
                         db.run(`UPDATE Item SET 
+                                name = ?,
                                 product_id = ?, 
                                 emv_source = NULL,
                                 linked_product_name = ?
                                 WHERE id = ?`,
-                            [existing.id, productName, itemId], (err2: Error | null) => {
+                            [productName, existing.id, productName, itemId], (err2: Error | null) => {
                                 if (err2) {
                                     resolve({ success: false, productId: null, message: err2.message });
                                 } else {
@@ -320,12 +322,14 @@ export const linkItemToProduct = async (
                                 const productId = this.lastID;
 
                                 // Link item to new product and clear any user override
+                                // Also rename the item to the product name
                                 db.run(`UPDATE Item SET 
+                                        name = ?,
                                         product_id = ?, 
                                         emv_source = NULL,
                                         linked_product_name = ?
                                         WHERE id = ?`,
-                                    [productId, productName, itemId], (err4: Error | null) => {
+                                    [productName, productId, productName, itemId], (err4: Error | null) => {
                                         if (err4) {
                                             resolve({ success: false, productId: null, message: err4.message });
                                         } else {
