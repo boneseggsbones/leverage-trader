@@ -383,6 +383,21 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                                     💡 Your item's value now blends this catalog price with recent eBay sales for extra accuracy.
                                                 </p>
                                             </div>
+                                        ) : linking ? (
+                                            /* Linking in progress - show clear loading state */
+                                            <div className="text-center py-8">
+                                                <div className="relative inline-block">
+                                                    <div className="w-16 h-16 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin mx-auto"></div>
+                                                    <span className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-2xl">🔗</span>
+                                                </div>
+                                                <p className="text-lg font-medium text-slate-700 mt-4">Linking to catalog...</p>
+                                                <p className="text-sm text-slate-500 mt-1">Fetching latest prices from multiple sources</p>
+                                                <div className="mt-4 space-y-2 text-xs text-slate-400 animate-pulse">
+                                                    <p>• Connecting to PriceCharting...</p>
+                                                    <p>• Checking eBay sold listings...</p>
+                                                    <p>• Calculating consolidated value...</p>
+                                                </div>
+                                            </div>
                                         ) : autoSearching ? (
                                             <div className="text-center py-8">
                                                 <div className="animate-spin text-3xl mb-2">🔍</div>
