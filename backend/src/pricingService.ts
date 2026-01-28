@@ -129,8 +129,9 @@ export const getPriceChartingProduct = async (pricechartingId: string): Promise<
 };
 
 /**
- * Refresh valuation for an item from external API
- * Returns the new EMV in cents, or null if refresh failed
+ * Refresh valuation for an item from external API(s)
+ * Uses consolidated pricing (PriceCharting + eBay) when eBay is configured
+ * Returns the new EMV in cents with source breakdown
  */
 export const refreshItemValuation = async (itemId: number): Promise<{
     success: boolean;
@@ -138,7 +139,29 @@ export const refreshItemValuation = async (itemId: number): Promise<{
     source: string;
     confidence: number | null;
     message: string;
+    sources?: PriceSource[];
+    trend?: 'up' | 'down' | 'stable';
+    volatility?: 'low' | 'medium' | 'high';
 }> => {
+    // If eBay is configured, use consolidated pricing from multiple sources
+    if (isEbayConfigured()) {
+        const consolidated = await getConsolidatedValuation(itemId);
+        if (consolidated.success && consolidated.consolidated) {
+            return {
+                success: true,
+                emvCents: consolidated.consolidated.consolidatedValue,
+                source: 'consolidated',
+                confidence: consolidated.consolidated.confidence,
+                message: consolidated.message,
+                sources: consolidated.consolidated.sources,
+                trend: consolidated.consolidated.trend,
+                volatility: consolidated.consolidated.volatility
+            };
+        }
+        // If consolidated failed, fall through to PriceCharting-only
+    }
+
+    // PriceCharting-only pricing (fallback or when eBay not configured)
     return new Promise((resolve) => {
         // Get the item and its product info
         db.get('SELECT i.*, pc.pricecharting_id FROM Item i LEFT JOIN product_catalog pc ON i.product_id = pc.id WHERE i.id = ?',
@@ -218,7 +241,15 @@ export const refreshItemValuation = async (itemId: number): Promise<{
                                     emvCents: valueCents,
                                     source: 'api',
                                     confidence: confidence,
-                                    message: `Updated from PriceCharting: ${product['product-name']}`
+                                    message: `Updated from PriceCharting: ${product['product-name']}`,
+                                    sources: [{
+                                        provider: 'pricecharting',
+                                        price: valueCents,
+                                        weight: 1,
+                                        confidence: 85,
+                                        dataPoints: 1,
+                                        lastUpdated: new Date()
+                                    }]
                                 });
                                 return;
                             }

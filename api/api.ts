@@ -359,12 +359,24 @@ export const fetchSimilarPrices = async (itemId: string | number): Promise<Simil
 // PRICING API FUNCTIONS
 // =====================================================
 
+export interface PriceSource {
+    provider: 'pricecharting' | 'ebay';
+    price: number;          // in cents
+    weight: number;         // 0-1
+    confidence: number;     // 0-100
+    dataPoints: number;
+    lastUpdated: Date | string;
+}
+
 export interface RefreshValuationResult {
     success: boolean;
     emvCents: number | null;
     source: string;
     confidence: number | null;
     message: string;
+    sources?: PriceSource[];
+    trend?: 'up' | 'down' | 'stable';
+    volatility?: 'low' | 'medium' | 'high';
 }
 
 export interface ExternalProduct {

@@ -69,9 +69,20 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({
 
     const getSourceConfig = (src: string | null | undefined): SourceConfig => {
         switch (src) {
+            case 'consolidated':
+                return {
+                    label: 'Multi-Source',
+                    bgColor: 'bg-emerald-100',
+                    textColor: 'text-emerald-800',
+                    icon: '◎',
+                    title: 'Multi-Source Price',
+                    description: 'This price combines data from multiple sources (PriceCharting + eBay sold listings) for improved accuracy.',
+                    dataSource: 'PriceCharting price guide combined with recent eBay completed sales. Each source is weighted based on data quality and volume.',
+                    methodology: 'We calculate a weighted average: sources with more recent sales data get higher weight. The final price reflects real market activity.',
+                    nextSteps: 'This is our most accurate pricing method! Tap "Refresh price from API" to see the breakdown by source.',
+                };
             case 'api':
             case 'API_VERIFIED':
-            case 'consolidated':
                 return {
                     label: 'API Verified',
                     bgColor: 'bg-blue-100',

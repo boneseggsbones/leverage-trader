@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Item } from '../types';
-import { fetchItemValuations, fetchSimilarPrices, submitValueOverride, refreshItemValuation as refreshItemValuationApi, searchExternalProducts, linkItemToProduct as linkItemToProductApi, ExternalProduct, ItemValuationData, SimilarPricesData } from '../api/api';
+import { fetchItemValuations, fetchSimilarPrices, submitValueOverride, refreshItemValuation as refreshItemValuationApi, searchExternalProducts, linkItemToProduct as linkItemToProductApi, ExternalProduct, ItemValuationData, SimilarPricesData, PriceSource, RefreshValuationResult } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import ValuationBadge from './ValuationBadge';
 
@@ -32,6 +32,9 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
 
     // Refresh state
     const [refreshing, setRefreshing] = useState(false);
+    const [priceSources, setPriceSources] = useState<PriceSource[] | undefined>(undefined);
+    const [priceTrend, setPriceTrend] = useState<'up' | 'down' | 'stable' | undefined>(undefined);
+    const [priceVolatility, setPriceVolatility] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
 
     // Product search/link state
     const [searchQuery, setSearchQuery] = useState('');
@@ -233,7 +236,10 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                                 if (!item) return;
                                 setRefreshing(true);
                                 try {
-                                    await refreshItemValuationApi(item.id);
+                                    const result: RefreshValuationResult = await refreshItemValuationApi(item.id);
+                                    setPriceSources(result.sources);
+                                    setPriceTrend(result.trend);
+                                    setPriceVolatility(result.volatility);
                                     loadData();
                                     if (onValuationUpdated) onValuationUpdated();
                                 } finally {
@@ -246,6 +252,42 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                             <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
                             {refreshing ? 'Updating...' : 'Refresh price from API'}
                         </button>
+
+                        {/* Price Source Breakdown */}
+                        {priceSources && priceSources.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-slate-700/50">
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {priceSources.map((source, idx) => (
+                                        <div key={idx} className="bg-slate-700/50 rounded-lg px-2.5 py-1.5 text-xs">
+                                            <span className="text-slate-400 capitalize">{source.provider}:</span>
+                                            <span className="text-white font-medium ml-1">
+                                                ${(source.price / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                            </span>
+                                            {source.dataPoints > 1 && (
+                                                <span className="text-slate-500 ml-1">({source.dataPoints} sales)</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    {priceTrend && (
+                                        <span className={`text-xs px-2 py-0.5 rounded ${priceTrend === 'up' ? 'bg-emerald-500/20 text-emerald-400' :
+                                            priceTrend === 'down' ? 'bg-red-500/20 text-red-400' :
+                                                'bg-slate-600/50 text-slate-400'
+                                            }`}>
+                                            {priceTrend === 'up' ? '📈 Trending Up' : priceTrend === 'down' ? '📉 Trending Down' : '→ Stable'}
+                                        </span>
+                                    )}
+                                    {priceVolatility && priceVolatility !== 'low' && (
+                                        <span className={`text-xs px-2 py-0.5 rounded ${priceVolatility === 'high' ? 'bg-amber-500/20 text-amber-400' :
+                                            'bg-slate-600/50 text-slate-400'
+                                            }`}>
+                                            {priceVolatility === 'high' ? '⚠️ High Volatility' : 'Med Volatility'}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Main Content */}
