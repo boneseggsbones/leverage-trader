@@ -1,10 +1,11 @@
 import { db } from './database';
 import { getEbayPricing, isEbayConfigured, EbayPriceData } from './ebayService';
+import { getEbaySoldPrice, isRapidApiConfigured, optimizeQueryForEbay } from './rapidApiEbayService';
 
 // === Consolidated Pricing Types ===
 
 export interface PriceSource {
-    provider: 'pricecharting' | 'ebay';
+    provider: 'pricecharting' | 'ebay' | 'rapidapi_ebay';
     price: number;          // in cents
     weight: number;         // 0-1
     confidence: number;     // 0-100
@@ -405,6 +406,37 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                         }
                     } catch (e) {
                         console.error('eBay fetch error:', e);
+                    }
+                }
+
+                // Fetch from RapidAPI eBay (fallback for items not in PriceCharting or when we need more data)
+                // This uses completed/sold listings scraped from eBay
+                if (isRapidApiConfigured() && searchQuery) {
+                    try {
+                        const optimizedQuery = optimizeQueryForEbay(searchQuery, item.category);
+                        const rapidApiData = await getEbaySoldPrice(optimizedQuery, {
+                            excludeKeywords: 'lot bundle broken parts',
+                            maxResults: 50
+                        });
+
+                        if (rapidApiData && rapidApiData.sampleSize > 0) {
+                            // Weight based on sample size - more sales = higher confidence
+                            const rapidWeight = rapidApiData.sampleSize >= 10 ? 0.5 :
+                                rapidApiData.sampleSize >= 5 ? 0.4 : 0.3;
+                            // Confidence scales with sample size
+                            const rapidConfidence = Math.min(90, 50 + (rapidApiData.sampleSize * 2));
+
+                            sources.push({
+                                provider: 'rapidapi_ebay',
+                                price: rapidApiData.averagePrice,
+                                weight: rapidWeight,
+                                confidence: rapidConfidence,
+                                dataPoints: rapidApiData.sampleSize,
+                                lastUpdated: rapidApiData.lastUpdated
+                            });
+                        }
+                    } catch (e) {
+                        console.error('RapidAPI eBay fetch error:', e);
                     }
                 }
 
