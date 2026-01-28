@@ -11,6 +11,8 @@ import sqlite3 from 'sqlite3';
 import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured, getConsolidatedValuation } from './pricingService';
 import { isEbayConfigured, getEbayAuthUrl, exchangeCodeForToken, storeUserToken, hasEbayConnection, disconnectEbay, fetchUserListings, markItemImported, isItemImported, EbayListing } from './ebayService';
 import { isRapidApiConfigured } from './rapidApiEbayService';
+import { isJustTcgConfigured } from './justTcgService';
+import { isStockxConfigured } from './stockxService';
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
 import { createTrackingRecord, getTrackingForTrade, detectCarrier } from './shippingService';
 import { authHandler, authDb } from './auth';
@@ -3441,11 +3443,13 @@ app.post('/api/items/:id/link-product', async (req, res) => {
 // Check if pricing API is configured
 app.get('/api/pricing/status', (req, res) => {
   res.json({
-    configured: isApiConfigured() || isEbayConfigured() || isRapidApiConfigured(),
+    configured: isApiConfigured() || isEbayConfigured() || isRapidApiConfigured() || isJustTcgConfigured() || isStockxConfigured(),
     providers: [
       { name: 'pricecharting', configured: isApiConfigured(), description: 'Video Games, TCG, Comics' },
       { name: 'ebay', configured: isEbayConfigured(), description: 'eBay Marketplace Insights API' },
-      { name: 'rapidapi_ebay', configured: isRapidApiConfigured(), description: 'eBay Sold Listings (via RapidAPI)' }
+      { name: 'rapidapi_ebay', configured: isRapidApiConfigured(), description: 'eBay Sold Listings (via RapidAPI)' },
+      { name: 'justtcg', configured: isJustTcgConfigured(), description: 'Trading Cards (Pokémon, MTG, Yu-Gi-Oh)' },
+      { name: 'stockx', configured: isStockxConfigured(), description: 'Sneakers & Streetwear' }
     ]
   });
 });

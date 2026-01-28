@@ -1,11 +1,13 @@
 import { db } from './database';
 import { getEbayPricing, isEbayConfigured, EbayPriceData } from './ebayService';
 import { getEbaySoldPrice, isRapidApiConfigured, optimizeQueryForEbay } from './rapidApiEbayService';
+import { searchTcgCards, isJustTcgConfigured, isTcgItem, TcgPriceData } from './justTcgService';
+import { searchSneakers, isStockxConfigured, isSneakerItem, SneakerPriceData } from './stockxService';
 
 // === Consolidated Pricing Types ===
 
 export interface PriceSource {
-    provider: 'pricecharting' | 'ebay' | 'rapidapi_ebay';
+    provider: 'pricecharting' | 'ebay' | 'rapidapi_ebay' | 'justtcg' | 'stockx';
     price: number;          // in cents
     weight: number;         // 0-1
     confidence: number;     // 0-100
@@ -19,6 +21,11 @@ export interface ConsolidatedPrice {
     sources: PriceSource[];
     trend: 'up' | 'down' | 'stable';
     volatility: 'low' | 'medium' | 'high';
+    priceRange?: {
+        low: number;                // Minimum across sources (in cents)
+        high: number;               // Maximum across sources (in cents)
+        display: string;            // Formatted display string, e.g. "$45 - $55"
+    };
 }
 
 // PriceCharting API configuration
@@ -440,6 +447,48 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                     }
                 }
 
+                // Fetch from JustTCG for trading cards (higher priority than PriceCharting for TCG)
+                if (isJustTcgConfigured() && searchQuery && isTcgItem(searchQuery, item.category)) {
+                    try {
+                        const tcgCards = await searchTcgCards(searchQuery, { limit: 5 });
+                        if (tcgCards.length > 0) {
+                            // Use the best match (first result)
+                            const bestMatch = tcgCards[0];
+                            sources.push({
+                                provider: 'justtcg',
+                                price: bestMatch.marketPrice,
+                                weight: 0.7, // High weight for TCG-specific source
+                                confidence: 90,
+                                dataPoints: 1,
+                                lastUpdated: bestMatch.lastUpdated
+                            });
+                        }
+                    } catch (e) {
+                        console.error('JustTCG fetch error:', e);
+                    }
+                }
+
+                // Fetch from StockX for sneakers
+                if (isStockxConfigured() && searchQuery && isSneakerItem(searchQuery, item.category)) {
+                    try {
+                        const sneakers = await searchSneakers(searchQuery, { limit: 5 });
+                        if (sneakers.length > 0) {
+                            // Use the best match
+                            const bestMatch = sneakers[0];
+                            sources.push({
+                                provider: 'stockx',
+                                price: bestMatch.lastSale,
+                                weight: 0.8, // Very high weight - StockX is authoritative for sneakers
+                                confidence: 95,
+                                dataPoints: 1,
+                                lastUpdated: bestMatch.lastUpdated
+                            });
+                        }
+                    } catch (e) {
+                        console.error('StockX fetch error:', e);
+                    }
+                }
+
                 // If no sources, return current item value
                 if (sources.length === 0) {
                     return resolve({
@@ -493,6 +542,18 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                         emv_confidence = ?, emv_updated_at = ? WHERE id = ?`,
                     [consolidatedValue, confidence, now.toISOString(), itemId]);
 
+                // Calculate price range from all sources
+                const allPrices = sources.map(s => s.price);
+                const minPrice = Math.min(...allPrices);
+                const maxPrice = Math.max(...allPrices);
+                const formatPrice = (cents: number) => `$${(cents / 100).toFixed(0)}`;
+
+                const priceRange = minPrice !== maxPrice ? {
+                    low: minPrice,
+                    high: maxPrice,
+                    display: `${formatPrice(minPrice)} - ${formatPrice(maxPrice)}`
+                } : undefined;
+
                 resolve({
                     success: true,
                     consolidated: {
@@ -500,7 +561,8 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                         confidence,
                         sources,
                         trend,
-                        volatility
+                        volatility,
+                        priceRange
                     },
                     message: `Consolidated from ${sources.length} source(s)`
                 });
