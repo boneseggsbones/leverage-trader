@@ -45,7 +45,7 @@ const AnalyticsDashboard: React.FC = () => {
         setLoading(true);
         Promise.all([
             fetchUserAnalytics(currentUser.id),
-            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/analytics/api-stats`)
+            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'}/api/analytics/api-stats`)
                 .then(res => res.json())
                 .catch(() => [])
         ])
@@ -272,15 +272,15 @@ const AnalyticsDashboard: React.FC = () => {
                             <div
                                 key={stat.api_name}
                                 className={`rounded-xl p-3 text-center ${stat.call_count > 0
-                                        ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700'
-                                        : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
+                                    ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700'
+                                    : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
                                     }`}
                             >
                                 <div className="text-2xl mb-1">{icons[stat.api_name] || '🔗'}</div>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 font-medium truncate">{stat.api_name}</p>
                                 <p className={`text-xl font-bold ${stat.call_count > 0
-                                        ? 'text-violet-600 dark:text-violet-400'
-                                        : 'text-gray-400 dark:text-gray-500'
+                                    ? 'text-violet-600 dark:text-violet-400'
+                                    : 'text-gray-400 dark:text-gray-500'
                                     }`}>
                                     {stat.call_count.toLocaleString()}
                                 </p>
