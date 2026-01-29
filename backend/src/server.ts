@@ -272,21 +272,45 @@ app.get('/api/items', (req, res) => {
 
 // Create a new item
 app.post('/api/items', upload.single('image'), (req, res) => {
-  const { name, description, owner_id } = req.body;
+  const { name, description, owner_id, condition, category } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   if (!name || !description || !owner_id) {
     return res.status(400).json({ error: 'name, description, and owner_id are required' });
   }
   const estimatedMarketValue = req.body.estimatedMarketValue ? parseInt(req.body.estimatedMarketValue, 10) : 0;
-  db.run('INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES (?, ?, ?, ?, ?)', [name, description, owner_id, estimatedMarketValue, imageUrl], function (this: sqlite3.RunResult, err: Error | null) {
-    if (err) {
-      console.error('Error inserting item:', err);
-      res.status(500).json({ error: err.message });
-      return;
+
+  // Note: category is not stored in DB (no column), but we return it for frontend use
+  db.run(
+    'INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl, condition) VALUES (?, ?, ?, ?, ?, ?)',
+    [name, description, owner_id, estimatedMarketValue, imageUrl, condition || 'GOOD'],
+    function (this: sqlite3.RunResult, err: Error | null) {
+      if (err) {
+        console.error('Error inserting item:', err);
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      // Return full item data so the frontend can use it immediately
+      const newItemId = this.lastID;
+      db.get('SELECT * FROM Item WHERE id = ?', [newItemId], (err2: Error | null, item: any) => {
+        if (err2 || !item) {
+          res.json({ id: newItemId, category });
+          return;
+        }
+        res.json({
+          id: String(item.id),
+          ownerId: String(item.owner_id),
+          name: item.name,
+          description: item.description,
+          category: category || null, // Return the category passed from frontend
+          condition: item.condition,
+          estimatedMarketValue: item.estimatedMarketValue,
+          imageUrl: item.imageUrl,
+        });
+      });
     }
-    res.json({ id: this.lastID });
-  });
+  );
 });
 
 // Update an item
@@ -3392,15 +3416,40 @@ app.post('/api/items/:id/refresh-valuation', async (req, res) => {
 // Search external pricing API for products to link
 app.get('/api/external/products/search', async (req, res) => {
   const q = req.query.q as string;
+  const category = req.query.category as string | undefined;
 
   if (!q || q.length < 2) {
     return res.json({ products: [], apiConfigured: isApiConfigured() });
   }
 
   try {
-    const products = await searchPriceChartingProducts(q);
-    res.json({
-      products: products.map(p => ({
+    let products: any[] = [];
+
+    if (isApiConfigured()) {
+      const pcProducts = await searchPriceChartingProducts(q);
+
+      // Filter PriceCharting results based on category
+      let filteredProducts = pcProducts;
+      const normalizedCategory = category?.toLowerCase();
+
+      if (normalizedCategory === 'tcg' || normalizedCategory === 'trading_cards') {
+        // Only include TCG-related platforms
+        const tcgPlatforms = ['pokemon', 'magic', 'yugioh', 'sports-cards', 'trading-cards', 'mtg', 'tcg'];
+        filteredProducts = pcProducts.filter((p: any) => {
+          const platform = (p['console-name'] || '').toLowerCase();
+          return tcgPlatforms.some(t => platform.includes(t));
+        });
+      } else if (normalizedCategory === 'video_games') {
+        // Only include video game platforms, exclude TCG/comics
+        const nonGamePlatforms = ['pokemon', 'magic', 'yugioh', 'sports-cards', 'trading-cards', 'mtg', 'tcg', 'comics'];
+        filteredProducts = pcProducts.filter((p: any) => {
+          const platform = (p['console-name'] || '').toLowerCase();
+          return !nonGamePlatforms.some(t => platform.includes(t));
+        });
+      }
+      // For other categories, return all PriceCharting results
+
+      products = filteredProducts.map((p: any) => ({
         id: p.id,
         name: p['product-name'],
         platform: p['console-name'],
@@ -3408,10 +3457,15 @@ app.get('/api/external/products/search', async (req, res) => {
         loosePrice: p['loose-price'] || 0,
         cibPrice: p['cib-price'] || 0,
         newPrice: p['new-price'] || 0
-      })),
+      }));
+    }
+
+    res.json({
+      products,
       apiConfigured: isApiConfigured()
     });
   } catch (error: any) {
+    console.error('[Search] Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

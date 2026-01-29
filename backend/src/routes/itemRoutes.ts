@@ -41,21 +41,43 @@ router.get('/', (req, res) => {
 
 // Create a new item
 router.post('/', upload.single('image'), (req, res) => {
-    const { name, description, owner_id } = req.body;
+    const { name, description, owner_id, category, condition } = req.body;
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-    if (!name || !description || !owner_id) {
-        return res.status(400).json({ error: 'name, description, and owner_id are required' });
+    if (!name || !owner_id) {
+        return res.status(400).json({ error: 'name and owner_id are required' });
     }
     const estimatedMarketValue = req.body.estimatedMarketValue ? parseInt(req.body.estimatedMarketValue, 10) : 0;
-    db.run('INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl) VALUES (?, ?, ?, ?, ?)', [name, description, owner_id, estimatedMarketValue, imageUrl], function (this: RunResult, err: Error | null) {
-        if (err) {
-            console.error('Error inserting item:', err);
-            res.status(500).json({ error: err.message });
-            return;
+
+    // Map category string to category_id (matching what pricing service expects)
+    const categoryMap: Record<string, number> = {
+        'tcg': 2,           // TCG items - uses JustTCG/PriceCharting
+        'sneakers': 3,      // Sneakers - uses StockX
+        'video_games': 1,   // Video games - uses PriceCharting
+        'collectibles': 4,  // Collectibles - uses eBay
+        'other': 0,         // Other - uses eBay
+    };
+    const category_id = category ? (categoryMap[category] ?? 0) : null;
+
+    db.run(
+        'INSERT INTO Item (name, description, owner_id, estimatedMarketValue, imageUrl, category, category_id, condition) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [name, description || '', owner_id, estimatedMarketValue, imageUrl, category || null, category_id, condition || 'GOOD'],
+        function (this: RunResult, err: Error | null) {
+            if (err) {
+                console.error('Error inserting item:', err);
+                res.status(500).json({ error: err.message });
+                return;
+            }
+            // Return the full created item for the frontend to use
+            db.get('SELECT * FROM Item WHERE id = ?', [this.lastID], (err2: Error | null, item: any) => {
+                if (err2) {
+                    res.json({ id: this.lastID });
+                    return;
+                }
+                res.json(item || { id: this.lastID });
+            });
         }
-        res.json({ id: this.lastID });
-    });
+    );
 });
 
 // Update an item

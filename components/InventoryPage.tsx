@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ItemCard from './ItemCard.tsx';
 import AddItemModal from './AddItemModal.tsx';
-import EditItemModal from './EditItemModal.tsx';
-import ItemValuationModal from './ItemValuationModal.tsx';
+import ItemDetailModal from './ItemDetailModal.tsx';
 import { ItemCardSkeleton } from './Skeleton.tsx';
 import { EmptyInventory } from './EmptyState.tsx';
 import { Item } from '../types';
@@ -16,8 +15,7 @@ const InventoryPage: React.FC = () => {
     const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddItemModal, setShowAddItemModal] = useState(false);
-    const [showEditItemModal, setShowEditItemModal] = useState(false);
-    const [showValuationModal, setShowValuationModal] = useState(false);
+    const [showDetailModal, setShowDetailModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
     // Search and filter state
@@ -45,8 +43,7 @@ const InventoryPage: React.FC = () => {
         fetchItems();
     }, [currentUser]);
 
-    const handleAddItem = (item: { name: string; description: string; image: File | null }) => {
-        // Updated to accept estimatedMarketValueDollars if provided by the modal
+    const handleAddItem = (item: { name: string; description: string; image: File | null; condition: string; category: string }) => {
         if (currentUser) {
             const formData = new FormData();
             formData.append('name', item.name);
@@ -55,26 +52,31 @@ const InventoryPage: React.FC = () => {
                 formData.append('image', item.image);
             }
             formData.append('owner_id', currentUser.id);
-            // If modal supplied an estimatedMarketValue in dollars, convert to cents and send
-            if ((item as any).estimatedMarketValueDollars !== undefined) {
-                const cents = dollarsToCents((item as any).estimatedMarketValueDollars);
-                formData.append('estimatedMarketValue', String(cents));
+            formData.append('condition', item.condition);
+            if (item.category) {
+                formData.append('category', item.category);
             }
 
             fetch('http://localhost:4000/api/items', {
                 method: 'POST',
                 body: formData,
             })
-                .then(() => {
+                .then(response => response.json())
+                .then((newItem) => {
                     setShowAddItemModal(false);
                     fetchItems();
                     fetchUser(currentUser.id).then(user => updateUser(user)).catch(err => console.error('Failed to refresh user after add:', err));
+                    // Auto-open the detail modal for the newly created item
+                    if (newItem && newItem.id) {
+                        setSelectedItem(newItem);
+                        setShowDetailModal(true);
+                    }
                 })
                 .catch(err => console.error('Error adding item:', err));
         }
     };
 
-    const handleEditItem = (item: { name: string; description: string; image: File | null, estimatedMarketValueDollars?: number }) => {
+    const handleEditItem = async (item: { name: string; description: string; image: File | null, estimatedMarketValueDollars?: number, condition?: string }) => {
         if (selectedItem) {
             const formData = new FormData();
             formData.append('name', item.name);
@@ -85,37 +87,38 @@ const InventoryPage: React.FC = () => {
             if (typeof (item as any).estimatedMarketValueDollars === 'number') {
                 formData.append('estimatedMarketValue', String(dollarsToCents((item as any).estimatedMarketValueDollars)));
             }
+            if (item.condition) {
+                formData.append('condition', item.condition);
+            }
 
-            fetch(`http://localhost:4000/api/items/${selectedItem.id}`,
-                {
+            try {
+                await fetch(`http://localhost:4000/api/items/${selectedItem.id}`, {
                     method: 'PUT',
                     body: formData,
-                })
-                .then(() => {
-                    setShowEditItemModal(false);
-                    setSelectedItem(null);
-                    fetchItems();
-                    fetchUser(currentUser.id).then(user => updateUser(user)).catch(err => console.error('Failed to refresh user after edit:', err));
-                })
-                .catch(err => console.error('Error editing item:', err));
+                });
+                fetchItems();
+                fetchUser(currentUser!.id).then(user => updateUser(user)).catch(err => console.error('Failed to refresh user after edit:', err));
+            } catch (err) {
+                console.error('Error editing item:', err);
+            }
         }
     };
 
-    const openEditModal = (item: Item) => {
-        setSelectedItem(item);
-        setShowEditItemModal(true);
-    };
-
-    const handleDeleteItem = (itemId: string | number) => {
-        if (window.confirm('Are you sure you want to delete this item?')) {
-            fetch(`http://localhost:4000/api/items/${itemId}`, {
-                method: 'DELETE',
+    const handleDeleteItem = (itemId: number) => {
+        fetch(`http://localhost:4000/api/items/${itemId}`, {
+            method: 'DELETE',
+        })
+            .then(() => {
+                fetchItems();
+                setShowDetailModal(false);
+                setSelectedItem(null);
             })
-                .then(() => {
-                    fetchItems();
-                })
-                .catch(err => console.error('Error deleting item:', err));
-        }
+            .catch(err => console.error('Error deleting item:', err));
+    };
+
+    const openDetailModal = (item: Item) => {
+        setSelectedItem(item);
+        setShowDetailModal(true);
     };
 
     // Filter and sort items
@@ -187,8 +190,7 @@ const InventoryPage: React.FC = () => {
                                 Your Inventory
                             </h1>
                             <p className="mt-2 text-slate-600 dark:text-gray-300 leading-relaxed max-w-2xl">
-                                Manage your collection here. Add items you're willing to trade, set valuations,
-                                and keep your inventory updated for potential swaps.
+                                Manage your collection here. Click any item to view details, edit, or set prices.
                             </p>
                         </div>
                     </div>
@@ -246,29 +248,25 @@ const InventoryPage: React.FC = () => {
                     </select>
                 </div>
             )}
+
             <AddItemModal
                 show={showAddItemModal}
                 onClose={() => setShowAddItemModal(false)}
                 onAddItem={handleAddItem}
             />
-            <EditItemModal
-                show={showEditItemModal}
+
+            <ItemDetailModal
+                show={showDetailModal}
                 onClose={() => {
-                    setShowEditItemModal(false);
+                    setShowDetailModal(false);
                     setSelectedItem(null);
                 }}
+                item={selectedItem}
+                onItemUpdated={fetchItems}
+                onDeleteItem={handleDeleteItem}
                 onEditItem={handleEditItem}
-                item={selectedItem}
             />
-            <ItemValuationModal
-                show={showValuationModal}
-                onClose={() => {
-                    setShowValuationModal(false);
-                    setSelectedItem(null);
-                }}
-                item={selectedItem}
-                onValuationUpdated={fetchItems}
-            />
+
             {filteredItems.length > 0 ? (
                 <>
                     {searchQuery && (
@@ -281,12 +279,8 @@ const InventoryPage: React.FC = () => {
                             <ItemCard
                                 key={item.id}
                                 item={item}
-                                onEdit={() => openEditModal(item)}
+                                onClick={() => openDetailModal(item)}
                                 onDelete={() => handleDeleteItem(item.id)}
-                                onViewValuation={() => {
-                                    setSelectedItem(item);
-                                    setShowValuationModal(true);
-                                }}
                             />
                         ))}
                     </div>

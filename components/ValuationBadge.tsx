@@ -138,7 +138,7 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({
                     label: 'Unverified',
                     bgColor: 'bg-gray-100',
                     textColor: 'text-gray-600',
-                    icon: '?',
+                    icon: '—',
                     title: 'Unverified Price',
                     description: 'This item isn\'t linked to any price database yet. The displayed value may be inaccurate.',
                     dataSource: 'No external data source connected.',
@@ -251,20 +251,10 @@ const ValuationBadge: React.FC<ValuationBadgeProps> = ({
                         </div>
 
                         {/* Footer */}
-                        <div className="px-5 pb-5 space-y-2">
-                            {itemName && (
-                                <a
-                                    href={getEbaySearchUrl(itemName)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
-                                >
-                                    🔍 Verify on eBay
-                                </a>
-                            )}
+                        <div className="px-5 pb-5">
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors"
+                                className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl text-sm font-medium transition-all"
                             >
                                 Got it
                             </button>

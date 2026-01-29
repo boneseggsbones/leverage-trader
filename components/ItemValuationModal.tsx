@@ -16,6 +16,22 @@ type ActivePanel = null | 'history' | 'autoPrice' | 'setPrice' | 'psa';
 // TCG category ID from the database
 const TCG_CATEGORY_ID = 2;
 
+// Map category to display label (handles both uppercase and lowercase)
+const getCategoryLabel = (category: string | undefined | null): string => {
+    if (!category) return 'item';
+    const normalizedCategory = category.toLowerCase();
+    const categoryLabels: Record<string, string> = {
+        'tcg': 'card',
+        'trading_cards': 'card',
+        'sneakers': 'sneakers',
+        'video_games': 'game',
+        'collectibles': 'collectible',
+        'electronics': 'item',
+        'other': 'item',
+    };
+    return categoryLabels[normalizedCategory] || 'item';
+};
+
 const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, item, onValuationUpdated }) => {
     const { currentUser } = useAuth();
     const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -101,7 +117,9 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                 setAutoMatchedResults([]);
                 setShowManualSearch(false);
                 try {
-                    const result = await searchExternalProducts(item.name);
+                    // Pass category to filter search results
+                    const itemCategory = (item as any)?.category;
+                    const result = await searchExternalProducts(item.name, itemCategory);
                     setAutoMatchedResults(result.products.slice(0, 3)); // Top 3 matches
                 } catch (err) {
                     console.error('Auto-search failed:', err);
@@ -137,7 +155,10 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
 
     const formatCurrency = (cents: number | null | undefined) => {
         if (cents === null || cents === undefined) return '—';
-        return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+        const dollars = cents / 100;
+        // Show cents if there are fractional dollars, otherwise show whole number
+        const hasCents = cents % 100 !== 0;
+        return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 })}`;
     };
 
     const handleSubmitOverride = async () => {
@@ -166,6 +187,19 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
     const isTCG = (valuationData?.item as any)?.category_id === TCG_CATEGORY_ID;
     const hasPSA = !!(valuationData?.item as any)?.psa_grade || !!psaData;
     const isLinked = !!(valuationData?.item as any)?.product_id || valuationData?.apiValuations?.length > 0;
+
+    // Check if this is a fresh item that needs pricing
+    const currentValue = valuationData?.item?.current_emv_cents || item.estimatedMarketValue || 0;
+    const isNewItem = currentValue === 0 && !isLinked && activePanel === null;
+
+    // Get category label for dynamic text
+    const categoryLabel = getCategoryLabel((item as any)?.category);
+
+    // Build full image URL (backend returns relative paths like /uploads/...)
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+    const itemImageUrl = item?.imageUrl
+        ? (item.imageUrl.startsWith('http') ? item.imageUrl : `${backendUrl}${item.imageUrl}`)
+        : null;
 
     // Action tiles configuration
     const tiles = [
@@ -213,92 +247,98 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
                 <div className="relative bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-                    {/* Header - Compact */}
-                    <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 px-6 pt-6 pb-8">
-                        <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
-
-                        {/* Editable Item Name */}
-                        {isEditingName ? (
-                            <div className="flex items-center gap-2 pr-8">
-                                <input
-                                    type="text"
-                                    value={editedName}
-                                    onChange={e => setEditedName(e.target.value)}
-                                    autoFocus
-                                    className="flex-1 bg-white/10 text-white text-sm rounded px-2 py-1 border border-white/20 focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                                    onKeyDown={async e => {
-                                        if (e.key === 'Enter' && editedName.trim()) {
-                                            // Save the name
-                                            try {
-                                                await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/items/${item.id}`, {
-                                                    method: 'PUT',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ name: editedName.trim() })
-                                                });
-                                                loadData();
-                                                if (onValuationUpdated) onValuationUpdated();
-                                            } catch (err) {
-                                                console.error('Failed to update name:', err);
-                                            }
-                                            setIsEditingName(false);
-                                        } else if (e.key === 'Escape') {
-                                            setIsEditingName(false);
-                                        }
-                                    }}
-                                    onBlur={() => setIsEditingName(false)}
-                                />
-                                <span className="text-xs text-white/50">Enter to save</span>
+                    {/* Epaulette Badge - Top Left Corner */}
+                    {!loading && valuationData?.item?.emv_source && (
+                        <div className="absolute top-3 left-3 z-10">
+                            <div className={`text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5 ${['api', 'consolidated', 'multi_source'].includes(valuationData.item.emv_source)
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                                : valuationData.item.emv_source === 'user_override'
+                                    ? 'bg-gradient-to-r from-violet-500 to-purple-500'
+                                    : 'bg-slate-600'
+                                }`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                                {['api', 'consolidated', 'multi_source'].includes(valuationData.item.emv_source) ? 'Verified' :
+                                    valuationData.item.emv_source === 'user_override' ? 'Custom' :
+                                        'Unverified'}
                             </div>
-                        ) : (
-                            <button
-                                onClick={() => { setEditedName(valuationData?.item?.name || item.name); setIsEditingName(true); }}
-                                className="text-slate-400 text-sm truncate pr-8 hover:text-white transition-colors flex items-center gap-1 group"
-                            >
-                                {valuationData?.item?.name || item.name}
-                                <span className="text-xs opacity-0 group-hover:opacity-100 text-white/50">✏️</span>
-                            </button>
-                        )}
+                        </div>
+                    )}
 
-                        {/* Hero Value */}
-                        {loading ? (
-                            <div className="text-4xl font-bold text-white/50 mt-2">Loading...</div>
-                        ) : (
-                            <div className="mt-2 flex items-baseline gap-3">
+                    {/* Header - Enhanced Design */}
+                    <div className="relative bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 px-6 pt-6 pb-6">
+                        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-all">✕</button>
+
+                        {/* Centered Item Card */}
+                        <div className="flex flex-col items-center text-center">
+                            {/* Item Image - Larger & More Prominent */}
+                            {itemImageUrl && (
+                                <div className="w-24 h-24 rounded-2xl overflow-hidden bg-slate-700 shadow-xl ring-2 ring-white/10 mb-4">
+                                    <img
+                                        src={itemImageUrl}
+                                        alt={item.name}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Item Name */}
+                            <div className="w-full max-w-[280px]">
+                                {isEditingName ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                        <input
+                                            type="text"
+                                            value={editedName}
+                                            onChange={e => setEditedName(e.target.value)}
+                                            autoFocus
+                                            className="w-full bg-white/10 text-white text-lg font-semibold text-center rounded-lg px-3 py-2 border border-white/20 focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                            onKeyDown={async e => {
+                                                if (e.key === 'Enter' && editedName.trim()) {
+                                                    // Save the name
+                                                    try {
+                                                        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/api/items/${item.id}`, {
+                                                            method: 'PUT',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ name: editedName.trim() })
+                                                        });
+                                                        loadData();
+                                                        if (onValuationUpdated) onValuationUpdated();
+                                                    } catch (err) {
+                                                        console.error('Failed to update name:', err);
+                                                    }
+                                                    setIsEditingName(false);
+                                                } else if (e.key === 'Escape') {
+                                                    setIsEditingName(false);
+                                                }
+                                            }}
+                                            onBlur={() => setIsEditingName(false)}
+                                        />
+                                        <span className="text-xs text-white/40">Press Enter to save</span>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => { setEditedName(valuationData?.item?.name || item.name); setIsEditingName(true); }}
+                                        className="text-white text-lg font-semibold truncate hover:text-violet-300 transition-colors flex items-center justify-center gap-1.5 group w-full"
+                                    >
+                                        <span className="truncate">{valuationData?.item?.name || item.name}</span>
+                                        <span className="text-xs opacity-0 group-hover:opacity-100 text-white/50 transition-opacity">✏️</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent my-5" />
+
+                        {/* Value Section - Clean & Simple */}
+                        <div className="flex flex-col items-center">
+                            {loading ? (
+                                <div className="text-3xl font-bold text-white/50">Loading...</div>
+                            ) : (
                                 <span className="text-5xl font-bold text-white tracking-tight">
                                     {formatCurrency(valuationData?.item?.current_emv_cents)}
                                 </span>
-                                <ValuationBadge
-                                    source={valuationData?.item?.emv_source}
-                                    lastUpdated={(valuationData?.item as any)?.emv_updated_at}
-                                    condition={(valuationData?.item as any)?.condition}
-                                    size="sm"
-                                    itemName={item?.name}
-                                />
-                            </div>
-                        )}
-
-                        {/* Quick refresh */}
-                        <button
-                            onClick={async () => {
-                                if (!item) return;
-                                setRefreshing(true);
-                                try {
-                                    const result: RefreshValuationResult = await refreshItemValuationApi(item.id);
-                                    setPriceSources(result.sources);
-                                    setPriceTrend(result.trend);
-                                    setPriceVolatility(result.volatility);
-                                    loadData();
-                                    if (onValuationUpdated) onValuationUpdated();
-                                } finally {
-                                    setRefreshing(false);
-                                }
-                            }}
-                            disabled={refreshing}
-                            className="mt-3 text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
-                        >
-                            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-                            {refreshing ? 'Updating...' : 'Refresh price from API'}
-                        </button>
+                            )}
+                        </div>
 
                         {/* Price Source Breakdown */}
                         {priceSources && priceSources.length > 0 && (
@@ -340,20 +380,63 @@ const ItemValuationModal: React.FC<ItemValuationModalProps> = ({ show, onClose, 
                     {/* Main Content */}
                     <div className="p-5">
                         {!activePanel ? (
-                            /* Action Tiles Grid */
-                            <div className={`grid ${tiles.length === 4 ? 'grid-cols-2' : 'grid-cols-3'} gap-3`}>
-                                {tiles.map(tile => (
+                            isNewItem ? (
+                                /* Onboarding state for new items */
+                                <div className="space-y-4">
+                                    <div className="text-center py-2">
+                                        <p className="text-lg font-semibold text-slate-800 dark:text-white">
+                                            🎉 Item added!
+                                        </p>
+                                        <p className="text-sm text-slate-500 mt-1">
+                                            Now let's figure out what your {categoryLabel} is worth
+                                        </p>
+                                    </div>
+
+                                    {/* Primary CTA - Auto Price */}
                                     <button
-                                        key={tile.id}
-                                        onClick={() => setActivePanel(tile.id as ActivePanel)}
-                                        className={`${tile.bgColor} rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-[0.98]`}
+                                        onClick={() => setActivePanel('autoPrice')}
+                                        className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-2xl p-5 text-left transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
                                     >
-                                        <span className="text-2xl">{tile.icon}</span>
-                                        <p className="font-semibold text-slate-800 mt-2 text-sm">{tile.label}</p>
-                                        <p className="text-xs text-slate-500 mt-0.5">{tile.sublabel}</p>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-3xl">🔗</span>
+                                            <div>
+                                                <p className="font-bold text-lg">Auto-Price</p>
+                                                <p className="text-white/80 text-sm">Match to a catalog for live pricing</p>
+                                            </div>
+                                            <span className="ml-auto text-white/60 text-xl">→</span>
+                                        </div>
                                     </button>
-                                ))}
-                            </div>
+
+                                    {/* Secondary option */}
+                                    <button
+                                        onClick={() => setActivePanel('setPrice')}
+                                        className="w-full bg-slate-100 dark:bg-gray-700 rounded-2xl p-4 text-left transition-all hover:bg-slate-200 dark:hover:bg-gray-600"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">✏️</span>
+                                            <div>
+                                                <p className="font-semibold text-slate-700 dark:text-slate-200">Set value manually</p>
+                                                <p className="text-xs text-slate-500">I know what this is worth</p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            ) : (
+                                /* Regular Action Tiles Grid */
+                                <div className={`grid ${tiles.length === 4 ? 'grid-cols-2' : 'grid-cols-3'} gap-3`}>
+                                    {tiles.map(tile => (
+                                        <button
+                                            key={tile.id}
+                                            onClick={() => setActivePanel(tile.id as ActivePanel)}
+                                            className={`${tile.bgColor} rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-[0.98]`}
+                                        >
+                                            <span className="text-2xl">{tile.icon}</span>
+                                            <p className="font-semibold text-slate-800 mt-2 text-sm">{tile.label}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">{tile.sublabel}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            )
                         ) : (
                             /* Expanded Panel */
                             <div className="animate-in slide-in-from-bottom-2 duration-200">

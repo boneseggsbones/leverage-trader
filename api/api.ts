@@ -413,8 +413,12 @@ export const refreshItemValuation = async (itemId: string | number): Promise<Ref
     return response.json();
 };
 
-export const searchExternalProducts = async (query: string): Promise<ExternalSearchResult> => {
-    const response = await fetch(`${API_URL}/external/products/search?q=${encodeURIComponent(query)}`);
+export const searchExternalProducts = async (query: string, category?: string): Promise<ExternalSearchResult> => {
+    const params = new URLSearchParams({ q: query });
+    if (category) {
+        params.append('category', category);
+    }
+    const response = await fetch(`${API_URL}/external/products/search?${params.toString()}`);
     if (!response.ok) {
         throw new Error('Failed to search external products');
     }
