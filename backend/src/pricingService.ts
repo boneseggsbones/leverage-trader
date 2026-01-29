@@ -497,9 +497,21 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                         });
                     }
 
+                    // eBay Official
                     if (sourceName === 'ebay' && result && result.sampleSize > 0) {
                         const ebayWeight = result.sampleSize >= 5 ? 0.6 : 0.4;
                         const ebayConfidence = Math.min(95, 60 + (result.sampleSize * 3));
+
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Search: "${searchQuery}" (condition: ${condition})`,
+                            responseSummary: `Found ${result.sampleSize} listings, avg: $${(result.averagePrice / 100).toFixed(2)}`,
+                            priceReturned: result.averagePrice,
+                            success: true,
+                            durationMs: totalDurationMs
+                        });
+
                         sources.push({
                             provider: 'ebay',
                             price: result.averagePrice,
@@ -508,12 +520,34 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                             dataPoints: result.sampleSize,
                             lastUpdated: result.lastUpdated
                         });
+                    } else if (sourceName === 'ebay') {
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Search: "${searchQuery}" (condition: ${condition})`,
+                            responseSummary: result ? 'No matching listings found' : 'No response',
+                            success: false,
+                            errorMessage: result === null ? 'API returned null' : 'No listings found',
+                            durationMs: totalDurationMs
+                        });
                     }
 
+                    // RapidAPI eBay
                     if (sourceName === 'rapidapi_ebay' && result && result.sampleSize > 0) {
                         const rapidWeight = result.sampleSize >= 10 ? 0.5 :
                             result.sampleSize >= 5 ? 0.4 : 0.3;
                         const rapidConfidence = Math.min(90, 50 + (result.sampleSize * 2));
+
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Search: "${searchQuery}"`,
+                            responseSummary: `Found ${result.sampleSize} sold items, avg: $${(result.averagePrice / 100).toFixed(2)}`,
+                            priceReturned: result.averagePrice,
+                            success: true,
+                            durationMs: totalDurationMs
+                        });
+
                         sources.push({
                             provider: 'rapidapi_ebay',
                             price: result.averagePrice,
@@ -522,10 +556,32 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                             dataPoints: result.sampleSize,
                             lastUpdated: result.lastUpdated
                         });
+                    } else if (sourceName === 'rapidapi_ebay') {
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Search: "${searchQuery}"`,
+                            responseSummary: result ? 'No sold items found' : 'No response',
+                            success: false,
+                            errorMessage: result === null ? 'API returned null' : 'No sold items found',
+                            durationMs: totalDurationMs
+                        });
                     }
 
+                    // JustTCG
                     if (sourceName === 'justtcg' && Array.isArray(result) && result.length > 0) {
                         const bestMatch = result[0];
+
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Card search: "${searchQuery}"`,
+                            responseSummary: `Found ${result.length} cards, best: ${bestMatch.name} @ $${(bestMatch.marketPrice / 100).toFixed(2)}`,
+                            priceReturned: bestMatch.marketPrice,
+                            success: true,
+                            durationMs: totalDurationMs
+                        });
+
                         sources.push({
                             provider: 'justtcg',
                             price: bestMatch.marketPrice,
@@ -534,10 +590,32 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                             dataPoints: 1,
                             lastUpdated: bestMatch.lastUpdated
                         });
+                    } else if (sourceName === 'justtcg') {
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Card search: "${searchQuery}"`,
+                            responseSummary: 'No matching cards found',
+                            success: false,
+                            errorMessage: Array.isArray(result) ? 'No cards matched' : 'API returned null',
+                            durationMs: totalDurationMs
+                        });
                     }
 
+                    // StockX
                     if (sourceName === 'stockx' && Array.isArray(result) && result.length > 0) {
                         const bestMatch = result[0];
+
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Sneaker search: "${searchQuery}"`,
+                            responseSummary: `Found ${result.length} sneakers, best: ${bestMatch.name} @ $${(bestMatch.lastSale / 100).toFixed(2)}`,
+                            priceReturned: bestMatch.lastSale,
+                            success: true,
+                            durationMs: totalDurationMs
+                        });
+
                         sources.push({
                             provider: 'stockx',
                             price: bestMatch.lastSale,
@@ -545,6 +623,16 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                             confidence: 95,
                             dataPoints: 1,
                             lastUpdated: bestMatch.lastUpdated
+                        });
+                    } else if (sourceName === 'stockx') {
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Sneaker search: "${searchQuery}"`,
+                            responseSummary: 'No matching sneakers found',
+                            success: false,
+                            errorMessage: Array.isArray(result) ? 'No sneakers matched' : 'API returned null',
+                            durationMs: totalDurationMs
                         });
                     }
                 });
