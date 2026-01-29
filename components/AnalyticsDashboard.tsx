@@ -284,7 +284,6 @@ const AnalyticsDashboard: React.FC = () => {
                     {apiStats.map((stat) => {
                         const icons: Record<string, string> = {
                             'PriceCharting': '📊',
-                            'eBay (Official)': '🛒',
                             'RapidAPI eBay': '⚡',
                             'JustTCG': '🃏',
                             'StockX': '👟',
@@ -299,8 +298,8 @@ const AnalyticsDashboard: React.FC = () => {
                                 <button
                                     onClick={() => setExpandedApi(isExpanded ? null : stat.api_name)}
                                     className={`w-full rounded-xl p-4 text-left transition-all ${stat.call_count > 0
-                                            ? 'bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700 hover:border-violet-400'
-                                            : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
+                                        ? 'bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700 hover:border-violet-400'
+                                        : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
                                         } ${isExpanded ? 'ring-2 ring-violet-400' : ''}`}
                                 >
                                     <div className="flex items-center justify-between">
@@ -341,8 +340,8 @@ const AnalyticsDashboard: React.FC = () => {
                                             <div
                                                 key={call.id}
                                                 className={`rounded-lg p-3 text-sm ${call.success
-                                                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700'
-                                                        : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700'
+                                                    ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700'
+                                                    : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700'
                                                     }`}
                                             >
                                                 <div className="flex justify-between items-start">

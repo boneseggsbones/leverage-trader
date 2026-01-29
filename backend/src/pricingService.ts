@@ -1,5 +1,5 @@
 import { db, recordApiCall, logApiCall } from './database';
-import { getEbayPricing, isEbayConfigured, EbayPriceData } from './ebayService';
+// Note: eBay Official (Marketplace Insights) removed - requires special approval and is redundant with RapidAPI eBay
 import { getEbaySoldPrice, isRapidApiConfigured, optimizeQueryForEbay } from './rapidApiEbayService';
 import { searchTcgCards, isJustTcgConfigured, isTcgItem, TcgPriceData } from './justTcgService';
 import { searchSneakers, isStockxConfigured, isSneakerItem, SneakerPriceData } from './stockxService';
@@ -7,7 +7,7 @@ import { searchSneakers, isStockxConfigured, isSneakerItem, SneakerPriceData } f
 // === Consolidated Pricing Types ===
 
 export interface PriceSource {
-    provider: 'pricecharting' | 'ebay' | 'rapidapi_ebay' | 'justtcg' | 'stockx';
+    provider: 'pricecharting' | 'rapidapi_ebay' | 'justtcg' | 'stockx';
     price: number;          // in cents
     weight: number;         // 0-1
     confidence: number;     // 0-100
@@ -151,8 +151,8 @@ export const refreshItemValuation = async (itemId: number): Promise<{
     trend?: 'up' | 'down' | 'stable';
     volatility?: 'low' | 'medium' | 'high';
 }> => {
-    // If eBay is configured, use consolidated pricing from multiple sources
-    if (isEbayConfigured()) {
+    // If any pricing API is configured, use consolidated pricing from multiple sources
+    if (isRapidApiConfigured() || isJustTcgConfigured() || isStockxConfigured() || isApiConfigured()) {
         const consolidated = await getConsolidatedValuation(itemId);
         if (consolidated.success && consolidated.consolidated) {
             return {
@@ -388,16 +388,7 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                     });
                 }
 
-                // eBay Marketplace Insights
-                if (isEbayConfigured() && searchQuery) {
-                    apiPromises.push({
-                        name: 'ebay',
-                        promise: getEbayPricing(searchQuery, { condition }).catch(e => {
-                            console.error('eBay fetch error:', e);
-                            return null;
-                        })
-                    });
-                }
+                // Note: eBay Official (Marketplace Insights) removed - redundant with RapidAPI eBay
 
                 // RapidAPI eBay (sold listings)
                 if (isRapidApiConfigured() && searchQuery) {
@@ -497,40 +488,7 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                         });
                     }
 
-                    // eBay Official
-                    if (sourceName === 'ebay' && result && result.sampleSize > 0) {
-                        const ebayWeight = result.sampleSize >= 5 ? 0.6 : 0.4;
-                        const ebayConfidence = Math.min(95, 60 + (result.sampleSize * 3));
-
-                        logApiCall({
-                            apiName: apiDisplayName,
-                            itemName: searchQuery,
-                            requestQuery: `Search: "${searchQuery}" (condition: ${condition})`,
-                            responseSummary: `Found ${result.sampleSize} listings, avg: $${(result.averagePrice / 100).toFixed(2)}`,
-                            priceReturned: result.averagePrice,
-                            success: true,
-                            durationMs: totalDurationMs
-                        });
-
-                        sources.push({
-                            provider: 'ebay',
-                            price: result.averagePrice,
-                            weight: ebayWeight,
-                            confidence: ebayConfidence,
-                            dataPoints: result.sampleSize,
-                            lastUpdated: result.lastUpdated
-                        });
-                    } else if (sourceName === 'ebay') {
-                        logApiCall({
-                            apiName: apiDisplayName,
-                            itemName: searchQuery,
-                            requestQuery: `Search: "${searchQuery}" (condition: ${condition})`,
-                            responseSummary: result ? 'No matching listings found' : 'No response',
-                            success: false,
-                            errorMessage: result === null ? 'API returned null' : 'No listings found',
-                            durationMs: totalDurationMs
-                        });
-                    }
+                    // Note: eBay Official result processing removed - using RapidAPI eBay instead
 
                     // RapidAPI eBay
                     if (sourceName === 'rapidapi_ebay' && result && result.sampleSize > 0) {
@@ -660,19 +618,10 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                     sources.reduce((sum, s) => sum + (s.confidence * s.weight), 0)
                 );
 
-                // Determine trend from eBay data if available
-                const ebaySource = sources.find(s => s.provider === 'ebay');
+                // Determine trend from RapidAPI data if available (simplified since we removed eBay Official)
                 let trend: 'up' | 'down' | 'stable' = 'stable';
                 let volatility: 'low' | 'medium' | 'high' = 'low';
-
-                if (ebaySource) {
-                    // Re-fetch eBay data for trend/volatility (they're in the original data)
-                    const ebayData = await getEbayPricing(searchQuery, { condition });
-                    if (ebayData) {
-                        trend = ebayData.trend;
-                        volatility = ebayData.volatility;
-                    }
-                }
+                // Note: For now using stable/low defaults - could enhance RapidAPI service to calculate trend
 
                 // Cache the consolidated result
                 const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
