@@ -1,4 +1,4 @@
-import { db, recordApiCall } from './database';
+import { db, recordApiCall, logApiCall } from './database';
 import { getEbayPricing, isEbayConfigured, EbayPriceData } from './ebayService';
 import { getEbaySoldPrice, isRapidApiConfigured, optimizeQueryForEbay } from './rapidApiEbayService';
 import { searchTcgCards, isJustTcgConfigured, isTcgItem, TcgPriceData } from './justTcgService';
@@ -443,6 +443,7 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                 const results = await Promise.all(apiPromises.map(p => p.promise));
 
                 console.log(`[Pricing] All sources responded in ${Date.now() - startTime}ms`);
+                const totalDurationMs = Date.now() - startTime;
 
                 // Process results and track API calls
                 results.forEach((result, index) => {
@@ -456,11 +457,24 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                         'justtcg': 'JustTCG',
                         'stockx': 'StockX'
                     };
-                    recordApiCall(apiNameMap[sourceName] || sourceName, result === null ? 'API returned null' : undefined);
+                    const apiDisplayName = apiNameMap[sourceName] || sourceName;
+                    recordApiCall(apiDisplayName, result === null ? 'API returned null' : undefined);
 
                     if (sourceName === 'pricecharting' && result) {
                         const priceField = CONDITION_TO_PRICE_FIELD[condition] || 'loose-price';
                         const valueCents = (result[priceField] as number) || (result['loose-price'] as number) || 0;
+
+                        // Log detailed call
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Product ID: ${item.pricecharting_id}`,
+                            responseSummary: valueCents > 0 ? `Found ${priceField}: $${(valueCents / 100).toFixed(2)}` : 'No price found',
+                            priceReturned: valueCents,
+                            success: valueCents > 0,
+                            durationMs: totalDurationMs
+                        });
+
                         if (valueCents > 0) {
                             sources.push({
                                 provider: 'pricecharting',
@@ -471,6 +485,16 @@ export const getConsolidatedValuation = async (itemId: number): Promise<{
                                 lastUpdated: now
                             });
                         }
+                    } else if (sourceName === 'pricecharting') {
+                        logApiCall({
+                            apiName: apiDisplayName,
+                            itemName: searchQuery,
+                            requestQuery: `Product ID: ${item.pricecharting_id}`,
+                            responseSummary: 'No response',
+                            success: false,
+                            errorMessage: 'API returned null',
+                            durationMs: totalDurationMs
+                        });
                     }
 
                     if (sourceName === 'ebay' && result && result.sampleSize > 0) {

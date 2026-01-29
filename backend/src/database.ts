@@ -677,6 +677,22 @@ const init = () => {
         error_count INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       );
+
+      -- Detailed API call log for debugging and analytics
+      CREATE TABLE IF NOT EXISTS api_call_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        api_name TEXT NOT NULL,
+        item_name TEXT,
+        request_query TEXT,
+        response_summary TEXT,
+        price_returned INTEGER,
+        success INTEGER DEFAULT 1,
+        error_message TEXT,
+        duration_ms INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_api_call_log_api ON api_call_log(api_name);
+      CREATE INDEX IF NOT EXISTS idx_api_call_log_created ON api_call_log(created_at DESC);
     `, (err) => {
       if (err) {
         reject(err);
@@ -1021,4 +1037,61 @@ const getApiCallStats = (): Promise<Array<{
   });
 };
 
-export { db, init, migrate, seedValuationData, recordApiCall, getApiCallStats };
+/**
+ * Log a detailed API call
+ */
+const logApiCall = (params: {
+  apiName: string;
+  itemName?: string;
+  requestQuery?: string;
+  responseSummary?: string;
+  priceReturned?: number;
+  success: boolean;
+  errorMessage?: string;
+  durationMs?: number;
+}): Promise<void> => {
+  return new Promise((resolve) => {
+    db.run(`
+      INSERT INTO api_call_log (api_name, item_name, request_query, response_summary, price_returned, success, error_message, duration_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      params.apiName,
+      params.itemName || null,
+      params.requestQuery || null,
+      params.responseSummary || null,
+      params.priceReturned || null,
+      params.success ? 1 : 0,
+      params.errorMessage || null,
+      params.durationMs || null
+    ], () => resolve());
+  });
+};
+
+/**
+ * Get detailed API call log (most recent first)
+ */
+const getApiCallLog = (limit: number = 100): Promise<Array<{
+  id: number;
+  api_name: string;
+  item_name: string | null;
+  request_query: string | null;
+  response_summary: string | null;
+  price_returned: number | null;
+  success: number;
+  error_message: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}>> => {
+  return new Promise((resolve) => {
+    db.all(`SELECT * FROM api_call_log ORDER BY created_at DESC LIMIT ?`, [limit], (err, rows: any[]) => {
+      if (err) {
+        console.error('Error getting API call log:', err);
+        resolve([]);
+      } else {
+        resolve(rows || []);
+      }
+    });
+  });
+};
+
+export { db, init, migrate, seedValuationData, recordApiCall, getApiCallStats, logApiCall, getApiCallLog };

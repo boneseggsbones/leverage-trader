@@ -39,6 +39,23 @@ const AnalyticsDashboard: React.FC = () => {
         last_error: string | null;
     }>>([]);
 
+    // API Call Log (detailed)
+    const [apiCallLog, setApiCallLog] = useState<Array<{
+        id: number;
+        api_name: string;
+        item_name: string | null;
+        request_query: string | null;
+        response_summary: string | null;
+        price_returned: number | null;
+        success: number;
+        error_message: string | null;
+        duration_ms: number | null;
+        created_at: string;
+    }>>([]);
+
+    // Expanded API (for showing call log)
+    const [expandedApi, setExpandedApi] = useState<string | null>(null);
+
     useEffect(() => {
         if (!currentUser) return;
 
@@ -47,11 +64,15 @@ const AnalyticsDashboard: React.FC = () => {
             fetchUserAnalytics(currentUser.id),
             fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'}/api/analytics/api-stats`)
                 .then(res => res.json())
+                .catch(() => []),
+            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'}/api/analytics/api-call-log?limit=50`)
+                .then(res => res.json())
                 .catch(() => [])
         ])
-            .then(([data, stats]) => {
+            .then(([data, stats, log]) => {
                 setAnalytics(data);
                 setApiStats(stats || []);
+                setApiCallLog(log || []);
                 setError(null);
             })
             .catch(err => setError(err.message))
@@ -257,8 +278,9 @@ const AnalyticsDashboard: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm mt-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                     <span className="text-xl">🔌</span> API Usage Statistics
+                    <span className="text-xs text-gray-400 font-normal ml-2">(click to expand)</span>
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div className="space-y-3">
                     {apiStats.map((stat) => {
                         const icons: Record<string, string> = {
                             'PriceCharting': '📊',
@@ -268,31 +290,105 @@ const AnalyticsDashboard: React.FC = () => {
                             'StockX': '👟',
                             'PSA': '🏆'
                         };
+                        const isExpanded = expandedApi === stat.api_name;
+                        const callsForApi = apiCallLog.filter(c => c.api_name === stat.api_name);
+
                         return (
-                            <div
-                                key={stat.api_name}
-                                className={`rounded-xl p-3 text-center ${stat.call_count > 0
-                                    ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700'
-                                    : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
-                                    }`}
-                            >
-                                <div className="text-2xl mb-1">{icons[stat.api_name] || '🔗'}</div>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 font-medium truncate">{stat.api_name}</p>
-                                <p className={`text-xl font-bold ${stat.call_count > 0
-                                    ? 'text-violet-600 dark:text-violet-400'
-                                    : 'text-gray-400 dark:text-gray-500'
-                                    }`}>
-                                    {stat.call_count.toLocaleString()}
-                                </p>
-                                {stat.error_count > 0 && (
-                                    <p className="text-xs text-amber-500 mt-1" title={stat.last_error || ''}>
-                                        ⚠️ {stat.error_count} errors
-                                    </p>
+                            <div key={stat.api_name}>
+                                {/* API Header - Clickable */}
+                                <button
+                                    onClick={() => setExpandedApi(isExpanded ? null : stat.api_name)}
+                                    className={`w-full rounded-xl p-4 text-left transition-all ${stat.call_count > 0
+                                            ? 'bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-700 hover:border-violet-400'
+                                            : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'
+                                        } ${isExpanded ? 'ring-2 ring-violet-400' : ''}`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">{icons[stat.api_name] || '🔗'}</span>
+                                            <div>
+                                                <p className="font-medium text-gray-800 dark:text-white">{stat.api_name}</p>
+                                                {stat.last_called_at && (
+                                                    <p className="text-xs text-gray-500">
+                                                        Last: {new Date(stat.last_called_at).toLocaleString()}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-right">
+                                                <p className={`text-2xl font-bold ${stat.call_count > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-gray-400'
+                                                    }`}>
+                                                    {stat.call_count.toLocaleString()}
+                                                </p>
+                                                <p className="text-xs text-gray-500">calls</p>
+                                            </div>
+                                            {stat.error_count > 0 && (
+                                                <div className="text-right">
+                                                    <p className="text-lg font-bold text-amber-500">{stat.error_count}</p>
+                                                    <p className="text-xs text-amber-500">errors</p>
+                                                </div>
+                                            )}
+                                            <span className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                                        </div>
+                                    </div>
+                                </button>
+
+                                {/* Expanded Call Log */}
+                                {isExpanded && callsForApi.length > 0 && (
+                                    <div className="mt-2 ml-4 border-l-2 border-violet-200 dark:border-violet-700 pl-4 space-y-2">
+                                        {callsForApi.map(call => (
+                                            <div
+                                                key={call.id}
+                                                className={`rounded-lg p-3 text-sm ${call.success
+                                                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700'
+                                                        : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700'
+                                                    }`}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-gray-800 dark:text-white">
+                                                            {call.item_name || 'Unknown item'}
+                                                        </p>
+                                                        {call.request_query && (
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                📤 <span className="font-mono">{call.request_query}</span>
+                                                            </p>
+                                                        )}
+                                                        {call.response_summary && (
+                                                            <p className={`text-xs mt-1 ${call.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                                📥 {call.response_summary}
+                                                            </p>
+                                                        )}
+                                                        {call.error_message && (
+                                                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                                                ❌ {call.error_message}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0 ml-3">
+                                                        {call.price_returned && call.price_returned > 0 && (
+                                                            <p className="font-bold text-green-600 dark:text-green-400">
+                                                                ${(call.price_returned / 100).toFixed(2)}
+                                                            </p>
+                                                        )}
+                                                        <p className="text-xs text-gray-400">
+                                                            {new Date(call.created_at).toLocaleTimeString()}
+                                                        </p>
+                                                        {call.duration_ms && (
+                                                            <p className="text-xs text-gray-400">{call.duration_ms}ms</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 )}
-                                {stat.last_called_at && (
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        {new Date(stat.last_called_at).toLocaleDateString()}
-                                    </p>
+
+                                {isExpanded && callsForApi.length === 0 && (
+                                    <div className="mt-2 ml-4 text-sm text-gray-400 py-2">
+                                        No detailed call logs available for this API yet.
+                                    </div>
                                 )}
                             </div>
                         );

@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { db, init, migrate, seedValuationData, getApiCallStats } from './database';
+import { db, init, migrate, seedValuationData, getApiCallStats, getApiCallLog } from './database';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
@@ -4836,6 +4836,22 @@ app.get('/api/analytics/api-stats', async (_req, res) => {
   } catch (err) {
     console.error('Error getting API stats:', err);
     res.status(500).json({ error: 'Failed to get API statistics' });
+  }
+});
+
+/**
+ * @route GET /api/analytics/api-call-log
+ * @desc Get detailed API call log with request/response info
+ * @access Public
+ */
+app.get('/api/analytics/api-call-log', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const log = await getApiCallLog(limit);
+    res.json(log);
+  } catch (err) {
+    console.error('Error getting API call log:', err);
+    res.status(500).json({ error: 'Failed to get API call log' });
   }
 });
 
