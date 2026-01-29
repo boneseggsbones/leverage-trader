@@ -28,6 +28,7 @@ import { normalizeLocation, normalizeCity, normalizeState } from './locationUtil
 import { calculateDistance, getCoordinates, getZipCodeData } from './distanceService';
 import { createSetupIntent, savePaymentMethod, getPaymentProvidersStatus, isStripeConfigured } from './payments/paymentMethodService';
 import { createProCheckoutSession, getSubscriptionStatus, createCustomerPortalSession, syncSubscriptionFromStripe } from './subscriptionService';
+import { initRedis, getCacheStats, getCachedSearchResults, cacheSearchResults } from './priceCacheService';
 import { createLinkToken, exchangePublicToken, deletePlaidItem, isPlaidConfigured } from './payments/plaidService';
 import { createConnectedAccount, getConnectedAccount, refreshConnectedAccountStatus, createOnboardingLink, initConnectedAccountsTable } from './payments/stripeConnectService';
 import {
@@ -3423,6 +3424,13 @@ app.get('/api/external/products/search', async (req, res) => {
   }
 
   try {
+    // Check Redis cache first for fast response
+    const cached = await getCachedSearchResults<{ products: any[], apiConfigured: boolean }>(q, category);
+    if (cached) {
+      console.log(`[Search] Cache HIT for "${q}" (category: ${category || 'all'})`);
+      return res.json(cached);
+    }
+
     let products: any[] = [];
     const normalizedCategory = category?.toLowerCase();
 
@@ -3508,10 +3516,15 @@ app.get('/api/external/products/search', async (req, res) => {
       }
     }
 
-    res.json({
+    const response = {
       products,
       apiConfigured: isApiConfigured() || isRapidApiConfigured()
-    });
+    };
+
+    // Cache the results for 1 hour
+    await cacheSearchResults(q, category, response);
+
+    res.json(response);
   } catch (error: any) {
     console.error('[Search] Error:', error.message);
     res.status(500).json({ error: error.message });
@@ -3544,7 +3557,9 @@ app.post('/api/items/:id/link-product', async (req, res) => {
 });
 
 // Check if pricing API is configured
-app.get('/api/pricing/status', (req, res) => {
+app.get('/api/pricing/status', async (req, res) => {
+  const cacheStats = await getCacheStats();
+
   res.json({
     configured: isApiConfigured() || isEbayConfigured() || isRapidApiConfigured() || isJustTcgConfigured() || isStockxConfigured(),
     providers: [
@@ -3553,7 +3568,8 @@ app.get('/api/pricing/status', (req, res) => {
       { name: 'rapidapi_ebay', configured: isRapidApiConfigured(), description: 'eBay Sold Listings (via RapidAPI)' },
       { name: 'justtcg', configured: isJustTcgConfigured(), description: 'Trading Cards (Pokémon, MTG, Yu-Gi-Oh)' },
       { name: 'stockx', configured: isStockxConfigured(), description: 'Sneakers & Streetwear' }
-    ]
+    ],
+    cache: cacheStats
   });
 });
 
@@ -4964,6 +4980,7 @@ if (require.main === module) {
     .then(() => init())
     .then(() => seedValuationData())
     .then(() => initConnectedAccountsTable())
+    .then(() => initRedis()) // Initialize Redis cache
     .then(() => {
       // Initialize WebSocket server
       initWebSocket(httpServer);

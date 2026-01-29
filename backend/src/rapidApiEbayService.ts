@@ -5,7 +5,11 @@
  * completed/sold listing data when PriceCharting doesn't cover an item.
  * 
  * API: https://rapidapi.com/rubensmau/api/ebay-average-selling-price
+ * 
+ * Now with Redis caching (2hr TTL) for improved performance and cost savings.
  */
+
+import { getCachedEbaySoldPrice, cacheEbaySoldPrice, hashQuery } from './priceCacheService';
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const RAPIDAPI_HOST = 'ebay-average-selling-price.p.rapidapi.com';
@@ -80,6 +84,14 @@ export const getEbaySoldPrice = async (
             ...(options.categoryId && { category_id: options.categoryId }),
         };
 
+        // Check Redis cache first
+        const cacheKey = query.trim().toLowerCase();
+        const cached = await getCachedEbaySoldPrice<RapidApiEbaySoldPrice>(cacheKey);
+        if (cached) {
+            console.log(`[RapidAPI eBay] Cache HIT for "${query}"`);
+            return cached;
+        }
+
         console.log(`[RapidAPI eBay] Searching for: "${query}"`);
 
         const response = await fetch(RAPIDAPI_URL, {
@@ -136,6 +148,9 @@ export const getEbaySoldPrice = async (
             condition: p.condition,
             soldDate: new Date(p.date_sold),
         }));
+
+        // Cache the result for future lookups (2hr TTL)
+        await cacheEbaySoldPrice(cacheKey, result);
 
         console.log(`[RapidAPI eBay] Found ${prices.length} results, avg: $${avgPrice.toFixed(2)}`);
         return result;

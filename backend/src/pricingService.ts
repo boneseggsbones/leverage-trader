@@ -3,6 +3,7 @@ import { db, recordApiCall, logApiCall } from './database';
 import { getEbaySoldPrice, isRapidApiConfigured, optimizeQueryForEbay } from './rapidApiEbayService';
 import { searchTcgCards, isJustTcgConfigured, isTcgItem, TcgPriceData } from './justTcgService';
 import { searchSneakers, isStockxConfigured, isSneakerItem, SneakerPriceData } from './stockxService';
+import { getCachedProductPrice, cacheProductPrice, getCachedConsolidatedValuation, cacheConsolidatedValuation, isRedisConnected } from './priceCacheService';
 
 // === Consolidated Pricing Types ===
 
@@ -107,11 +108,18 @@ export const searchPriceChartingProducts = async (query: string): Promise<PriceC
 
 /**
  * Get full product pricing from PriceCharting
+ * Now with Redis caching for sub-100ms repeat lookups
  */
 export const getPriceChartingProduct = async (pricechartingId: string): Promise<PriceChartingProduct | null> => {
     if (!isApiConfigured()) {
         console.log('PriceCharting API not configured');
         return null;
+    }
+
+    // Check Redis cache first
+    const cached = await getCachedProductPrice<PriceChartingProduct>(pricechartingId, 'pricecharting');
+    if (cached) {
+        return cached;
     }
 
     try {
@@ -128,6 +136,9 @@ export const getPriceChartingProduct = async (pricechartingId: string): Promise<
             console.error('PriceCharting API error:', data);
             return null;
         }
+
+        // Cache the result for future lookups
+        await cacheProductPrice(pricechartingId, 'pricecharting', data);
 
         return data;
     } catch (error) {
