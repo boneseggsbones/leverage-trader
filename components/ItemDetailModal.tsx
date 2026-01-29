@@ -191,22 +191,47 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ show, onClose, item, 
     };
 
     const handleLinkProduct = async (product: ExternalProduct) => {
-        if (!item) return;
+        if (!item || !currentUser) return;
         setLinking(true);
         setError(null);
         try {
-            await linkItemToProductApi(
-                item.id,
-                product.id,
-                product.name,
-                product.platform || 'Unknown'
-            );
-            setLinkSuccess(true);
-            setSearchQuery('');
-            setSearchResults([]);
-            await loadValuation();
-            onItemUpdated?.();
-            setTimeout(() => setLinkSuccess(false), 2000);
+            // eBay products can't be "linked" - instead use their price as an override
+            if (product.provider === 'rapidapi_ebay') {
+                const price = getProductPrice(product);
+                if (price && price > 0) {
+                    await submitValueOverride(
+                        item.id.toString(),
+                        currentUser.id.toString(),
+                        price,
+                        'ebay_sold_data',
+                        product.isAggregate
+                            ? `eBay average from ${product.sampleSize} recent sales`
+                            : `eBay sold listing: ${product.name}`
+                    );
+                    setLinkSuccess(true);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    await loadValuation();
+                    onItemUpdated?.();
+                    setTimeout(() => setLinkSuccess(false), 2000);
+                } else {
+                    setError('No valid price from eBay data');
+                }
+            } else {
+                // PriceCharting products can be linked normally
+                await linkItemToProductApi(
+                    item.id,
+                    product.id,
+                    product.name,
+                    product.platform || 'Unknown'
+                );
+                setLinkSuccess(true);
+                setSearchQuery('');
+                setSearchResults([]);
+                await loadValuation();
+                onItemUpdated?.();
+                setTimeout(() => setLinkSuccess(false), 2000);
+            }
         } catch (err) {
             setError('Failed to link product');
         } finally {
@@ -263,8 +288,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ show, onClose, item, 
                             </span>
                             {emvSource && (
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${isLinked ? 'bg-emerald-500/30 text-emerald-300' :
-                                        emvSource === 'user_override' ? 'bg-violet-500/30 text-violet-300' :
-                                            'bg-slate-600/50 text-slate-300'
+                                    emvSource === 'user_override' ? 'bg-violet-500/30 text-violet-300' :
+                                        'bg-slate-600/50 text-slate-300'
                                     }`}>
                                     {isLinked ? '✓ Linked' : emvSource === 'user_override' ? 'Custom' : 'Manual'}
                                 </span>
@@ -405,27 +430,48 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ show, onClose, item, 
 
                                         {searchResults.length > 0 && (
                                             <div className="mt-2 rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden">
-                                                {searchResults.slice(0, 5).map((product, idx) => {
+                                                {searchResults.slice(0, 8).map((product, idx) => {
                                                     const price = getProductPrice(product);
+                                                    const isEbay = product.provider === 'rapidapi_ebay';
+                                                    const isAggregate = product.isAggregate;
+
                                                     return (
                                                         <button
                                                             key={product.id}
                                                             onClick={() => handleLinkProduct(product)}
                                                             disabled={linking}
                                                             className={`w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all flex justify-between items-center gap-3 ${idx > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''
-                                                                }`}
+                                                                } ${isAggregate ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}
                                                         >
                                                             <div className="min-w-0 flex-1">
-                                                                <p className="text-sm text-gray-800 dark:text-white truncate">{product.name}</p>
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-sm text-gray-800 dark:text-white truncate">{product.name}</p>
+                                                                    {isEbay && (
+                                                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
+                                                                            eBay
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                                 <p className="text-xs text-gray-400">{product.platform}</p>
                                                             </div>
-                                                            {price !== null ? (
-                                                                <span className="text-sm font-bold text-green-600 whitespace-nowrap">
-                                                                    {formatPrice(price)}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-xs text-gray-400">No price</span>
-                                                            )}
+                                                            <div className="text-right shrink-0">
+                                                                {isAggregate && product.minPrice && product.maxPrice ? (
+                                                                    <div>
+                                                                        <span className="text-sm font-bold text-green-600">
+                                                                            {formatPrice(price)}
+                                                                        </span>
+                                                                        <p className="text-[10px] text-gray-400">
+                                                                            {formatPrice(product.minPrice)} – {formatPrice(product.maxPrice)}
+                                                                        </p>
+                                                                    </div>
+                                                                ) : price !== null ? (
+                                                                    <span className="text-sm font-bold text-green-600 whitespace-nowrap">
+                                                                        {formatPrice(price)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-xs text-gray-400">No price</span>
+                                                                )}
+                                                            </div>
                                                         </button>
                                                     );
                                                 })}

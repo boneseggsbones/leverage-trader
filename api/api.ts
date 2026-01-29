@@ -387,6 +387,12 @@ export interface ExternalProduct {
     loosePrice?: number; // Price in cents
     cibPrice?: number;
     newPrice?: number;
+    // eBay-specific fields (from RapidAPI eBay sold data)
+    minPrice?: number;
+    maxPrice?: number;
+    sampleSize?: number;
+    isAggregate?: boolean;      // True if this is aggregate data (e.g., "eBay Sold Average")
+    isIndividualSale?: boolean; // True if this is a single sold item
 }
 
 export interface ExternalSearchResult {

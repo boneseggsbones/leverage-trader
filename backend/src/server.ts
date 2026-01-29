@@ -10,7 +10,7 @@ import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { refreshItemValuation, searchPriceChartingProducts, linkItemToProduct, isApiConfigured, getConsolidatedValuation } from './pricingService';
 import { isEbayConfigured, getEbayAuthUrl, exchangeCodeForToken, storeUserToken, hasEbayConnection, disconnectEbay, fetchUserListings, markItemImported, isItemImported, EbayListing } from './ebayService';
-import { isRapidApiConfigured } from './rapidApiEbayService';
+import { isRapidApiConfigured, getEbaySoldPrice, optimizeQueryForEbay } from './rapidApiEbayService';
 import { isJustTcgConfigured } from './justTcgService';
 import { isStockxConfigured } from './stockxService';
 import { generatePriceSignalsForTrade, getPriceSignalsForItem } from './priceSignalService';
@@ -3419,27 +3419,34 @@ app.get('/api/external/products/search', async (req, res) => {
   const category = req.query.category as string | undefined;
 
   if (!q || q.length < 2) {
-    return res.json({ products: [], apiConfigured: isApiConfigured() });
+    return res.json({ products: [], apiConfigured: isApiConfigured() || isRapidApiConfigured() });
   }
 
   try {
     let products: any[] = [];
+    const normalizedCategory = category?.toLowerCase();
 
+    // Determine which providers to query based on category
+    const isGeneralCategory = !normalizedCategory ||
+      ['electronics', 'watches', 'jewelry', 'other', 'general'].includes(normalizedCategory);
+    const isTcgCategory = normalizedCategory === 'tcg' || normalizedCategory === 'trading_cards';
+    const isGameCategory = normalizedCategory === 'video_games';
+
+    // Run PriceCharting search
     if (isApiConfigured()) {
       const pcProducts = await searchPriceChartingProducts(q);
 
       // Filter PriceCharting results based on category
       let filteredProducts = pcProducts;
-      const normalizedCategory = category?.toLowerCase();
 
-      if (normalizedCategory === 'tcg' || normalizedCategory === 'trading_cards') {
+      if (isTcgCategory) {
         // Only include TCG-related platforms
         const tcgPlatforms = ['pokemon', 'magic', 'yugioh', 'sports-cards', 'trading-cards', 'mtg', 'tcg'];
         filteredProducts = pcProducts.filter((p: any) => {
           const platform = (p['console-name'] || '').toLowerCase();
           return tcgPlatforms.some(t => platform.includes(t));
         });
-      } else if (normalizedCategory === 'video_games') {
+      } else if (isGameCategory) {
         // Only include video game platforms, exclude TCG/comics
         const nonGamePlatforms = ['pokemon', 'magic', 'yugioh', 'sports-cards', 'trading-cards', 'mtg', 'tcg', 'comics'];
         filteredProducts = pcProducts.filter((p: any) => {
@@ -3460,15 +3467,57 @@ app.get('/api/external/products/search', async (req, res) => {
       }));
     }
 
+    // For general categories or when PriceCharting has no/few results, 
+    // also query eBay Sold data (per Gemini Deep Research recommendation)
+    if (isRapidApiConfigured() && (isGeneralCategory || products.length < 3)) {
+      const ebayResults = await getEbaySoldPrice(optimizeQueryForEbay(q, category), {
+        maxResults: 25,
+        excludeKeywords: 'lot bundle broken parts repair'
+      });
+
+      if (ebayResults && ebayResults.sampleSize > 0) {
+        // Add a single "eBay Average" result that users can use as reference
+        products.push({
+          id: `ebay_avg_${Date.now()}`,
+          name: `${q} (eBay Sold Average)`,
+          platform: `${ebayResults.sampleSize} recent sales`,
+          provider: 'rapidapi_ebay',
+          loosePrice: ebayResults.averagePrice,  // Use avg as "loose" equivalent
+          cibPrice: 0,
+          newPrice: 0,
+          minPrice: ebayResults.minPrice,
+          maxPrice: ebayResults.maxPrice,
+          sampleSize: ebayResults.sampleSize,
+          isAggregate: true  // Flag to indicate this is aggregate data, not a specific product
+        });
+
+        // Also add individual eBay sold items if available
+        if (ebayResults.products && ebayResults.products.length > 0) {
+          const topEbayProducts = ebayResults.products.slice(0, 5).map((p, idx) => ({
+            id: `ebay_${Date.now()}_${idx}`,
+            name: p.title,
+            platform: `eBay • Sold ${p.soldDate.toLocaleDateString()} • ${p.condition}`,
+            provider: 'rapidapi_ebay',
+            loosePrice: p.soldPrice,
+            cibPrice: 0,
+            newPrice: 0,
+            isIndividualSale: true
+          }));
+          products.push(...topEbayProducts);
+        }
+      }
+    }
+
     res.json({
       products,
-      apiConfigured: isApiConfigured()
+      apiConfigured: isApiConfigured() || isRapidApiConfigured()
     });
   } catch (error: any) {
     console.error('[Search] Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 // Link an item to an external product
 app.post('/api/items/:id/link-product', async (req, res) => {
